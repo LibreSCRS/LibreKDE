@@ -1,0 +1,97 @@
+# Maintainer: hirashix0 <hirashix0@proton.me>
+#
+# LibreKDE — KDE Plasma 6 integration for the LibreSCRS stack: the smart-card
+# plasmoid, the credential-management window, the Purpose "Sign" share plugin,
+# and the card:/ KIO worker.
+#
+# LibreKDE is a THIN CLIENT of the LibreSCRS agent over D-Bus — it links NO
+# LibreMiddleware target (card I/O + secret entry live in the agent). So it
+# depends on `librescrs-agent` (the agent package built from pkgbase
+# `librelinux`), NOT on `librescrs-middleware`.
+#
+# Dependency chain: librescrs-middleware <= librelinux <= librekde
+#
+# Versioning: independent SemVer (0.x until the D-Bus wire surface freezes).
+
+pkgname=librekde
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="KDE Plasma 6 integration for LibreSCRS: smart-card plasmoid, credential-management window, Purpose Sign plugin, and card:/ KIO worker"
+arch=('x86_64' 'aarch64')
+url="https://github.com/LibreSCRS/LibreKDE"
+license=('LGPL-2.1-or-later')
+depends=(
+    'librescrs-agent'   # the D-Bus agent this client talks to
+    'plasma-workspace'  # Plasma 6 shell (plasmoid host)
+    'libplasma'         # find_package(Plasma 6.0)
+    'qt6-base'          # Core/Gui/DBus/Widgets
+    'qt6-declarative'   # Qml (plasmoid) incl. QtQuick.Dialogs (Save photo…);
+                        #   also Quick/QuickControls2/QuickTemplates2 (credentials window)
+    'ki18n'
+    'kcoreaddons'
+    'knotifications'
+    'kconfig'
+    'kio'               # card:/ KIO worker (LIBREKDE_BUILD_KIO)
+    'purpose'           # Purpose "Sign" plugin (LIBREKDE_BUILD_PURPOSE)
+    'kirigami'          # credential-management window UI (LIBREKDE_BUILD_CREDENTIALS)
+    'kdbusaddons'       # credential window single-instance (KDBusService)
+    'qqc2-desktop-style' # org.kde.desktop QtQuick Controls style for the window
+)
+makedepends=(
+    'cmake'
+    'ninja'
+    'git'                   # GitVersion.cmake
+    'extra-cmake-modules'   # ECM (KDEInstallDirs/KDECMakeSettings/...)
+    'gtest'                 # BUILD_TESTING unit tests
+    'qt6-tools'             # lrelease for ki18n .po -> .qm (ECMPoQmTools)
+    'dbus'                  # dbus-run-session for the D-Bus client tests
+)
+source=(
+    "$pkgname-$pkgver.tar.gz::https://github.com/LibreSCRS/LibreKDE/archive/refs/tags/v$pkgver.tar.gz"
+)
+# Placeholder — real sum filled at tag time with `updpkgsums`. The v0.1.0 tag
+# does not exist yet (repo unpublished); see README.md for the local-dogfood
+# build that needs no remote.
+sha256sums=('SKIP')
+
+build() {
+    cd "$srcdir/LibreKDE-$pkgver"
+    # Explicit component flags (their CMake defaults are already ON, but pin
+    # them so the package contract does not silently drift):
+    #   LIBREKDE_BUILD_KIO         — card:/ KIO worker
+    #   LIBREKDE_BUILD_PURPOSE     — Purpose "Sign" plugin
+    #   LIBREKDE_BUILD_PLASMOID    — Plasma 6 widget
+    #   LIBREKDE_BUILD_CREDENTIALS — credential-management window
+    cmake -S . -B build -G Ninja \
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DLIBREKDE_BUILD_PLASMOID=ON \
+        -DLIBREKDE_BUILD_PURPOSE=ON \
+        -DLIBREKDE_BUILD_KIO=ON \
+        -DLIBREKDE_BUILD_CREDENTIALS=ON \
+        -DBUILD_TESTING=ON
+    cmake --build build -j4
+}
+
+check() {
+    cd "$srcdir/LibreKDE-$pkgver"
+    # KDE/Qt tests need offscreen Qt; the D-Bus client tests spin a private
+    # bus via dbus-run-session (dbus is a makedepend).
+    QT_QPA_PLATFORM=offscreen ctest --test-dir build --output-on-failure -j4
+}
+
+package() {
+    cd "$srcdir/LibreKDE-$pkgver"
+    DESTDIR="$pkgdir" cmake --install build
+    # cmake --install lays down the plasmoid package, the credential-management
+    # window (bin/librescrs-credentials-kde + its NoDisplay .desktop under
+    # KDE_INSTALL_APPDIR), the Purpose plugin + its metainfo, the card:/ KIO
+    # worker, the smartcard AppStream metainfo, and the ki18n gettext catalogues
+    # — all under KDE_INSTALL_* (/usr/...). ki18n_install(po) now fires: the
+    # po/ dir ships sr + sr@latin catalogues for the `librekde` and
+    # `plasma_applet_org.librescrs.smartcard` domains
+    # (share/locale/<lang>/LC_MESSAGES/<domain>.mo).
+    # The credential window is a NoDisplay helper launched from the plasmoid, so
+    # it gets no separate AppStream component (it is not an app-store entry).
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

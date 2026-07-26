@@ -1,0 +1,1299 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+// SPDX-FileCopyrightText: 2026 hirashix0
+
+#include "SmartCardHandler.h"
+
+#include "AgentCapabilities.h"
+#include "AgentCard.h"
+#include "AgentClient.h"
+#include "AgentOperation.h"
+#include "AgentReader.h"
+#include "ErrorText.h"
+#include "IdentityRows.h"
+#include "SealedFd.h"
+#include "SharedAgentClient.h"
+#include "SignJob.h"
+#include "plasmoid_log_categories.h"
+
+#include <KIO/CommandLauncherJob>
+#include <KLocalizedString>
+#include <KService>
+#include <KShell>
+
+#include <QBuffer>
+#include <QClipboard>
+#include <QDBusPendingCallWatcher>
+#include <QDesktopServices>
+#include <QFileInfo>
+#include <QGuiApplication>
+#include <QImage>
+#include <QImageReader>
+#include <QProcess>
+#include <QRegularExpression>
+#include <QSaveFile>
+#include <QStandardPaths>
+#include <QTextDocument> // Qt::mightBeRichText
+#include <QUrl>
+
+#include <algorithm>
+#include <atomic>
+#include <memory>
+#include <optional>
+#include <utility>
+
+namespace LibreKDE::Plasmoid {
+
+quint64 SmartCardHandler::nextPhotoSlot()
+{
+    // Process-unique, monotonic: two widgets never write the same store slot.
+    static std::atomic<quint64> counter{0};
+    return ++counter;
+}
+
+SmartCardHandler::SmartCardHandler(QObject* parent) : SmartCardHandler(LibreKDE::sharedAgentClient(), parent) {}
+
+SmartCardHandler::SmartCardHandler(std::shared_ptr<LibreKDE::AgentClient> client, QObject* parent)
+    : QObject(parent), m_client(std::move(client))
+{
+    qCInfo(LibreKDE::Plasmoid::Logging)
+        << "SmartCardHandler starting (per-widget instance over the shared agent client)";
+    wireClient();
+    refresh();
+}
+
+SmartCardHandler::~SmartCardHandler()
+{
+    // Scrub this widget's photo slot from the process-shared store; the store
+    // (and the provider co-owning it) outlives any single handler.
+    m_photoStore->clear(m_photoSlot);
+}
+
+int SmartCardHandler::state() const noexcept
+{
+    return static_cast<int>(m_state);
+}
+
+void SmartCardHandler::wireClient()
+{
+    connect(m_client.get(), &LibreKDE::AgentClient::readersChanged, this, &SmartCardHandler::refresh);
+    connect(m_client.get(), &LibreKDE::AgentClient::cardChanged, this, [this](const QString&) { refresh(); });
+    connect(m_client.get(), &LibreKDE::AgentClient::availabilityChanged, this, [this](bool) { refresh(); });
+}
+
+void SmartCardHandler::refresh()
+{
+    // Availability first: an unreachable agent is a client-level state, not a
+    // NoCard. Never hang — isAvailable() is a cached, non-blocking flag. The
+    // roster recompute still runs (the registry was cleared on service loss),
+    // so the QML master-detail never lingers around the AgentUnavailable state.
+    if (!m_client->isAvailable()) {
+        updateReaderRosters();
+        bindCard(nullptr);
+        updatePinManagementAvailable();
+        setReaderName({});
+        setCardLabel({});
+        setError({});
+        setCardDetected(false);
+        m_identityRead = false;
+        setAgentInstalled(detectAgentInstalled());
+        transitionTo(CardStateModel::State::AgentUnavailable);
+        return;
+    }
+
+    // Recompute the reader rosters (config chooser + Auto master list) from the
+    // live registry, then resolve which card this widget reflects. Selection is
+    // centralized + deterministic (sorted-path order) in AgentClient.
+    updateReaderRosters();
+
+    LibreKDE::AgentReader* reader = pickActiveReader();
+    if (reader == nullptr) {
+        bindCard(nullptr);
+        updatePinManagementAvailable();
+        // Bound mode: keep the bound name visible so the QML can render a
+        // reader-scoped NoCard state — "Insert a card into <name>" when the
+        // reader is present (boundReaderPresent), or "Reader <name> not
+        // connected" when it is absent. Auto: clear it.
+        setReaderName(m_boundReaderName);
+        setCardLabel({});
+        setError({});
+        // A reader may physically report a card here even though no resolvable
+        // Card1 exists yet (the agent's deferred-publish window): flag it so the
+        // QML says "detecting a card" rather than "insert a card".
+        setCardDetected(computeCardDetected());
+        m_identityRead = false;
+        transitionTo(CardStateModel::State::NoCard);
+        return;
+    }
+
+    setCardDetected(false);
+    setReaderName(reader->name());
+    LibreKDE::AgentCard* card = m_client->card(reader->cardPath());
+    bindCard(card);
+    classifyActiveCard();
+}
+
+void SmartCardHandler::updateReaderRosters()
+{
+    QStringList all;
+    QStringList withCards;
+    const QList<LibreKDE::AgentReader*> readers = m_client->readersSortedByPath();
+    for (LibreKDE::AgentReader* reader : readers) {
+        all.append(reader->name());
+        if (m_client->card(reader->cardPath()) != nullptr) {
+            withCards.append(reader->name());
+        }
+    }
+    // Rebuild the raw-name -> friendly-label map from the FULL roster (so
+    // contact/contactless disambiguation sees every reader), keyed by the raw
+    // name the rest of the code binds/selects on. Cheap; recomputed only when a
+    // roster actually changes below.
+    if (all != m_availableReaderNames) {
+        const QStringList labels = readerDisplayLabels(all);
+        m_readerDisplayNames.clear();
+        for (int i = 0; i < all.size() && i < labels.size(); ++i) {
+            m_readerDisplayNames.insert(all.at(i), labels.at(i));
+        }
+    }
+
+    if (all != m_availableReaderNames) {
+        m_availableReaderNames = all;
+        Q_EMIT availableReaderNamesChanged();
+    }
+    if (withCards != m_readersWithCards) {
+        m_readersWithCards = withCards;
+        Q_EMIT readersWithCardsChanged();
+    }
+    // Recompute after the roster is settled, unconditionally: boundReaderPresent
+    // can flip on a binding change even when the roster itself did not move.
+    updateBoundReaderPresent();
+}
+
+void SmartCardHandler::updateBoundReaderPresent()
+{
+    // Present iff a reader is bound AND it is currently in the live roster
+    // (`availableReaderNames` lists every reader the agent reports, card or not).
+    // Exact name first; the same-unit fallback applies ONLY when the bound name
+    // has vanished from the roster (re-enumeration) — while it is still listed,
+    // a dual-interface sibling sharing the unit serial must not stand in for it.
+    // Auto mode (no binding) is never "present". Fire only on an actual flip.
+    bool present = false;
+    if (!m_boundReaderName.isEmpty()) {
+        present = m_availableReaderNames.contains(m_boundReaderName);
+        if (!present) {
+            for (const QString& name : m_availableReaderNames) {
+                if (sameReaderUnit(m_boundReaderName, name)) {
+                    present = true;
+                    break;
+                }
+            }
+        }
+    }
+    if (present == m_boundReaderPresent) {
+        return;
+    }
+    m_boundReaderPresent = present;
+    Q_EMIT boundReaderPresentChanged();
+}
+
+LibreKDE::AgentReader* SmartCardHandler::pickActiveReader()
+{
+    if (!m_boundReaderName.isEmpty()) {
+        // Bound mode: ONLY the bound reader, and only when it holds a resolvable
+        // card. Exact name first — stable rosters never change behaviour.
+        if (LibreKDE::AgentReader* exact = m_client->readerWithCardByName(m_boundReaderName)) {
+            return exact;
+        }
+        const QList<LibreKDE::AgentReader*> readers = m_client->readersSortedByPath();
+        // The same-unit fallback exists for RE-ENUMERATION (shifted trailing
+        // index re-mints the entry under a new name), so it engages ONLY when
+        // the bound name has vanished from the roster. While the bound reader
+        // is still listed — merely card-less — never fall back: on a
+        // dual-interface reader (contact + contactless expose one shared USB
+        // serial as two simultaneous entries) a card laid on the sibling
+        // interface must not capture this widget. Reader-scoped waiting is the
+        // honest state.
+        for (LibreKDE::AgentReader* reader : readers) {
+            if (reader->name() == m_boundReaderName) {
+                return nullptr;
+            }
+        }
+        for (LibreKDE::AgentReader* reader : readers) {
+            if (sameReaderUnit(m_boundReaderName, reader->name()) && m_client->card(reader->cardPath()) != nullptr) {
+                return reader;
+            }
+        }
+        return nullptr;
+    }
+    // Auto mode: honour a transient master-detail pick while it still holds a
+    // card; otherwise the deterministic first (mirrors firstReaderWithCard).
+    if (!m_selectedReaderName.isEmpty()) {
+        if (LibreKDE::AgentReader* selected = m_client->readerWithCardByName(m_selectedReaderName)) {
+            return selected;
+        }
+    }
+    return m_client->firstReaderWithCard();
+}
+
+bool SmartCardHandler::computeCardDetected() const
+{
+    // Reached only from the card-less refresh branch, so pickActiveReader()
+    // found no reader holding a RESOLVABLE card. A reader that nonetheless
+    // reports HasCard() therefore has a card the agent has not yet exported a
+    // Card1 for (the deferred-publish window) — genuinely "a card is here, being
+    // read", not "no card".
+    if (!m_boundReaderName.isEmpty()) {
+        // Bound mode: answer for the SAME entry pickActiveReader() would
+        // choose. While the bound name is listed, only THAT reader's slot
+        // counts — a dual-interface sibling's card must not flip the bound
+        // widget's "insert a card" into "detecting".
+        const QList<LibreKDE::AgentReader*> readers = m_client->readersSortedByPath();
+        for (LibreKDE::AgentReader* reader : readers) {
+            if (reader->name() == m_boundReaderName) {
+                return reader->hasCard();
+            }
+        }
+        // Bound name absent (re-enumerated): any same-unit candidate that
+        // physically reports a card is the entry pickActiveReader() will pick
+        // once its Card1 resolves — scan them ALL (a transient double
+        // enumeration can leave an empty stale twin sorting first).
+        for (LibreKDE::AgentReader* reader : readers) {
+            if (sameReaderUnit(m_boundReaderName, reader->name()) && reader->hasCard()) {
+                return true;
+            }
+        }
+        return false;
+    }
+    // Auto mode: any reader physically holding a card.
+    for (LibreKDE::AgentReader* reader : m_client->readersSortedByPath()) {
+        if (reader->hasCard()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void SmartCardHandler::setCardDetected(bool detected)
+{
+    if (m_cardDetected == detected) {
+        return;
+    }
+    m_cardDetected = detected;
+    Q_EMIT cardDetectedChanged();
+}
+
+void SmartCardHandler::setBoundReaderName(const QString& name)
+{
+    if (m_boundReaderName == name) {
+        return;
+    }
+    m_boundReaderName = name;
+    // A rebind invalidates any Auto-mode transient pick.
+    m_selectedReaderName.clear();
+    Q_EMIT boundReaderNameChanged();
+    refresh();
+}
+
+void SmartCardHandler::selectReader(const QString& friendlyName)
+{
+    // Master-detail is an Auto-mode affordance; a bound widget is pinned.
+    if (!m_boundReaderName.isEmpty()) {
+        return;
+    }
+    if (m_selectedReaderName == friendlyName) {
+        return;
+    }
+    m_selectedReaderName = friendlyName;
+    refresh();
+}
+
+void SmartCardHandler::bindCard(LibreKDE::AgentCard* card)
+{
+    // Short-circuit only when re-binding the SAME, still-live card (a genuine
+    // no-op). When `card == nullptr` we must NOT short-circuit on `m_card == card`:
+    // a removed card destroys the AgentCard, so the `m_card` QPointer has already
+    // auto-nulled to nullptr too — `nullptr == nullptr` would skip the photo/
+    // identity scrub and leave the holder PII in the store after removal.
+    if (card != nullptr && m_card == card) {
+        return;
+    }
+    if (m_card != nullptr) {
+        m_card->disconnect(this);
+    }
+    if (m_identityOp != nullptr) {
+        m_identityOp->disconnect(this);
+        m_identityOp = nullptr;
+        // The discarded op can no longer drive onOperationFinished (the only
+        // other setBusy(false) site), so release the busy latch HERE. Reached
+        // with a LIVE op on a card SWITCH mid-read (chip click / rebind — no
+        // client death-sweep terminalizes the op then); left latched, busy
+        // permanently disables the PreAuth "Read Card…" button. The
+        // photo op below needs no counterpart — it carries no busy flag.
+        setBusy(false);
+    }
+    if (m_photoOp != nullptr) {
+        m_photoOp->disconnect(this);
+        m_photoOp = nullptr;
+    }
+    // A card switch abandons the previous card's warm guard: the entry call has
+    // already left (its effect is agent-side only) and a held guard would block
+    // the NEW card's pre-warm. The abandoned watcher still self-deletes when
+    // its reply lands; a same-card rebind never reaches this line (the
+    // short-circuit above), so an in-flight warm for a stable card survives.
+    m_certWarmCall = nullptr;
+    m_card = card;
+    m_identityRead = false;
+    // A new (or no) card invalidates any photo AND identity read for the previous one.
+    clearPhoto();
+    clearIdentity();
+    if (m_card != nullptr) {
+        // A live capability change (e.g. post-PACE the agent surfaces more
+        // caps) re-classifies the active card.
+        connect(m_card, &LibreKDE::AgentCard::changed, this, &SmartCardHandler::classifyActiveCard);
+    }
+}
+
+void SmartCardHandler::setViewActive(bool active)
+{
+    if (m_viewActive == active) {
+        return;
+    }
+    m_viewActive = active;
+    Q_EMIT viewActiveChanged();
+    if (m_viewActive) {
+        // The popup just opened: first view of whatever card is active.
+        ensureFreeRead();
+    }
+}
+
+void SmartCardHandler::classifyActiveCard()
+{
+    // Every (re)classification refreshes the launcher gate from the LIVE caps —
+    // including the AgentCard::changed path, where the coarse state may not move.
+    updatePinManagementAvailable();
+
+    if (m_card == nullptr) {
+        transitionTo(CardStateModel::State::NoCard);
+        return;
+    }
+
+    // Single source of truth: LibreKDE::resolveCardState owns the PreAuth latch
+    // (PreReadAuthMethod != None && identity not yet read -> PreAuthRequired) and
+    // the empty-capability None -> Error / caps==0 -> UnknownCard split.
+    // fromUiState maps the result onto the plasmoid's State. (When
+    // PreAuthRequired we also clear the label, matching the previous behaviour.)
+    const LibreKDE::UiState ui = LibreKDE::resolveCardState(m_card->capabilities(), m_card->preReadAuthMethod(),
+                                                            /*present=*/true, m_identityRead);
+    if (ui == LibreKDE::UiState::PreAuthRequired) {
+        setCardLabel({});
+    }
+    transitionTo(CardStateModel::fromUiState(ui));
+
+    // The free read is issued here ONLY while the view is active:
+    // classification runs at insertion for every widget in the process, and
+    // the free-read rule only allows auto-populating "on first view" — an unconditional read
+    // would park identity+photo PII in plasmashell memory even for widgets
+    // whose popup is never opened. Hanging the check off the classification
+    // (rather than off stateChanged edges in QML) covers every ACTIVE-CARD
+    // change too: a chip switch between two same-classification cards or a
+    // same-reader card swap fires no stateChanged, yet must re-populate the
+    // open popup. ensureFreeRead() itself keeps the invariants: never
+    // a Can/Mrz card, no-op when already read or in flight.
+    if (m_viewActive) {
+        ensureFreeRead();
+    }
+}
+
+void SmartCardHandler::ensureFreeRead()
+{
+    if (m_card == nullptr) {
+        return;
+    }
+    // Only a card that needs NO pre-read unlock (PreReadAuth::None) and carries
+    // identity data has a secret-free read — the "free read" allowed
+    // on first view. Can/Mrz cards are deliberately EXCLUDED: they keep
+    // the lazy invariant (the agent would raise a CAN/MRZ prompt, which must be
+    // user-initiated; CanCardIssuesNoImplicitCardIo asserts this). The
+    // !m_identityRead guard makes repeat popup-opens no-ops; readIdentity()
+    // itself guards the in-flight case.
+    if (m_card->preReadAuthMethod() != LibreKDE::PreReadAuth::None || m_identityRead || m_identityOp != nullptr) {
+        return;
+    }
+    if (m_state != CardStateModel::State::IdentityOnly && m_state != CardStateModel::State::Hybrid) {
+        return;
+    }
+    readIdentity();
+}
+
+void SmartCardHandler::readIdentity()
+{
+    if (m_card == nullptr) {
+        return;
+    }
+    if (m_identityOp != nullptr) {
+        return; // a read is already in flight
+    }
+    setError({});
+    LibreKDE::AgentOperation* op = m_card->readIdentity();
+    if (op == nullptr) {
+        setError(i18nc("@info plasmoid identity read failed to start",
+                       "Could not start reading this card. Please try again."));
+        transitionTo(CardStateModel::State::Error);
+        return;
+    }
+    m_identityOp = op;
+    setBusy(true);
+    setOperationPhase(LibreKDE::OperationPhase::Created); // reset for the new read
+    connect(op, &LibreKDE::AgentOperation::finished, this, &SmartCardHandler::onOperationFinished);
+    connect(op, &LibreKDE::AgentOperation::phaseChanged, this,
+            [this](LibreKDE::OperationPhase ph, double /*progress*/) { setOperationPhase(ph); });
+}
+
+void SmartCardHandler::warmCertificateCache()
+{
+    if (m_card == nullptr || m_certWarmCall != nullptr) {
+        return; // no card, or a warm entry call is already on the wire
+    }
+    // Best-effort background warm: deliberately NO setBusy / NO state transition /
+    // NO error surfacing — the identity view is unaffected and a failed warm just
+    // leaves the file-manager PKI folder to pay its own cold read. The entry call
+    // is asynchronous (AgentCard::warmCertificates), so even a wedged agent can
+    // never stall the GUI thread here. The guard only debounces stacked entry
+    // calls: once the entry reply lands the watcher self-deletes (the QPointer
+    // auto-nulls) and a later open may warm again — the agent dedups overlapping
+    // cert reads onto one shared card read, so a re-warm is harmless.
+    m_certWarmCall = m_card->warmCertificates();
+}
+
+void SmartCardHandler::signFile(const QString& fileUrl)
+{
+    if (m_signJob != nullptr) {
+        return; // a sign is already in flight
+    }
+    // The QML FileDialog hands us a file:// URL; accept a plain path too.
+    const QUrl url(fileUrl);
+    const QString inputPath = url.isLocalFile() ? url.toLocalFile() : fileUrl;
+
+    setError({});
+    // ONE signing CORE (the shared librekde-signing SignJob) over the active card,
+    // but the plasmoid injects its OWN non-QtWidgets seams: a QML/Plasma popup must
+    // never raise a parentless top-level QWidget modal (QInputDialog/QMessageBox),
+    // which is un-idiomatic and asserts if plasmashell is a QGuiApplication (not a
+    // QApplication). The Purpose plugin keeps the QtWidgets SignSeams; here:
+    //  - cert chooser: SignJob auto-picks a lone signing cert, so this only fires
+    //    when a card carries several. The plasmoid signs with the first
+    //    (deterministic, matching its "obvious card" model); rich multi-cert
+    //    selection is a LibreCelik concern. Because that
+    //    pick is silent, the chooser records WHICH cert it picked so the
+    //    success message can say so (never a silent implicit choice).
+    //  - overwrite: the confirmer only ever guards the DERIVED "<name>-signed.<ext>"
+    //    artifact (SignJob NEVER modifies the input in place), so allowing an
+    //    overwrite is safe and lets a re-sign just work in the demo.
+    // MIME: the plasmoid has no share-time MIME (the input comes from a FileDialog),
+    // so it passes an empty mimeType and SignJob sniffs via QMimeDatabase. For a
+    // well-formed file this resolves to the same {format,packaging} the Purpose
+    // path derives from its caller-supplied MIME;
+    // the only boundary is a file whose sniffed MIME differs from a share-time MIME,
+    // which the plasmoid cannot see. A null/non-PKI card is handled by SignJob
+    // itself (it fails cleanly with its own diagnostic). The agent raises its own
+    // PIN prompter.
+    m_lastSignCertLabel.clear();
+    LibreKDE::CertChooser pickFirstCert = [this](const LibreKDE::CertificateList& cands) -> std::optional<QString> {
+        if (cands.isEmpty()) {
+            return std::nullopt;
+        }
+        // Only reached for a MULTI-cert card (SignJob auto-picks a lone cert):
+        // remember the picked cert's display name for the success message.
+        const LibreKDE::CertificateInfo& picked = cands.first();
+        m_lastSignCertLabel = picked.subjectCn.isEmpty() ? picked.certId : picked.subjectCn;
+        return std::optional<QString>(picked.certId);
+    };
+    LibreKDE::OverwriteConfirmer allowOverwrite = [](const QString&) { return true; };
+
+    auto* job = new LibreKDE::SignJob(m_card, inputPath, QString(), QString(), pickFirstCert, allowOverwrite, this);
+    m_signJob = job;
+    m_signingBusy = true;
+    Q_EMIT signingBusyChanged();
+    setOperationPhase(LibreKDE::OperationPhase::Created); // reset for the new sign
+    connect(job, &LibreKDE::SignJob::phaseChanged, this,
+            [this](LibreKDE::OperationPhase ph, double /*progress*/) { setOperationPhase(ph); });
+
+    connect(job, &LibreKDE::SignJob::succeeded, this, [this, job](const QString& outputPath) {
+        m_signJob = nullptr;
+        m_signingBusy = false;
+        Q_EMIT signingBusyChanged();
+        qCInfo(LibreKDE::Plasmoid::Logging) << "signed file written to" << outputPath;
+        // certLabel is non-empty ONLY when the card carried several signing
+        // certs and the deterministic first was picked implicitly — the
+        // success message then names it; a lone auto-selected cert
+        // needs no callout.
+        Q_EMIT signSucceeded(outputPath, m_lastSignCertLabel);
+        job->deleteLater();
+    });
+    connect(job, &LibreKDE::SignJob::failed, this, [this, job](const QString& message) {
+        m_signJob = nullptr;
+        m_signingBusy = false;
+        Q_EMIT signingBusyChanged();
+        setError(message);
+        Q_EMIT signFailed(message);
+        job->deleteLater();
+    });
+    job->start();
+}
+
+void SmartCardHandler::onOperationFinished(LibreKDE::OperationStatus status, LibreKDE::ErrorCode errorCode,
+                                           const QString& /*msgKey*/, const QString& msgFallback)
+{
+    LibreKDE::AgentOperation* op = m_identityOp;
+    m_identityOp = nullptr;
+    setBusy(false);
+    if (status != LibreKDE::OperationStatus::Ok) {
+        setError(LibreKDE::ErrorText::forCode(errorCode, msgFallback));
+        transitionTo(CardStateModel::State::Error);
+        return;
+    }
+    m_identityRead = true;
+    if (op != nullptr) {
+        rebuildIdentityModel(op->identityResult());
+    }
+    classifyActiveCard();
+    // The identity is in hand; opportunistically fetch the face photo. Best
+    // effort — a card with no photo (or a photo read that fails) must not turn a
+    // successful identity read into an error.
+    startPhotoRead();
+}
+
+void SmartCardHandler::startPhotoRead()
+{
+    if (m_card == nullptr) {
+        return;
+    }
+    if (m_photoOp != nullptr) {
+        return; // a photo read is already in flight
+    }
+    LibreKDE::AgentOperation* op = m_card->getPhoto();
+    if (op == nullptr) {
+        // No photo capability / could not start — hasCardPhoto stays false, but
+        // the refusal must be diagnosable (AgentCard logs the D-Bus error too).
+        qCWarning(LibreKDE::Plasmoid::Logging) << "photo read could not start on" << m_readerName << "— no photo shown";
+        return;
+    }
+    m_photoOp = op;
+    connect(op, &LibreKDE::AgentOperation::phaseChanged, this,
+            [this](LibreKDE::OperationPhase ph, double /*progress*/) { setOperationPhase(ph); });
+    // Drive on the op's terminal signal (queued per the agentclient terminal
+    // discipline). Async/signal-driven: NO nested QEventLoop — the plasmoid runs
+    // on the GUI event loop. If the card is pulled mid-read the op is destroyed
+    // and this connection auto-disconnects (QPointer also guards reentry).
+    connect(op, &LibreKDE::AgentOperation::finished, this,
+            [this](LibreKDE::OperationStatus status, LibreKDE::ErrorCode code, const QString&, const QString& message) {
+                if (status != LibreKDE::OperationStatus::Ok) {
+                    qCWarning(LibreKDE::Plasmoid::Logging).noquote()
+                        << "photo read failed:" << static_cast<int>(code) << message;
+                }
+                onPhotoFinished(status);
+            });
+}
+
+void SmartCardHandler::onPhotoFinished(LibreKDE::OperationStatus status)
+{
+    LibreKDE::AgentOperation* op = m_photoOp;
+    m_photoOp = nullptr;
+    if (op == nullptr || status != LibreKDE::OperationStatus::Ok) {
+        return; // best effort: no photo shown; the finished hook logged why
+    }
+    const LibreKDE::PhotoMap& photos = op->photoResult();
+    if (photos.isEmpty()) {
+        // Graceful absence, not an error — but distinguishable from a failure.
+        qCInfo(LibreKDE::Plasmoid::Logging) << "card carries no photo";
+        return;
+    }
+    // v1: surface the FIRST photo entry. (A future layout could expose every
+    // "group:field" photo; the key is split on the first ':' only if parsed.)
+    const QByteArray bytes = readSealedFd(photos.constBegin().value());
+    if (bytes.isEmpty()) {
+        qCWarning(LibreKDE::Plasmoid::Logging) << "photo payload unreadable (sealed fd empty)";
+        return;
+    }
+    // Let Qt sniff the format. eMRTD photos may be JPEG2000; Qt decodes it iff the
+    // jp2 image plugin is present, otherwise QImage::fromData yields a null image,
+    // which the QML treats exactly like "no photo".
+    QImage image = QImage::fromData(bytes);
+    if (image.isNull()) {
+        qCWarning(LibreKDE::Plasmoid::Logging)
+            << "photo bytes did not decode (" << bytes.size() << "bytes) — missing image plugin?";
+        return;
+    }
+    m_photoBytes = bytes; // retained (original format) for Save photo…
+    m_photoSuggestedFileName = suggestedPhotoFileName(bytes);
+    m_photoStore->setImage(m_photoSlot, image);
+    m_hasCardPhoto = true;
+    // Bump the token so the QML pixmap cache re-requests this (new) photo; the
+    // slot addresses THIS widget's store entry (per-widget isolation).
+    ++m_photoToken;
+    m_cardPhotoUrl = QStringLiteral("image://librekde/cardphoto/%1?%2").arg(m_photoSlot).arg(m_photoToken);
+    Q_EMIT cardPhotoChanged();
+}
+
+void SmartCardHandler::clearPhoto()
+{
+    m_photoBytes.clear();
+    if (m_photoStore != nullptr) {
+        m_photoStore->clear(m_photoSlot);
+    }
+    if (!m_hasCardPhoto && m_cardPhotoUrl.isEmpty()) {
+        return;
+    }
+    m_hasCardPhoto = false;
+    m_cardPhotoUrl.clear();
+    m_photoSuggestedFileName.clear();
+    Q_EMIT cardPhotoChanged();
+}
+
+QString SmartCardHandler::suggestedPhotoFileName(const QByteArray& bytes)
+{
+    // Sniff the RAW bytes' actual format — savePhoto writes those bytes
+    // verbatim, so the suggested extension must match the content (an eMRTD
+    // photo may be JPEG2000; ".png" would lie about jp2 bytes).
+    QBuffer buffer;
+    buffer.setData(bytes);
+    buffer.open(QIODevice::ReadOnly);
+    QByteArray format = QImageReader(&buffer).format();
+    if (format == "jpeg") {
+        format = "jpg"; // the conventional extension
+    }
+    const QString base = QStringLiteral("card-photo");
+    return format.isEmpty() ? base : base + QLatin1Char('.') + QString::fromLatin1(format);
+}
+
+void SmartCardHandler::openInLibreCelik()
+{
+    // Conditional: the QML side hides this affordance when LibreCelik is absent,
+    // and we never route to a browser (no librecelik:// URL scheme). Launch the
+    // detected executable with the reader as its argument.
+    if (m_libreCelikPath.isEmpty()) {
+        qCWarning(LibreKDE::Plasmoid::Logging) << "openInLibreCelik ignored — LibreCelik not detected on PATH";
+        return;
+    }
+    if (!QProcess::startDetached(m_libreCelikPath, {m_readerName})) {
+        qCWarning(LibreKDE::Plasmoid::Logging) << "failed to launch LibreCelik:" << m_libreCelikPath;
+    }
+}
+
+// The standalone credential-management window executable (components/credentials);
+// manageCredentials() launches it for the active card's reader. constexpr
+// gives it internal linkage, so no anonymous namespace is needed.
+constexpr char kCredentialsExe[] = "librescrs-credentials-kde";
+
+bool SmartCardHandler::pinManagementAvailable() const
+{
+    return m_pinManagementAvailable;
+}
+
+void SmartCardHandler::updatePinManagementAvailable()
+{
+    // Purely capability-bit-driven — no card read is issued. False when no card
+    // is bound, mirroring every other card-derived flag. The dedicated change
+    // signal is what keeps the QML launcher affordance live: transitionTo()
+    // dedupes stateChanged, so a capability flip that keeps the coarse state
+    // (Hybrid stays Hybrid) fires only this.
+    const bool available = m_card && LibreKDE::has(m_card->capabilities(), LibreKDE::Cap::PinManagement);
+    if (m_pinManagementAvailable == available) {
+        return;
+    }
+    m_pinManagementAvailable = available;
+    Q_EMIT pinManagementAvailableChanged();
+}
+
+QStringList SmartCardHandler::credentialsLaunchArgs(const QString& readerPath)
+{
+    return {QStringLiteral("--reader"), readerPath};
+}
+
+namespace {
+// Parsed view of one raw PC/SC reader name.
+struct ReaderParse
+{
+    QString model; // short model label ("" -> caller falls back to raw)
+    bool contactless = false;
+    QString serialTail; // last chars of the serial, for disambiguating twins
+};
+
+// Drop pcsc-lite generic words + interface markers from a candidate label.
+QString cleanReaderToken(QString t)
+{
+    static const QRegularExpression generic(
+        QStringLiteral("\\b(smart\\s*card|smartcard|reader|ccid|interface|usb|contactless|contact)\\b"),
+        QRegularExpression::CaseInsensitiveOption);
+    t.remove(generic);
+    // "5422CL" -> "5422" (the CL is the interface marker, not part of the model).
+    static const QRegularExpression clAfterDigit(QStringLiteral("([0-9])CL\\b"),
+                                                 QRegularExpression::CaseInsensitiveOption);
+    t.replace(clAfterDigit, QStringLiteral("\\1"));
+    static const QRegularExpression clWord(QStringLiteral("\\bCL\\b"), QRegularExpression::CaseInsensitiveOption);
+    t.remove(clWord);
+    static const QRegularExpression squashWs(QStringLiteral("\\s+"));
+    t.replace(squashWs, QStringLiteral(" "));
+    return t.trimmed();
+}
+
+ReaderParse parseReaderName(const QString& raw)
+{
+    ReaderParse out;
+    QString s = raw.trimmed();
+
+    // Serial = the parenthesised group pcsc-lite appends ("(iSerial)").
+    static const QRegularExpression serialRe(QStringLiteral("\\(([^)]+)\\)"));
+    const QRegularExpressionMatch sm = serialRe.match(s);
+    if (sm.hasMatch()) {
+        out.serialTail = sm.captured(1).trimmed().right(4);
+    }
+
+    // Strip the trailing boilerplate: "(serial)" and the "<ifd> <slot>" pair, in
+    // whichever order (run the number-pair strip twice to cover both).
+    static const QRegularExpression tailNums(QStringLiteral("\\s*\\d+\\s+\\d+\\s*$"));
+    static const QRegularExpression tailSerial(QStringLiteral("\\s*\\([^)]*\\)\\s*$"));
+    s.remove(tailNums);
+    s.remove(tailSerial);
+    s.remove(tailNums);
+    s = s.trimmed();
+
+    // Split "PREFIX [BRACKET]" — pcsc-lite usually puts the USB product string
+    // (vendor-free) in the bracket, which makes the cleaner model source.
+    QString prefix = s;
+    QString bracket;
+    static const QRegularExpression bracketRe(QStringLiteral("\\[([^\\]]*)\\]"));
+    const QRegularExpressionMatch bm = bracketRe.match(s);
+    if (bm.hasMatch()) {
+        bracket = bm.captured(1).trimmed();
+        prefix = s.left(bm.capturedStart()).trimmed();
+    }
+
+    // Contactless if the fullest text carries a contactless marker.
+    static const QRegularExpression clRe(QStringLiteral("contactless|\\bpicc\\b|\\bnfc\\b|[0-9]\\s*CL\\b|\\bCL\\b"),
+                                         QRegularExpression::CaseInsensitiveOption);
+    out.contactless = clRe.match(s).hasMatch();
+
+    const QString cleanedBracket = cleanReaderToken(bracket);
+    const QString cleanedPrefix = cleanReaderToken(prefix);
+    // Prefer the bracket when it yields a model-like token (a digit or >=2
+    // words); otherwise the prefix; never empty (caller falls back to raw).
+    static const QRegularExpression hasDigit(QStringLiteral("[0-9]"));
+    const bool bracketModelLike = !cleanedBracket.isEmpty() && (hasDigit.match(cleanedBracket).hasMatch() ||
+                                                                cleanedBracket.contains(QLatin1Char(' ')));
+    out.model = bracketModelLike ? cleanedBracket : (cleanedPrefix.isEmpty() ? cleanedBracket : cleanedPrefix);
+    return out;
+}
+} // namespace
+
+QStringList SmartCardHandler::readerDisplayLabels(const QStringList& rawNames)
+{
+    const int n = rawNames.size();
+    QList<ReaderParse> parsed;
+    parsed.reserve(n);
+    QHash<QString, int> contactlessPerModel;
+    for (const QString& raw : rawNames) {
+        ReaderParse p = parseReaderName(raw);
+        if (p.model.isEmpty()) {
+            p.model = raw.trimmed(); // safe fallback: never empty/misleading
+        }
+        if (p.contactless) {
+            contactlessPerModel[p.model] += 1;
+        }
+        parsed.append(p);
+    }
+
+    QStringList labels;
+    labels.reserve(n);
+    for (const ReaderParse& p : std::as_const(parsed)) {
+        if (p.contactless) {
+            labels.append(
+                i18nc("@item reader label: <model> on the contactless interface", "%1 — contactless", p.model));
+        } else if (contactlessPerModel.value(p.model, 0) > 0) {
+            // A contactless sibling exists — mark this as the contact interface.
+            labels.append(i18nc("@item reader label: <model> on the contact interface", "%1 — contact", p.model));
+        } else {
+            labels.append(p.model);
+        }
+    }
+
+    // Uniqueness: the whole point is distinguishability, so if two labels still
+    // collide (e.g. two identical devices), append a short serial tail (or, as a
+    // last resort, a 1-based index) until every label is unique.
+    QHash<QString, int> seen;
+    for (int i = 0; i < labels.size(); ++i) {
+        seen[labels[i]] += 1;
+    }
+    for (int i = 0; i < labels.size(); ++i) {
+        if (seen.value(labels[i], 0) <= 1) {
+            continue;
+        }
+        const QString tail = parsed[i].serialTail;
+        QString disambiguated = tail.isEmpty() ? QStringLiteral("%1 (%2)").arg(labels[i]).arg(i + 1)
+                                               : QStringLiteral("%1 (%2)").arg(labels[i], tail);
+        // Guard against the (unlikely) case the disambiguated form still clashes.
+        while (seen.value(disambiguated, 0) > 0) {
+            disambiguated = QStringLiteral("%1 (%2)").arg(labels[i]).arg(i + 1);
+            break;
+        }
+        seen[disambiguated] += 1;
+        labels[i] = disambiguated;
+    }
+    return labels;
+}
+
+QString SmartCardHandler::readerDisplayName(const QString& rawName) const
+{
+    return m_readerDisplayNames.value(rawName, rawName);
+}
+
+void SmartCardHandler::manageCredentials()
+{
+    if (!m_card) {
+        return;
+    }
+    const QString readerPath = m_card->readerPath(); // Reader1 object path
+    // CommandLauncherJob (vs ApplicationLauncherJob's URL-only surface) takes an
+    // explicit executable + argument list, so `--reader <path>` passes cleanly,
+    // AND it supplies the startup-notification / Wayland activation token. The
+    // window is KDBusService::Unique: a second launch raises + re-targets
+    // the running instance, its argv reaching the window via activateRequested.
+    auto* job =
+        new KIO::CommandLauncherJob(QString::fromLatin1(kCredentialsExe), credentialsLaunchArgs(readerPath), this);
+    job->setDesktopName(QStringLiteral("org.librescrs.credentials")); // startup-notify id
+    job->start();
+}
+
+void SmartCardHandler::setReaderName(const QString& name)
+{
+    if (m_readerName == name) {
+        return;
+    }
+    m_readerName = name;
+    Q_EMIT readerNameChanged();
+}
+
+void SmartCardHandler::setCardLabel(const QString& label)
+{
+    if (m_cardLabel == label) {
+        return;
+    }
+    m_cardLabel = label;
+    Q_EMIT cardLabelChanged();
+}
+
+void SmartCardHandler::transitionTo(CardStateModel::State newState)
+{
+    if (newState == m_state) {
+        return;
+    }
+    m_state = newState;
+    Q_EMIT stateChanged();
+}
+
+void SmartCardHandler::setError(const QString& diagnosticOrEmpty)
+{
+    if (m_errorMessage == diagnosticOrEmpty) {
+        return;
+    }
+    m_errorMessage = diagnosticOrEmpty;
+    Q_EMIT errorMessageChanged();
+}
+
+bool SmartCardHandler::agentServiceInstalledIn(const QStringList& dataDirs)
+{
+    for (const QString& dir : dataDirs) {
+        if (QFileInfo::exists(dir + QStringLiteral("/dbus-1/services/org.librescrs.Agent.service"))) {
+            return true;
+        }
+        if (QFileInfo::exists(dir + QStringLiteral("/systemd/user/librescrs-agent.service"))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool SmartCardHandler::detectAgentInstalled()
+{
+    return agentServiceInstalledIn(QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation));
+}
+
+void SmartCardHandler::setAgentInstalled(bool installed)
+{
+    if (m_agentInstalled == installed) {
+        return;
+    }
+    m_agentInstalled = installed;
+    Q_EMIT agentInstalledChanged();
+}
+
+void SmartCardHandler::rebuildIdentityModel(const LibreKDE::IdentityFields& fields)
+{
+    // Reuse the shared flatten (skip-binary + stringify) — the SAME rule the
+    // card:/ KIO worker uses (AgentCardDataSource -> flattenIdentityFields). The
+    // plasmoid additionally drops empty-value rows (a blank summary/expander row
+    // looks broken in a popup) and adapts to QVariantMap for the QML Repeater.
+    QVariantList flat;
+    for (const LibreKDE::IdentityRow& row : LibreKDE::flattenIdentityFields(fields)) {
+        if (row.value.isEmpty()) {
+            continue;
+        }
+        QVariantMap out;
+        out.insert(QStringLiteral("groupKey"), row.groupKey);
+        out.insert(QStringLiteral("fieldKey"), row.fieldKey);
+        // Localize via the frozen labelKey the agent ships (shared resolver — the
+        // SAME rule the card:/ worker uses), falling back to the English label.
+        out.insert(QStringLiteral("label"), LibreKDE::localizedFieldLabel(row));
+        out.insert(QStringLiteral("value"), row.value);
+        flat.append(out);
+    }
+
+    m_identityFields = flat;
+    m_identitySummary = curateIdentitySummary(flat);
+    Q_EMIT identityChanged();
+}
+
+QVariantList SmartCardHandler::curateIdentitySummary(const QVariantList& fields)
+{
+    // The identifying fields, in preferred display order. These are the ACTUAL
+    // field keys the agent's LibreMiddleware identity plugins emit (verified
+    // against the shipping code, not guessed):
+    //   - rs-eid-plugin/src/eid_card_plugin.cpp: surname, given_name,
+    //     personal_number, document_type, document_serial_number, doc_reg_no,
+    //     expiry_date, card_type
+    //   - rs-health-plugin/src/health_card_plugin.cpp: family_name, given_name,
+    //     personal_number, card_id, date_of_expiry, valid_until
+    //   - emrtd-plugin/src/emrtd_card_plugin.cpp: full_name, surname,
+    //     given_names, personal_number, document_number, date_of_expiry
+    //   - eu-vrc-plugin/src/eu_vrc_card_plugin.cpp: document_number,
+    //     expiry_date
+    // First match wins; card-agnostic (invents no field, uses the agent's own
+    // labels).
+    //
+    // full_name is deliberately ABSENT here: it is the eMRTD DG11 row —
+    // free-form supplementary data (often national-script, on some documents
+    // not a person name at all). The machine-verified DG1/MRZ name components
+    // are the primary identity source; full_name joins only as a FALLBACK
+    // headline when no name component exists (see below).
+    static const QStringList kSummaryKeys = {
+        QStringLiteral("surname"),
+        QStringLiteral("family_name"),
+        QStringLiteral("given_name"),
+        QStringLiteral("given_names"),
+        QStringLiteral("personal_number"),
+        QStringLiteral("document_number"),
+        QStringLiteral("document_serial_number"),
+        QStringLiteral("doc_reg_no"),
+        QStringLiteral("card_id"),
+        QStringLiteral("document_type"),
+        QStringLiteral("card_type"),
+        QStringLiteral("date_of_expiry"),
+        QStringLiteral("expiry_date"),
+        QStringLiteral("valid_until"),
+    };
+    static const QStringList kNameComponentKeys = {
+        QStringLiteral("surname"),
+        QStringLiteral("family_name"),
+        QStringLiteral("given_name"),
+        QStringLiteral("given_names"),
+    };
+    // Single pass; a name component counts only with a non-empty value, so
+    // the rule also holds for callers that feed unfiltered flattened rows
+    // (the plasmoid model drops empty-value rows earlier, card:/-style
+    // consumers do not).
+    // One emptiness rule for both the suppression predicate and the row
+    // selection below, so an empty-valued name row can neither suppress
+    // full_name nor headline the summary itself (callers that feed
+    // unfiltered flattened rows retain empty values by contract).
+    const auto hasText = [](const QVariantMap& row) {
+        return !row.value(QStringLiteral("value")).toString().trimmed().isEmpty();
+    };
+    const bool hasNameComponent = std::any_of(fields.cbegin(), fields.cend(), [&hasText](const QVariant& entry) {
+        const QVariantMap row = entry.toMap();
+        return kNameComponentKeys.contains(row.value(QStringLiteral("fieldKey")).toString()) && hasText(row);
+    });
+    QStringList effectiveKeys = kSummaryKeys;
+    if (!hasNameComponent) {
+        effectiveKeys.prepend(QStringLiteral("full_name"));
+    }
+    const auto toSummaryRow = [](const QVariantMap& row) {
+        QVariantMap out;
+        out.insert(QStringLiteral("label"), row.value(QStringLiteral("label")));
+        out.insert(QStringLiteral("value"), row.value(QStringLiteral("value")));
+        return out;
+    };
+    QVariantList summary;
+    for (const QString& key : effectiveKeys) {
+        for (const QVariant& entry : std::as_const(fields)) {
+            const QVariantMap row = entry.toMap();
+            if (row.value(QStringLiteral("fieldKey")).toString() == key && hasText(row)) {
+                summary.append(toSummaryRow(row));
+                break;
+            }
+        }
+    }
+    // Never empty: a card whose keys are outside the curated set still gets a
+    // summary (the first few rows), so the headline is always populated.
+    if (summary.isEmpty()) {
+        constexpr int kFallbackRows = 4;
+        for (const QVariant& entry : std::as_const(fields)) {
+            summary.append(toSummaryRow(entry.toMap()));
+            if (summary.size() >= kFallbackRows) {
+                break;
+            }
+        }
+    }
+    return summary;
+}
+
+void SmartCardHandler::clearIdentity()
+{
+    if (m_identityFields.isEmpty() && m_identitySummary.isEmpty()) {
+        return;
+    }
+    m_identityFields.clear();
+    m_identitySummary.clear();
+    Q_EMIT identityChanged();
+}
+
+QString SmartCardHandler::locateLibreCelik()
+{
+    // Generic, cross-distro "is LibreCelik installed, and where?" resolution.
+    // Returns a launchable executable path, or empty when absent.
+    //
+    // 1) PATH — LibreCelik's desktop entry ships `Exec=LibreCelik`, so probe
+    //    that exact (capitalised) name first; a lowercase fallback covers any
+    //    package that renames the binary. (The previous lowercase-only probe
+    //    missed the shipped `LibreCelik` binary on case-sensitive filesystems.)
+    for (const QString& name : {QStringLiteral("LibreCelik"), QStringLiteral("librecelik")}) {
+        const QString path = QStandardPaths::findExecutable(name);
+        if (!path.isEmpty()) {
+            return path;
+        }
+    }
+    // 2) Freedesktop application database — the canonical, distro-agnostic
+    //    registry of installed apps (native packages register `librecelik.desktop`
+    //    even when the binary is not on this process's PATH). Resolve the
+    //    registered Exec's binary to a full path so the launch path stays
+    //    uniform (QProcess with the reader name). The Exec FIELD itself decides
+    //    launchability: a wrapper line ("flatpak run …", "env VAR=x …",
+    //    "sh -c …") has an executable FIRST token, so resolving that token
+    //    would mis-detect the wrapper as LibreCelik — and later launch e.g.
+    //    `flatpak <readerName>`, a silently dead button. Only an Exec whose
+    //    first token IS the app binary (basename `librecelik`, any case) is
+    //    directly launchable; any other Exec is treated as absent rather than
+    //    mis-launched — launch-by-KService can be added if wrapper packaging
+    //    is ever shipped.
+    if (const KService::Ptr service = KService::serviceByDesktopName(QStringLiteral("librecelik"))) {
+        const QStringList execArgs = KShell::splitArgs(service->exec());
+        const QString firstToken = execArgs.isEmpty() ? QString{} : execArgs.constFirst();
+        if (QFileInfo(firstToken).fileName().compare(QLatin1String("librecelik"), Qt::CaseInsensitive) == 0) {
+            const QString path = QStandardPaths::findExecutable(firstToken);
+            if (!path.isEmpty()) {
+                return path;
+            }
+        }
+    }
+    return {};
+}
+
+QString SmartCardHandler::readerSerialKey(const QString& name)
+{
+    // The unit serial is the last parenthesized group of the reader name
+    // ("Gemalto PC Twin Reader (69988A87) 00 00" -> "69988A87";
+    //  "... [OMNIKEY 5422CL Smartcard Reader] (IM0O2C00NF10456904) 01 00"
+    //  -> "IM0O2C00NF10456904"). Qualifying needs a few characters AND at
+    // least one digit: driver databases ship model-static parenthesized
+    // tokens — "(1)", "(CCID)", "(ICCD)", "(Liteon)" — that are identical for
+    // every unit of those models and must never become a matching key. A
+    // model-static token that happens to carry digits (e.g. "(0013)") still
+    // qualifies; sameReaderUnit() documents that residual risk.
+    const int close = name.lastIndexOf(QLatin1Char(')'));
+    if (close < 1) {
+        return {};
+    }
+    const int open = name.lastIndexOf(QLatin1Char('('), close - 1);
+    if (open < 0) {
+        return {};
+    }
+    const QString key = name.mid(open + 1, close - open - 1).trimmed();
+    if (key.size() < 4) {
+        return {};
+    }
+    const bool hasDigit = std::any_of(key.cbegin(), key.cend(), [](QChar c) { return c.isDigit(); });
+    return hasDigit ? key : QString{};
+}
+
+QString SmartCardHandler::readerBaseName(const QString& name)
+{
+    // The name minus its volatile parts: the last parenthesized group (the
+    // serial-key candidate) and the trailing pcsc-lite " NN NN" enumeration
+    // indices (two two-digit hex tokens appended after the serial). What
+    // remains identifies the MODEL — the part that must agree before a shared
+    // serial key may equate two names.
+    QString base = name;
+    const int close = base.lastIndexOf(QLatin1Char(')'));
+    if (close >= 1) {
+        const int open = base.lastIndexOf(QLatin1Char('('), close - 1);
+        if (open >= 0) {
+            base.remove(open, close - open + 1);
+        }
+    }
+    static const QRegularExpression slotIndexToken(QStringLiteral("^[0-9A-Fa-f]{2}$"));
+    QStringList tokens = base.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+    for (int stripped = 0; stripped < 2 && !tokens.isEmpty(); ++stripped) {
+        if (!slotIndexToken.match(tokens.constLast()).hasMatch()) {
+            break;
+        }
+        tokens.removeLast();
+    }
+    return tokens.join(QLatin1Char(' '));
+}
+
+bool SmartCardHandler::sameReaderUnit(const QString& a, const QString& b)
+{
+    // The same physical unit re-enumerated: BOTH names carry a qualifying unit
+    // serial, the serials agree, AND the base name (the model part) agrees.
+    // The base gate keeps a shared or model-static token from equating
+    // DIFFERENT devices: two models with the same generic token (G&D Star Sign
+    // 350 vs 550), and the two interfaces of a dual-interface reader (contact
+    // vs contactless expose one USB serial under different bracketed model
+    // strings). Residual risk: a digit-bearing model-static token (e.g.
+    // "(0013)") equates two same-model UNITS — reachable only when the bound
+    // unit is absent from the roster and a same-model twin is present, where
+    // exact matching would have shown "not connected" instead.
+    const QString keyA = readerSerialKey(a);
+    if (keyA.isEmpty() || keyA != readerSerialKey(b)) {
+        return false;
+    }
+    return readerBaseName(a) == readerBaseName(b);
+}
+
+QUrl SmartCardHandler::cardUrlForReader(const QString& readerName)
+{
+    QUrl url;
+    url.setScheme(QStringLiteral("card"));
+    url.setPath(QLatin1Char('/') + readerName);
+    return url;
+}
+
+QString SmartCardHandler::plainDisplay(const QString& text)
+{
+    // See the header note: escape ONLY what AutoText would promote to
+    // StyledText, so a hostile value renders as literal characters while every
+    // legitimate value stays byte-identical.
+    return Qt::mightBeRichText(text) ? text.toHtmlEscaped() : text;
+}
+
+void SmartCardHandler::setBusy(bool busy)
+{
+    if (m_busy == busy) {
+        return;
+    }
+    m_busy = busy;
+    Q_EMIT busyChanged();
+}
+
+QString SmartCardHandler::operationPhaseLabel(int phase) const
+{
+    switch (static_cast<LibreKDE::OperationPhase>(phase)) {
+    case LibreKDE::OperationPhase::Reading:
+        return ki18nc("@info:status reading data from the card", "Reading card…").toString();
+    case LibreKDE::OperationPhase::AwaitingConsent:
+        return ki18nc("@info:status waiting for PIN/CAN in the secure prompt", "Waiting for input…").toString();
+    case LibreKDE::OperationPhase::Authenticating:
+        return ki18nc("@info:status verifying the entered secret on the card", "Verifying…").toString();
+    case LibreKDE::OperationPhase::Signing:
+        return ki18nc("@info:status producing the signature on the card", "Signing…").toString();
+    case LibreKDE::OperationPhase::Timestamping:
+        return ki18nc("@info:status attaching a trusted timestamp", "Adding timestamp…").toString();
+    case LibreKDE::OperationPhase::Created:
+    case LibreKDE::OperationPhase::Connecting:
+    case LibreKDE::OperationPhase::Done:
+        break;
+    }
+    return ki18nc("@info:status generic in-progress card operation", "Working…").toString();
+}
+
+void SmartCardHandler::setOperationPhase(LibreKDE::OperationPhase phase)
+{
+    const int p = static_cast<int>(phase);
+    if (m_operationPhase == p) {
+        return;
+    }
+    m_operationPhase = p;
+    Q_EMIT operationPhaseChanged();
+}
+
+void SmartCardHandler::copyField(const QString& value)
+{
+    if (value.isEmpty()) {
+        return;
+    }
+    if (QClipboard* clipboard = QGuiApplication::clipboard()) {
+        clipboard->setText(value);
+    }
+}
+
+bool SmartCardHandler::savePhoto(const QUrl& destination)
+{
+    if (m_photoBytes.isEmpty() || !destination.isValid()) {
+        return false;
+    }
+    const QString path = destination.isLocalFile() ? destination.toLocalFile() : destination.path();
+    if (path.isEmpty()) {
+        return false;
+    }
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly)) {
+        qCWarning(LibreKDE::Plasmoid::Logging) << "savePhoto: cannot open" << path;
+        return false;
+    }
+    if (file.write(m_photoBytes) != m_photoBytes.size()) {
+        file.cancelWriting();
+        return false;
+    }
+    return file.commit();
+}
+
+void SmartCardHandler::openInFiles()
+{
+    if (m_readerName.isEmpty()) {
+        return;
+    }
+    // Warm the certificate read BEFORE launching the file manager: the plasmoid
+    // read identity, not certs, so the `card:/…/PKI` folder would otherwise pay a
+    // cold cert read (PACE + eMRTD secure-channel reads, ~5-10 s) on first open.
+    // This pre-reads them on the already-warm PACE session while Dolphin starts
+    // (asynchronously — the launch below is never delayed); the agent dedups +
+    // caches, so by the time the user navigates to PKI it is instant (and the
+    // KIO worker's read shares the one card read).
+    warmCertificateCache();
+    // card:/<reader> is a KIO-registered scheme -> the default file manager
+    // (Dolphin) handles it. QDesktopServices never routes a registered KIO
+    // scheme to a browser.
+    QDesktopServices::openUrl(cardUrlForReader(m_readerName));
+}
+
+void SmartCardHandler::startAgent()
+{
+    // Best-effort: start the D-Bus-activatable agent via systemd --user. Its bus
+    // registration then fires availabilityChanged(true) -> refresh().
+    if (!QProcess::startDetached(QStringLiteral("systemctl"), {QStringLiteral("--user"), QStringLiteral("start"),
+                                                               QStringLiteral("librescrs-agent")})) {
+        qCWarning(LibreKDE::Plasmoid::Logging) << "startAgent: could not invoke systemctl --user start librescrs-agent";
+    }
+}
+
+void SmartCardHandler::requestRefresh()
+{
+    // Manual re-check. refreshDiscovery() re-probes the bus name and re-runs
+    // GetManagedObjects — recovering a card the agent exported but whose
+    // InterfacesAdded we never received, or an agent that reappeared without a
+    // watcher signal — and emits readersChanged(), which is wired to refresh().
+    // Re-detect install state too, so the AgentUnavailable guidance is current
+    // even when the agent is still absent.
+    setAgentInstalled(detectAgentInstalled());
+    m_client->refreshDiscovery();
+}
+
+} // namespace LibreKDE::Plasmoid

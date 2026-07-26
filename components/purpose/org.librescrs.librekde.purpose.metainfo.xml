@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: CC0-1.0 -->
+<component type="addon">
+    <id>org.librescrs.librekde.purpose</id>
+    <extends>org.kde.dolphin.desktop</extends>
+    <name>Sign with LibreSCRS Smart Card</name>
+    <name xml:lang="sr">Потпиши LibreSCRS паметном картицом</name>
+    <name xml:lang="sr@latin">Potpiši LibreSCRS pametnom karticom</name>
+    <summary>Share-menu action that digitally signs a file with a smart card</summary>
+    <summary xml:lang="sr">Радња из менија дељења која дигитално потписује датотеку паметном картицом</summary>
+    <summary xml:lang="sr@latin">Radnja iz menija deljenja koja digitalno potpisuje datoteku pametnom karticom</summary>
+    <metadata_license>CC0-1.0</metadata_license>
+    <project_license>LGPL-2.1-or-later</project_license>
+    <url type="homepage">https://librescrs.github.io/</url>
+    <url type="bugtracker">https://github.com/LibreSCRS/LibreKDE/issues</url>
+    <developer id="rs.librescrs">
+        <name>LibreSCRS Project</name>
+    </developer>
+    <description>
+        <p>
+            A KDE Purpose plugin that adds a "Sign with LibreSCRS Smart Card"
+            action to the file-manager Share menu. It hands the selected file
+            to the LibreSCRS session agent, which performs the signature on the
+            card and returns a signed artifact written next to the original.
+            The signature format is chosen from the file type (PAdES for PDF,
+            XAdES for XML, JAdES for JSON, ASiC-E for ASiC-E containers, CAdES
+            otherwise). All card access, secret entry (PIN/CAN) and signing
+            policy live in the agent; this plugin performs no cryptographic
+            operations and holds no secrets of its own.
+        </p>
+    </description>
+    <content_rating type="oars-1.1"/>
+</component>

@@ -1,0 +1,951 @@
+# Serbian translation for LibreKDE.
+# SPDX-FileCopyrightText: 2026 hirashix0
+# SPDX-License-Identifier: LGPL-2.1-or-later
+msgid ""
+msgstr ""
+"Project-Id-Version: librekde\n"
+"Report-Msgid-Bugs-To: https://librescrs.github.io/\n"
+"POT-Creation-Date: 2026-07-13 13:40+0200\n"
+"PO-Revision-Date: 2026-07-13\n"
+"Last-Translator: hirashix0\n"
+"Language-Team: Serbian\n"
+"Language: sr\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
+"n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+# --- components/kio/CardWorkerLogic.cpp (card:// worker) --------------------
+#: components/kio/CardWorkerLogic.cpp:38
+msgctxt "X.509 key usage"
+msgid "Digital Signature"
+msgstr "Дигитални потпис"
+
+#: components/kio/CardWorkerLogic.cpp:38
+msgctxt "X.509 key usage"
+msgid "Non-Repudiation"
+msgstr "Непорецивост"
+
+#: components/kio/CardWorkerLogic.cpp:39
+msgctxt "X.509 key usage"
+msgid "Key Encipherment"
+msgstr "Шифровање кључа"
+
+#: components/kio/CardWorkerLogic.cpp:39
+msgctxt "X.509 key usage"
+msgid "Data Encipherment"
+msgstr "Шифровање података"
+
+#: components/kio/CardWorkerLogic.cpp:40
+msgctxt "X.509 key usage"
+msgid "Key Agreement"
+msgstr "Договарање кључа"
+
+#: components/kio/CardWorkerLogic.cpp:40
+msgctxt "X.509 key usage"
+msgid "Certificate Signing"
+msgstr "Потписивање сертификата"
+
+#: components/kio/CardWorkerLogic.cpp:41
+msgctxt "X.509 key usage"
+msgid "CRL Signing"
+msgstr "Потписивање CRL-а"
+
+#: components/kio/CardWorkerLogic.cpp:41
+msgctxt "X.509 key usage"
+msgid "Encipher Only"
+msgstr "Само шифровање"
+
+#: components/kio/CardWorkerLogic.cpp:42
+msgctxt "X.509 key usage"
+msgid "Decipher Only"
+msgstr "Само дешифровање"
+
+#: components/kio/CardWorkerLogic.cpp:44
+msgctxt "certificate trust status"
+msgid "not yet evaluated"
+msgstr "још није оцењено"
+
+#: components/kio/CardWorkerLogic.cpp:45
+msgctxt "certificate qualified status"
+msgid "unknown"
+msgstr "непознато"
+
+#: components/kio/CardWorkerLogic.cpp:50
+msgctxt "certificate info.txt line label"
+msgid "Subject"
+msgstr "Субјекат"
+
+#: components/kio/CardWorkerLogic.cpp:51
+msgctxt "certificate info.txt line label"
+msgid "Issuer"
+msgstr "Издавалац"
+
+#: components/kio/CardWorkerLogic.cpp:52
+msgctxt "certificate info.txt line label"
+msgid "Valid until"
+msgstr "Важи до"
+
+#: components/kio/CardWorkerLogic.cpp:53
+msgctxt "certificate info.txt line label"
+msgid "Purpose"
+msgstr "Намена"
+
+#: components/kio/CardWorkerLogic.cpp:54
+msgctxt "certificate info.txt line label"
+msgid "Extended Key Usage"
+msgstr "Проширена употреба кључа"
+
+#: components/kio/CardWorkerLogic.cpp:55
+msgctxt "certificate info.txt line label"
+msgid "Signing capable"
+msgstr "Може да потписује"
+
+#: components/kio/CardWorkerLogic.cpp:56
+msgctxt "certificate info.txt line label"
+msgid "Trust"
+msgstr "Поверење"
+
+#: components/kio/CardWorkerLogic.cpp:57
+msgctxt "certificate info.txt line label"
+msgid "Qualified"
+msgstr "Квалификован"
+
+#: components/kio/CardWorkerLogic.cpp:58
+msgctxt "certificate info.txt line label"
+msgid "Chain"
+msgstr "Ланац"
+
+#: components/kio/CardWorkerLogic.cpp:59
+msgctxt "card info.txt line label"
+msgid "Reader"
+msgstr "Читач"
+
+#: components/kio/CardWorkerLogic.cpp:60
+msgctxt "card info.txt line label"
+msgid "Capabilities"
+msgstr "Могућности"
+
+#: components/kio/CardWorkerLogic.cpp:61
+msgctxt "card info.txt line label"
+msgid "Pre-read authentication"
+msgstr "Аутентификација пре читања"
+
+#: components/kio/CardWorkerLogic.cpp:63
+msgctxt "boolean value in info.txt"
+msgid "yes"
+msgstr "да"
+
+#: components/kio/CardWorkerLogic.cpp:64
+msgctxt "boolean value in info.txt"
+msgid "no"
+msgstr "не"
+
+#: components/kio/CardWorkerLogic.cpp:65
+msgctxt "empty capability list in info.txt"
+msgid "none"
+msgstr "ниједна"
+
+#: components/kio/CardWorkerLogic.cpp:66
+msgctxt "no pre-read authentication required"
+msgid "None"
+msgstr "Нема"
+
+#: components/kio/CardWorkerLogic.cpp:67
+msgctxt "card capability flag"
+msgid "Identity"
+msgstr "Идентитет"
+
+#: components/kio/CardWorkerLogic.cpp:68
+msgctxt "card capability flag"
+msgid "PIN management"
+msgstr "Управљање ПИН-ом"
+
+#: components/kio/CardWorkerLogic.cpp:118
+msgctxt "certificate folder fallback name, %1 = short id"
+msgid "Certificate (%1)"
+msgstr "Сертификат (%1)"
+
+#: components/kio/CardWorkerLogic.cpp:120
+msgctxt "certificate folder name: purpose + short id"
+msgid "%1 (%2)"
+msgstr "%1 (%2)"
+
+#: components/kio/CardWorkerLogic.cpp:148
+msgctxt ""
+"disambiguator for same-purpose cert folders: %1 = base name, %2 = ordinal"
+msgid "%1 (%2)"
+msgstr "%1 (%2)"
+
+#: components/kio/CardWorkerLogic.cpp:179
+msgid "The card was removed."
+msgstr "Картица је извађена."
+
+#: components/kio/CardWorkerLogic.cpp:186
+msgid "The smart-card service is unavailable."
+msgstr "Сервис паметних картица није доступан."
+
+#: components/kio/CardWorkerLogic.cpp:195
+msgid "Could not read the card."
+msgstr "Није могуће прочитати картицу."
+
+# --- SmartCardHandler.cpp -------------------------------------------------
+#: components/plasmoid/src/SmartCardHandler.cpp:258
+msgctxt "@info plasmoid identity read failed to start"
+msgid "Could not start reading this card. Please try again."
+msgstr "Није могуће започети читање ове картице. Покушајте поново."
+
+#: components/plasmoid/src/SmartCardHandler.cpp
+msgctxt "@item reader label: <model> on the contact interface"
+msgid "%1 — contact"
+msgstr "%1 — контактни"
+
+#: components/plasmoid/src/SmartCardHandler.cpp
+msgctxt "@item reader label: <model> on the contactless interface"
+msgid "%1 — contactless"
+msgstr "%1 — бесконтактни"
+
+# --- librescrs_sign_purpose.cpp (Purpose plugin) ---------------------------
+#: components/purpose/librescrs_sign_purpose.cpp:38
+msgctxt "@info:status"
+msgid "No file was selected to sign."
+msgstr "Није изабран фајл за потписивање."
+
+#: components/purpose/librescrs_sign_purpose.cpp:44
+msgctxt "@info:status"
+msgid "Only local files can be signed."
+msgstr "Могу да се потпишу само локални фајлови."
+
+#: components/purpose/librescrs_sign_purpose.cpp:53
+msgctxt "@info:status"
+msgid "The LibreSCRS smart-card service is not running."
+msgstr "LibreSCRS сервис за паметне картице није покренут."
+
+#: components/purpose/librescrs_sign_purpose.cpp:63
+msgctxt "@info:status"
+msgid "Insert a smart card that supports signing."
+msgstr "Убаците паметну картицу која подржава потписивање."
+
+# --- shared/agentclient/ErrorText.cpp (ki18nd, no context) ------------------
+#: shared/agentclient/ErrorText.cpp:18
+msgid "The card was removed before the operation finished."
+msgstr "Картица је извађена пре него што је операција завршена."
+
+#: shared/agentclient/ErrorText.cpp:20
+msgid "The PIN or access code entered was incorrect."
+msgstr "Унети ПИН или приступни код није исправан."
+
+#: shared/agentclient/ErrorText.cpp:22
+msgid "The card credential is blocked. Unblock it before retrying."
+msgstr "Акредитив картице је блокиран. Деблокирајте га пре поновног покушаја."
+
+#: shared/agentclient/ErrorText.cpp:24
+msgid "Communication with the card reader failed."
+msgstr "Комуникација са читачем картица није успела."
+
+#: shared/agentclient/ErrorText.cpp:26
+msgid "The data read from the card could not be interpreted."
+msgstr "Подаци прочитани са картице не могу да се протумаче."
+
+#: shared/agentclient/ErrorText.cpp:28
+msgid "This card is not supported."
+msgstr "Ова картица није подржана."
+
+#: shared/agentclient/ErrorText.cpp:30
+msgid "Authentication with the card failed."
+msgstr "Аутентификација са картицом није успела."
+
+#: shared/agentclient/ErrorText.cpp:32
+msgid "The secure entry prompt could not be shown."
+msgstr "Није могуће приказати безбедни упит за унос."
+
+#: shared/agentclient/ErrorText.cpp:34
+msgid "This card does not support the requested operation."
+msgstr "Ова картица не подржава тражену операцију."
+
+#: shared/agentclient/ErrorText.cpp:36
+msgid "The operation timed out."
+msgstr "Време за операцију је истекло."
+
+#: shared/agentclient/ErrorText.cpp:38
+msgid "The selected certificate could not be found on the card."
+msgstr "Изабрани сертификат није пронађен на картици."
+
+#: shared/agentclient/ErrorText.cpp:40
+msgid "More than one key matched the selection."
+msgstr "Више од једног кључа одговара избору."
+
+#: shared/agentclient/ErrorText.cpp:42
+msgid "The signing certificate has expired."
+msgstr "Сертификат за потписивање је истекао."
+
+#: shared/agentclient/ErrorText.cpp:44
+msgid "The certificate chain could not be completed."
+msgstr "Ланац сертификата није могуће употпунити."
+
+#: shared/agentclient/ErrorText.cpp:46
+msgid "The timestamp authority is unreachable."
+msgstr "Ауторитет за временски жиг није доступан."
+
+#: shared/agentclient/ErrorText.cpp:48
+msgid "The signing engine reported an error."
+msgstr "Механизам за потписивање је пријавио грешку."
+
+#: shared/agentclient/ErrorText.cpp:50
+msgid "Too many signing requests. Try again shortly."
+msgstr "Превише захтева за потписивање. Покушајте поново ускоро."
+
+# --- shared/signing/SignSeams.cpp -------------------------------------------
+#: shared/signing/SignSeams.cpp:31
+msgctxt "@title:window"
+msgid "Choose a Signing Certificate"
+msgstr "Избор сертификата за потписивање"
+
+#: shared/signing/SignSeams.cpp:32
+msgctxt "@label:listbox"
+msgid "This card has several signing certificates. Choose one:"
+msgstr "Ова картица има више сертификата за потписивање. Изаберите један:"
+
+#: shared/signing/SignSeams.cpp:48
+msgctxt "@title:window"
+msgid "Overwrite Signed File?"
+msgstr "Преписати потписани фајл?"
+
+#: shared/signing/SignSeams.cpp:49
+msgctxt "@info"
+msgid "The file %1 already exists. Overwrite it with the new signature?"
+msgstr "Фајл %1 већ постоји. Преписати га новим потписом?"
+
+# --- shared/signing/SignJob.cpp --------------------------------------------
+#: shared/signing/SignJob.cpp:78
+msgctxt "@info:status sign failed"
+msgid "No smart card is available for signing."
+msgstr "Ниједна паметна картица није доступна за потписивање."
+
+#: shared/signing/SignJob.cpp:86
+msgctxt "@info:status card has no PKI capability"
+msgid "This card does not support signing."
+msgstr "Ова картица не подржава потписивање."
+
+#: shared/signing/SignJob.cpp:148
+msgctxt "@info:status no signing certificate on the card"
+msgid "This card does not support signing."
+msgstr "Ова картица не подржава потписивање."
+
+#: shared/signing/SignJob.cpp:158
+msgctxt "@info:status user cancelled the certificate chooser"
+msgid "Signing was cancelled."
+msgstr "Потписивање је отказано."
+
+#: shared/signing/SignJob.cpp:182
+msgctxt "@info:status sign failed, card removed during selection"
+msgid "The smart card was removed before signing could start."
+msgstr ""
+"Паметна картица је извађена пре него што је потписивање могло да почне."
+
+#: shared/signing/SignJob.cpp:190
+msgctxt "@info:status sign failed to open input"
+msgid "Could not open the file to sign."
+msgstr "Није могуће отворити фајл за потписивање."
+
+#: shared/signing/SignJob.cpp:258 shared/signing/SignJob.cpp:284
+#: shared/signing/SignJob.cpp:303
+msgctxt "@info:status sign failed to write output"
+msgid "Could not write the signed file %1."
+msgstr "Није могуће уписати потписани фајл %1."
+
+#: shared/signing/SignJob.cpp:297
+msgctxt "@info:status user declined overwriting the output"
+msgid "Signing was cancelled to avoid overwriting %1."
+msgstr "Потписивање је отказано да се не би преписао фајл %1."
+
+# --- shared/agentclient/IdentityRows.cpp (identity field labels) -----------
+msgctxt "@item:intable identity field"
+msgid "Full Name"
+msgstr "Име и презиме"
+
+msgctxt "@item:intable identity field"
+msgid "Surname"
+msgstr "Презиме"
+
+msgctxt "@item:intable identity field"
+msgid "Family Name"
+msgstr "Презиме"
+
+msgctxt "@item:intable identity field"
+msgid "Family Name (Latin)"
+msgstr "Презиме (латиница)"
+
+msgctxt "@item:intable identity field"
+msgid "Given Name"
+msgstr "Име"
+
+msgctxt "@item:intable identity field"
+msgid "Given Names"
+msgstr "Име"
+
+msgctxt "@item:intable identity field"
+msgid "Given Name (Latin)"
+msgstr "Име (латиница)"
+
+msgctxt "@item:intable identity field"
+msgid "Other Names"
+msgstr "Друга имена"
+
+msgctxt "@item:intable identity field"
+msgid "Parent Given Name"
+msgstr "Име родитеља"
+
+msgctxt "@item:intable identity field"
+msgid "Parent Name"
+msgstr "Име родитеља"
+
+msgctxt "@item:intable identity field"
+msgid "Parent Name (Latin)"
+msgstr "Име родитеља (латиница)"
+
+msgctxt "@item:intable identity field"
+msgid "Sex"
+msgstr "Пол"
+
+msgctxt "@item:intable identity field"
+msgid "Gender"
+msgstr "Пол"
+
+msgctxt "@item:intable identity field"
+msgid "Title"
+msgstr "Титула"
+
+msgctxt "@item:intable identity field"
+msgid "Profession"
+msgstr "Занимање"
+
+msgctxt "@item:intable identity field"
+msgid "Nationality"
+msgstr "Држављанство"
+
+msgctxt "@item:intable identity field"
+msgid "Status of Foreigner"
+msgstr "Статус странца"
+
+msgctxt "@item:intable identity field"
+msgid "Date of Birth"
+msgstr "Датум рођења"
+
+msgctxt "@item:intable identity field"
+msgid "Place of Birth"
+msgstr "Место рођења"
+
+msgctxt "@item:intable identity field"
+msgid "Community of Birth"
+msgstr "Општина рођења"
+
+msgctxt "@item:intable identity field"
+msgid "State of Birth"
+msgstr "Држава рођења"
+
+msgctxt "@item:intable identity field"
+msgid "Personal Number"
+msgstr "Лични број"
+
+msgctxt "@item:intable identity field (health insurant number)"
+msgid "Insurant Number"
+msgstr "Број осигураника"
+
+msgctxt "@item:intable identity field"
+msgid "Address"
+msgstr "Адреса"
+
+msgctxt "@item:intable identity field (address)"
+msgid "State"
+msgstr "Држава"
+
+msgctxt "@item:intable identity field"
+msgid "Country"
+msgstr "Држава"
+
+msgctxt "@item:intable identity field (address)"
+msgid "Community"
+msgstr "Општина"
+
+msgctxt "@item:intable identity field"
+msgid "Municipality"
+msgstr "Општина"
+
+msgctxt "@item:intable identity field (address)"
+msgid "Place"
+msgstr "Место"
+
+msgctxt "@item:intable identity field"
+msgid "Street"
+msgstr "Улица"
+
+msgctxt "@item:intable identity field"
+msgid "House Number"
+msgstr "Кућни број"
+
+msgctxt "@item:intable identity field"
+msgid "House Letter"
+msgstr "Слово куће"
+
+msgctxt "@item:intable identity field (house number)"
+msgid "Number"
+msgstr "Број"
+
+msgctxt "@item:intable identity field"
+msgid "Entrance"
+msgstr "Улаз"
+
+msgctxt "@item:intable identity field"
+msgid "Floor"
+msgstr "Спрат"
+
+msgctxt "@item:intable identity field"
+msgid "Apartment"
+msgstr "Стан"
+
+msgctxt "@item:intable identity field"
+msgid "Apartment Number"
+msgstr "Број стана"
+
+msgctxt "@item:intable identity field"
+msgid "Telephone"
+msgstr "Телефон"
+
+msgctxt "@item:intable identity field"
+msgid "Document Number"
+msgstr "Број документа"
+
+msgctxt "@item:intable identity field"
+msgid "Document Code"
+msgstr "Шифра документа"
+
+msgctxt "@item:intable identity field"
+msgid "Document Type"
+msgstr "Врста документа"
+
+msgctxt "@item:intable identity field"
+msgid "Serial Number"
+msgstr "Серијски број"
+
+msgctxt "@item:intable identity field"
+msgid "Registration Number"
+msgstr "Регистарски број"
+
+msgctxt "@item:intable identity field"
+msgid "Issuing State"
+msgstr "Држава издавања"
+
+msgctxt "@item:intable identity field"
+msgid "Issuing Authority"
+msgstr "Орган издавања"
+
+msgctxt "@item:intable identity field"
+msgid "Issuing Date"
+msgstr "Датум издавања"
+
+msgctxt "@item:intable identity field"
+msgid "Date of Issue"
+msgstr "Датум издавања"
+
+msgctxt "@item:intable identity field"
+msgid "Date of Expiry"
+msgstr "Датум истека"
+
+msgctxt "@item:intable identity field"
+msgid "Expiry Date"
+msgstr "Датум истека"
+
+msgctxt "@item:intable identity field"
+msgid "Valid Until"
+msgstr "Важи до"
+
+msgctxt "@item:intable identity field"
+msgid "Endorsements"
+msgstr "Напомене"
+
+msgctxt "@item:intable identity field"
+msgid "Custody Information"
+msgstr "Подаци о старатељству"
+
+msgctxt "@item:intable identity field"
+msgid "Insurer"
+msgstr "Осигуравач"
+
+msgctxt "@item:intable identity field"
+msgid "Insurer ID"
+msgstr "ИД осигуравача"
+
+msgctxt "@item:intable identity field"
+msgid "Card ID"
+msgstr "Број картице"
+
+msgctxt "@item:intable identity field (insurance basis)"
+msgid "Basis"
+msgstr "Основ осигурања"
+
+msgctxt "@item:intable identity field"
+msgid "Description"
+msgstr "Опис"
+
+msgctxt "@item:intable identity field"
+msgid "Start Date"
+msgstr "Датум почетка"
+
+msgctxt "@item:intable identity field"
+msgid "Data Groups"
+msgstr "Групе података"
+
+msgctxt "@item:intable identity field"
+msgid "Authentication Method"
+msgstr "Метод аутентификације"
+
+msgctxt "@item:intable identity field"
+msgid "Data Integrity"
+msgstr "Интегритет података"
+
+msgctxt "@item:intable identity field"
+msgid "Data Authenticity"
+msgstr "Аутентичност података"
+
+msgctxt "@item:intable identity field"
+msgid "Chip Genuineness"
+msgstr "Аутентичност чипа"
+
+msgctxt "@item:intable identity field (token label)"
+msgid "Label"
+msgstr "Назив"
+
+msgctxt "@item:intable identity field"
+msgid "Manufacturer"
+msgstr "Произвођач"
+
+# --- components/plasmoid/src/SmartCardHandler.cpp --
+#: components/plasmoid/src/SmartCardHandler.cpp
+msgctxt "@info:status reading data from the card"
+msgid "Reading card…"
+msgstr "Читам картицу…"
+
+#: components/plasmoid/src/SmartCardHandler.cpp
+msgctxt "@info:status waiting for PIN/CAN in the secure prompt"
+msgid "Waiting for input…"
+msgstr "Чекам унос…"
+
+#: components/plasmoid/src/SmartCardHandler.cpp
+msgctxt "@info:status verifying the entered secret on the card"
+msgid "Verifying…"
+msgstr "Проверавам…"
+
+#: components/plasmoid/src/SmartCardHandler.cpp
+msgctxt "@info:status producing the signature on the card"
+msgid "Signing…"
+msgstr "Потписујем…"
+
+#: components/plasmoid/src/SmartCardHandler.cpp
+msgctxt "@info:status attaching a trusted timestamp"
+msgid "Adding timestamp…"
+msgstr "Додајем временски жиг…"
+
+#: components/plasmoid/src/SmartCardHandler.cpp
+msgctxt "@info:status generic in-progress card operation"
+msgid "Working…"
+msgstr "Радим…"
+
+#: shared/agentclient/ErrorText.cpp
+msgid ""
+"The signing service is not set up correctly — its security module could not "
+"be loaded. Check the installation."
+msgstr ""
+"Услуга за потписивање није исправно подешена — њен безбедносни модул није "
+"могуће учитати. Проверите инсталацију."
+
+#: shared/agentclient/ErrorText.cpp
+msgid ""
+"The document you tried to sign is invalid or could not be read. Check the "
+"file."
+msgstr ""
+"Документ који сте покушали да потпишете је неисправан или се не може "
+"прочитати. Проверите датотеку."
+
+# --- shared/agentclient/CredentialText.cpp (credential kinds/states/outcomes)
+#: shared/agentclient/CredentialText.cpp:10
+msgctxt "credential kind"
+msgid "User PIN"
+msgstr "Кориснички ПИН"
+
+#: shared/agentclient/CredentialText.cpp:12
+msgctxt "credential kind"
+msgid "Signing PIN"
+msgstr "ПИН за потписивање"
+
+#: shared/agentclient/CredentialText.cpp:14
+msgctxt "credential kind"
+msgid "PUK"
+msgstr "ПУК"
+
+#: shared/agentclient/CredentialText.cpp:16
+msgctxt "credential kind"
+msgid "CAN"
+msgstr "CAN"
+
+#: shared/agentclient/CredentialText.cpp:18
+msgctxt "credential kind"
+msgid "Credential"
+msgstr "Акредитив"
+
+#: shared/agentclient/CredentialText.cpp:26
+msgid "Transport — activation needed"
+msgstr "Транспортно — потребна активација"
+
+#: shared/agentclient/CredentialText.cpp:28
+msgid "Operational"
+msgstr "Оперативан"
+
+#: shared/agentclient/CredentialText.cpp:30
+msgid "Change required"
+msgstr "Потребна промена"
+
+#: shared/agentclient/CredentialText.cpp:32
+msgid "Blocked"
+msgstr "Блокиран"
+
+#: shared/agentclient/CredentialText.cpp:34
+msgid "Unknown"
+msgstr "Непознат"
+
+#: shared/agentclient/CredentialText.cpp:47
+msgid "Done."
+msgstr "Готово."
+
+#: shared/agentclient/CredentialText.cpp:61
+msgid "The %1 was not correct."
+msgstr "%1 није био исправан."
+
+#: shared/agentclient/CredentialText.cpp:55
+msgctxt "%1 is the credential name, %2 the remaining attempts"
+msgid "The %1 was not correct — %2 attempt left."
+msgid_plural "The %1 was not correct — %2 attempts left."
+msgstr[0] "%1 није био исправан — преостао је %2 покушај."
+msgstr[1] "%1 није био исправан — преостала су %2 покушаја."
+msgstr[2] "%1 није био исправан — преостало је %2 покушаја."
+
+#: shared/agentclient/CredentialText.cpp:53
+msgid "The %1 is now blocked."
+msgstr "%1 је сада блокиран."
+
+#: shared/agentclient/CredentialText.cpp:55
+msgid "A required value was not entered."
+msgstr "Обавезна вредност није унета."
+
+#: shared/agentclient/CredentialText.cpp:57
+msgid "The PIN was set, but activating the signing key failed."
+msgstr "ПИН је постављен, али активација кључа за потписивање није успела."
+
+#: shared/agentclient/CredentialText.cpp:59
+msgid "This action isn't available on this card."
+msgstr "Ова радња није доступна на овој картици."
+
+#: shared/agentclient/CredentialText.cpp:63
+msgid "The card reported an error."
+msgstr "Картица је пријавила грешку."
+
+#: shared/agentclient/CredentialText.cpp:65
+msgid "The operation did not complete."
+msgstr "Операција није завршена."
+
+# --- Agent guidance keys (runtime message keys; not xgettext-extractable) ---
+# Emitted by the agent (LibreMiddleware pin_family_quirks.cpp) and resolved via
+# ki18nd("librekde", key). Kept in sync with the LM source strings by hand.
+msgid "librescrs.pin.blocked.issuer"
+msgstr "Деблокаду обавља издавалац картице."
+
+msgid "librescrs.pin.keyActivation.issuer"
+msgstr "Активацију кључа за потписивање обавља издавалац."
+
+# --- components/credentials/src (credentials window C++) --------------------
+#: components/credentials/src/main.cpp:30
+#: components/credentials/qml/Main.qml:37
+msgctxt "@title"
+msgid "Card Credentials"
+msgstr "Акредитиви картице"
+
+#: components/credentials/src/main.cpp:32
+msgid "Manage the PINs and signing key on your smart card"
+msgstr "Управљајте ПИН-овима и кључем за потписивање на вашој паметној картици"
+
+#: components/credentials/src/main.cpp:41
+msgid "Reader object path to bind"
+msgstr "Путања објекта читача за повезивање"
+
+#: components/credentials/src/CredentialController.cpp:407
+msgid "The card's credentials changed; the list was refreshed."
+msgstr "Акредитиви картице су се променили; листа је освежена."
+
+#: components/credentials/src/CredentialController.cpp:416
+msgid "Please wait a moment before trying again."
+msgstr "Сачекајте тренутак пре поновног покушаја."
+
+#: components/credentials/src/CredentialController.cpp:581
+msgid "The card refused the request."
+msgstr "Картица је одбила захтев."
+
+#: components/credentials/src/CredentialController.cpp:432
+msgid "The action could not be started."
+msgstr "Радњу није могуће покренути."
+
+#: components/credentials/src/CredentialModel.cpp:29
+msgctxt "retry counter: remaining of maximum"
+msgid "Attempts: %1 of %2"
+msgstr "Покушаји: %1 од %2"
+
+#: components/credentials/src/CredentialModel.cpp:35
+msgctxt "retry counter: remaining"
+msgid "Attempts: %1"
+msgstr "Покушаји: %1"
+
+#: components/credentials/src/CredentialModel.cpp:44
+msgctxt "usage counter: remaining of maximum"
+msgid "Uses: %1 of %2"
+msgstr "Употребе: %1 од %2"
+
+#: components/credentials/src/CredentialModel.cpp:50
+msgctxt "usage counter: remaining"
+msgid "Uses: %1"
+msgstr "Употребе: %1"
+
+#: components/credentials/src/CredentialController.cpp:425
+msgctxt "unblock sheet: %1 PUK name, %2/%3 remaining/total unblocks"
+msgid "%1: %2 of %3 unblocks left"
+msgstr "%1: %2 од %3 деблокирања"
+
+#: components/credentials/src/CredentialController.cpp:429
+msgctxt "unblock sheet: %1 PUK name, %2 remaining unblocks"
+msgid "%1: %2 unblocks left"
+msgstr "%1: %2 деблокирања"
+
+# --- components/credentials/qml (credentials window QML) --------------------
+#: components/credentials/qml/Main.qml:15
+msgctxt "@title:window"
+msgid "Card Credentials"
+msgstr "Акредитиви картице"
+
+#: components/credentials/qml/Main.qml:47
+msgctxt "@info:status the reader whose card this window manages"
+msgid "Reader: %1"
+msgstr "Читач: %1"
+
+#: components/credentials/qml/StateMessage.qml:33
+msgid "The smart-card service isn't running."
+msgstr "Сервис за паметне картице није покренут."
+
+#: components/credentials/qml/StateMessage.qml:38
+msgctxt "@info %1 is the reader name"
+msgid "Insert the card in reader %1."
+msgstr "Убаците картицу у читач %1."
+
+#: components/credentials/qml/StateMessage.qml:39
+msgid "Insert the card in the reader."
+msgstr "Убаците картицу у читач."
+
+#: components/credentials/qml/StateMessage.qml:29
+msgid "This card doesn't support credential management here."
+msgstr "Ова картица не подржава управљање акредитивима овде."
+
+#: components/credentials/qml/StateMessage.qml:31
+msgid "Reading credentials…"
+msgstr "Читам акредитиве…"
+
+#: components/credentials/qml/StateMessage.qml:33
+msgid "No manageable credentials on this card."
+msgstr "Нема акредитива за управљање на овој картици."
+
+#: components/credentials/qml/StateMessage.qml:35
+msgid ""
+"The card's credentials couldn't be read. Try removing and reinserting the "
+"card."
+msgstr ""
+"Акредитиве картице није могуће прочитати. Покушајте да извадите и поново "
+"убаците картицу."
+
+#: components/credentials/qml/CredentialDelegate.qml:101
+msgctxt "@action:button change a PIN"
+msgid "Change…"
+msgstr "Промени…"
+
+#: components/credentials/qml/CredentialDelegate.qml:108
+msgctxt "@info:whatsthis change PIN button"
+msgid "Opens the secure prompt to change this PIN."
+msgstr "Отвара безбедни упит за промену овог ПИН-а."
+
+#: components/credentials/qml/CredentialDelegate.qml:112
+msgctxt "@action:button unblock a PIN with its PUK"
+msgid "Unblock…"
+msgstr "Деблокирај…"
+
+#: components/credentials/qml/CredentialDelegate.qml:119
+msgctxt "@info:whatsthis unblock PIN button"
+msgid "Unblocks this PIN with its PUK, entered in the secure prompt."
+msgstr "Деблокира овај ПИН његовим ПУК-ом, унетим у безбедном упиту."
+
+#: components/credentials/qml/CredentialDelegate.qml:123
+msgctxt "@action:button activate a transport PIN"
+msgid "Activate…"
+msgstr "Активирај…"
+
+#: components/credentials/qml/CredentialDelegate.qml:130
+msgctxt "@info:whatsthis activate transport PIN button"
+msgid "Activates this transport PIN via the secure prompt."
+msgstr "Активира овај транспортни ПИН преко безбедног упита."
+
+#: components/credentials/qml/CredentialDelegate.qml:134
+msgctxt "@action:button activate the on-card signing key"
+msgid "Activate signing key"
+msgstr "Активирај кључ за потписивање"
+
+#: components/credentials/qml/CredentialDelegate.qml:143
+msgctxt "@info:whatsthis activate signing key button"
+msgid "Activates the card's signing key."
+msgstr "Активира кључ за потписивање на картици."
+
+#: components/credentials/qml/Dashboard.qml:102
+#: components/credentials/qml/UnblockConfirmSheet.qml:38
+msgctxt "@action:button"
+msgid "Cancel"
+msgstr "Откажи"
+
+#: components/credentials/qml/Dashboard.qml:70
+msgctxt "@info:status accessible name of the modal overlay while a credential operation runs"
+msgid "Operation in progress"
+msgstr "Операција је у току"
+
+#: components/credentials/qml/Dashboard.qml:110
+msgctxt "@info:whatsthis cancel the running credential operation"
+msgid "Cancels the operation in progress."
+msgstr "Отказује операцију у току."
+
+#: components/credentials/qml/UnblockConfirmSheet.qml:21
+msgctxt "@title:window"
+msgid "Unblock PIN"
+msgstr "Деблокирање ПИН-а"
+
+#: components/credentials/qml/UnblockConfirmSheet.qml:23
+msgctxt "@info"
+msgid ""
+"%1.\n"
+"\n"
+"Continue to enter the PUK in the secure prompt."
+msgstr ""
+"%1.\n"
+"\n"
+"Наставите да унесете ПУК у безбедном упиту."
+
+#: components/credentials/qml/UnblockConfirmSheet.qml:24
+msgctxt "@info"
+msgid "You will be asked for the PUK in a secure prompt."
+msgstr "Биће вам затражен ПУК у безбедном упиту."
+
+#: components/credentials/qml/UnblockConfirmSheet.qml:30
+msgctxt "@action:button proceed to unblock a PIN with its PUK"
+msgid "Continue"
+msgstr "Настави"

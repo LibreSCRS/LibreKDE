@@ -1,0 +1,103 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+name: CI
+
+# LibreKDE is currently unpublished — this workflow activates on the first
+# push to GitHub. LibreKDE is LM-free AND LibreLinux-free at build time: the
+# plasmoid, Purpose plugin and card:/ KIO worker are thin clients that talk to
+# the org.librescrs.Agent D-Bus service only at RUNTIME. So this CI is
+# self-contained — it needs Qt6 + KF6 + Plasma 6 dev packages and nothing from
+# the rest of the stack.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  format-check:
+    # Self-contained: the format gate needs no KDE deps, so it runs on
+    # ubuntu-latest with the exact clang-format-21 the org pins (apt.llvm.org).
+    # The build job runs in an Arch container, but Arch's rolling `clang` is
+    # ahead of 21 and would reformat against a different major — the project
+    # standard is clang-format 21, not the distro default.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang-format-21
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/llvm.gpg
+          echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble-21 main" | sudo tee /etc/apt/sources.list.d/llvm-21.list
+          sudo apt-get update
+          sudo apt-get install -y clang-format-21
+
+      - name: Check clang-format
+        run: |
+          find components shared tests -name "*.cpp" -o -name "*.h" \
+            | xargs clang-format-21 --dry-run --Werror
+
+  build-linux:
+    # Arch container: the codebase targets current KF6 / Plasma 6, which
+    # ubuntu apt does not carry at the required versions. pacman provides
+    # current ECM, Qt6, KF6 and Plasma 6 — matching the owner's Arch/Manjaro
+    # env and the LibreKDE PKGBUILD dep set (packaging/arch/PKGBUILD).
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Install system dependencies
+        # Build deps from the LibreKDE PKGBUILD makedepends + the runtime KF6/
+        # Plasma/Qt packages its find_package() calls need at configure time.
+        # qt6-declarative supplies qmllint for the plasmoid QML lint step.
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm --needed \
+            base-devel cmake ninja git pkgconf \
+            extra-cmake-modules \
+            qt6-base qt6-declarative qt6-tools \
+            ki18n kcoreaddons knotifications kconfig kio purpose \
+            plasma-workspace libplasma \
+            gtest dbus
+
+      - name: Generate a UTF-8 locale
+        # The bare Arch container ships only the C / C.UTF-8 locales, under which
+        # the C library's gettext (which ki18n uses to read .mo catalogs)
+        # suppresses translation. IdentityLabelTest proves labelKey→Serbian
+        # resolution end-to-end and therefore needs a real UTF-8 locale present;
+        # generate en_US.UTF-8 (the test sets LANG=en_US.UTF-8 + LANGUAGE=sr).
+        run: |
+          echo 'en_US.UTF-8 UTF-8' >> /etc/locale.gen
+          locale-gen
+
+      - uses: actions/checkout@v4
+
+      # Explicit component flags pin the package contract (their CMake option
+      # defaults are already ON, but pin them so CI matches the PKGBUILD).
+      - name: Configure
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DLIBREKDE_BUILD_PLASMOID=ON \
+            -DLIBREKDE_BUILD_PURPOSE=ON \
+            -DLIBREKDE_BUILD_KIO=ON \
+            -DBUILD_TESTING=ON
+
+      - name: Build
+        run: cmake --build build -j4
+
+      # qmllint over the plasmoid QML (Qt6 qmllint, shipped by qt6-declarative).
+      # The plasmoid ships its UI as QML under package/contents/ui. On Arch the
+      # Qt6 qmllint lives in $(qmake6 -query QT_INSTALL_BINS) (e.g.
+      # /usr/lib/qt6/bin), NOT on PATH — only the Qt5 build drops it in /usr/bin.
+      - name: qmllint (plasmoid QML)
+        run: |
+          QMLLINT="$(qmake6 -query QT_INSTALL_BINS)/qmllint"
+          find components/plasmoid -name "*.qml" -print0 | xargs -0 "$QMLLINT"
+
+      # offscreen for the Qt/KDE widget tests; dbus-run-session provides a
+      # private session bus the agentclient D-Bus tests connect to. No
+      # LIBRESCRS_TEST_PIN: there is no card/secret path in these clients.
+      - name: Test
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: dbus-run-session -- ctest --test-dir build --output-on-failure

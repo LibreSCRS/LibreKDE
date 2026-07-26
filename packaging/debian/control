@@ -1,0 +1,25 @@
+Source: librekde
+Section: kde
+Priority: optional
+Maintainer: hirashix0 <hirashix0@proton.me>
+Build-Depends: debhelper-compat (= 13),
+               cmake,
+               extra-cmake-modules,
+               libkf6coreaddons-dev,
+               libkf6i18n-dev,
+               libkf6notifications-dev,
+               qt6-base-dev,
+               qt6-declarative-dev,
+               libplasma-dev,
+               librescrs-middleware-dev (>= 4.0)
+Standards-Version: 4.6.2
+Homepage: https://librescrs.github.io/
+
+Package: librekde-plasmoid
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends},
+         plasma-workspace,
+         qml6-module-qtquick-dialogs,
+         librescrs-middleware (>= 4.0)
+Description: LibreSCRS smart-card plasmoid for KDE Plasma 6
+ Status icon for inserted LibreSCRS smart cards.

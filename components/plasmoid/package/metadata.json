@@ -1,0 +1,26 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Email": "hirashix0@proton.me",
+                "Name": "hirashix0"
+            }
+        ],
+        "Category": "System Information",
+        "Description": "Status icon for inserted LibreSCRS smart cards",
+        "Description[sr@latin]": "Statusna ikona za umetnute LibreSCRS pametne kartice",
+        "Description[sr]": "Статусна икона за уметнуте LibreSCRS паметне картице",
+        "Icon": "secure-card",
+        "Id": "org.librescrs.smartcard",
+        "License": "LGPL-2.1-or-later",
+        "Name": "LibreSCRS Smart Card",
+        "Name[sr@latin]": "LibreSCRS pametna kartica",
+        "Name[sr]": "LibreSCRS паметна картица",
+        "ServiceTypes": ["Plasma/Applet"],
+        "Version": "0.1.0",
+        "Website": "https://librescrs.github.io/"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-Plasma-Provides": ["org.kde.plasma.smartcard"]
+}

@@ -1,0 +1,9 @@
+build*/
+install*/
+.cache/
+.vscode/
+.idea/
+*.user
+*.user.*
+compile_commands.json
+.clangd/

@@ -1,0 +1,25 @@
+{
+    "KPlugin": {
+        "Name": "Sign with LibreSCRS Smart Card",
+        "Name[sr]": "Потпиши LibreSCRS паметном картицом",
+        "Name[sr@latin]": "Potpiši LibreSCRS pametnom karticom",
+        "Description": "Digitally sign the selected file with a LibreSCRS-supported smart card via the session agent",
+        "Description[sr]": "Дигитално потпиши изабрану датотеку LibreSCRS паметном картицом преко агента сесије",
+        "Description[sr@latin]": "Digitalno potpiši izabranu datoteku LibreSCRS pametnom karticom preko agenta sesije",
+        "Icon": "application-certificate",
+        "License": "LGPL-2.1-or-later",
+        "Authors": [
+            {
+                "Name": "LibreSCRS Project"
+            }
+        ]
+    },
+    "X-Purpose-ActionDisplay": "Sign with LibreSCRS Smart Card",
+    "X-Purpose-ActionDisplay[sr]": "Потпиши LibreSCRS паметном картицом",
+    "X-Purpose-ActionDisplay[sr@latin]": "Potpiši LibreSCRS pametnom karticom",
+    "X-Purpose-PluginTypes": [
+        "Export",
+        "ShareUrl"
+    ],
+    "X-Purpose-Configuration": []
+}

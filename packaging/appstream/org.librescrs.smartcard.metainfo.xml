@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: CC0-1.0 -->
+<component type="addon">
+    <id>org.librescrs.smartcard</id>
+    <extends>org.kde.plasmashell</extends>
+    <name>LibreSCRS Smart Card</name>
+    <name xml:lang="sr">LibreSCRS паметна картица</name>
+    <name xml:lang="sr@latin">LibreSCRS pametna kartica</name>
+    <summary>Status icon for inserted LibreSCRS smart cards</summary>
+    <summary xml:lang="sr">Статусна икона за уметнуте LibreSCRS паметне картице</summary>
+    <summary xml:lang="sr@latin">Statusna ikona za umetnute LibreSCRS pametne kartice</summary>
+    <metadata_license>CC0-1.0</metadata_license>
+    <project_license>LGPL-2.1-or-later</project_license>
+    <url type="homepage">https://librescrs.github.io/</url>
+    <url type="bugtracker">https://github.com/LibreSCRS/LibreKDE/issues</url>
+    <developer id="rs.librescrs">
+        <name>LibreSCRS Project</name>
+    </developer>
+    <description>
+        <p>
+            Plasma 6 system-tray widget that surfaces the identity and PKI
+            capabilities of any LibreSCRS-supported smart card the moment it
+            is inserted. It is a thin client of the LibreSCRS session agent over
+            D-Bus: all card access and secret entry (PIN/CAN) live in the agent.
+            The widget links no LibreMiddleware, performs no cryptographic
+            operations and holds no secrets of its own.
+        </p>
+    </description>
+    <provides>
+        <plasma-applet>org.librescrs.smartcard</plasma-applet>
+    </provides>
+    <content_rating type="oars-1.1"/>
+</component>

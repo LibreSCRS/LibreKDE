@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
+<!-- SPDX-FileCopyrightText: 2026 hirashix0 -->
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+    <kcfgfile name=""/>
+    <group name="General">
+        <!-- Friendly reader Name this widget is pinned to; empty = Auto (follow
+             the active card). Persisted per widget instance. Stored by NAME, not
+             the agent's per-session /reader/N object path. -->
+        <entry name="boundReaderName" type="String">
+            <label>Friendly name of the reader this widget is pinned to; empty follows the active card (Auto).</label>
+            <default></default>
+        </entry>
+    </group>
+</kcfg>

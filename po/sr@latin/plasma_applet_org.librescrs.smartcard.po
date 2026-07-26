@@ -1,0 +1,362 @@
+# Serbian (Latin) translation for LibreKDE.
+# SPDX-FileCopyrightText: 2026 hirashix0
+# SPDX-License-Identifier: LGPL-2.1-or-later
+msgid ""
+msgstr ""
+"Project-Id-Version: plasma_applet_org.librescrs.smartcard\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-13 14:12+0200\n"
+"PO-Revision-Date: 2026-07-13\n"
+"Last-Translator: hirashix0\n"
+"Language-Team: Serbian\n"
+"Language: sr@latin\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
+"n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+#: components/plasmoid/package/contents/config/config.qml:13
+msgctxt "@title:tab plasmoid config page"
+msgid "General"
+msgstr "Opšte"
+
+# --- AgentUnavailableState.qml --------------------------------------------
+#: components/plasmoid/package/contents/ui/AgentUnavailableState.qml:19
+msgctxt "@info plasmoid agent unavailable"
+msgid "Smart card service unavailable"
+msgstr "Servis pametnih kartica nije dostupan"
+
+#: components/plasmoid/package/contents/ui/AgentUnavailableState.qml:22
+msgctxt "@info plasmoid agent stopped"
+msgid "The LibreSCRS smart card service is installed but not running."
+msgstr "LibreSCRS servis za pametne kartice je instaliran, ali nije pokrenut."
+
+#: components/plasmoid/package/contents/ui/AgentUnavailableState.qml:24
+msgctxt "@info plasmoid agent not installed"
+msgid "The LibreSCRS smart card service is not installed."
+msgstr "LibreSCRS servis za pametne kartice nije instaliran."
+
+#: components/plasmoid/package/contents/ui/AgentUnavailableState.qml:38
+msgctxt "@action:button start smart card service"
+msgid "Start service"
+msgstr "Pokreni servis"
+
+#: components/plasmoid/package/contents/ui/AgentUnavailableState.qml:46
+msgctxt "@info plasmoid agent start instruction"
+msgid "Start it with this command:"
+msgstr "Pokrenite ga ovom komandom:"
+
+#: components/plasmoid/package/contents/ui/AgentUnavailableState.qml:62
+msgctxt "@action:button open online installation help"
+msgid "Installation help"
+msgstr "Pomoć za instalaciju"
+
+# --- CardDetail.qml -------------------------------------------------------
+#: components/plasmoid/package/contents/ui/CardDetail.qml:72
+msgctxt "@action:button open the credential-management window"
+msgid "Manage credentials…"
+msgstr "Upravljaj akreditivima…"
+
+#: components/plasmoid/package/contents/ui/CardDetail.qml:76
+msgctxt "@info:whatsthis manage credentials button"
+msgid "Opens a window to change or unblock this card's PIN."
+msgstr "Otvara prozor za promenu ili deblokiranje PIN-a ove kartice."
+
+# --- CompactRepresentation.qml (tray) -------------------------------------
+#: components/plasmoid/package/contents/ui/main.qml:45
+msgctxt "@info:status tray icon"
+msgid "Detecting a smart card…"
+msgstr "Otkrivanje pametne kartice…"
+
+#: components/plasmoid/package/contents/ui/CompactRepresentation.qml:33
+msgctxt "@info:status tray icon"
+msgid "No smart card inserted"
+msgstr "Nema ubačene pametne kartice"
+
+#: components/plasmoid/package/contents/ui/CompactRepresentation.qml:34
+msgctxt "@info:status tray icon"
+msgid "Smart card must be unlocked"
+msgstr "Pametna kartica mora da se otključa"
+
+#: components/plasmoid/package/contents/ui/CompactRepresentation.qml:35
+msgctxt "@info:status tray icon"
+msgid "Identity card ready"
+msgstr "Lična karta spremna"
+
+#: components/plasmoid/package/contents/ui/CompactRepresentation.qml:36
+msgctxt "@info:status tray icon"
+msgid "PKI token ready"
+msgstr "PKI token spreman"
+
+#: components/plasmoid/package/contents/ui/CompactRepresentation.qml:37
+msgctxt "@info:status tray icon"
+msgid "Identity and PKI card ready"
+msgstr "Lična karta i PKI spremni"
+
+#: components/plasmoid/package/contents/ui/CompactRepresentation.qml:38
+msgctxt "@info:status tray icon"
+msgid "Unrecognized smart card"
+msgstr "Nepoznata pametna kartica"
+
+#: components/plasmoid/package/contents/ui/CompactRepresentation.qml:39
+msgctxt "@info:status tray icon"
+msgid "Smart card service unavailable"
+msgstr "Servis pametnih kartica nije dostupan"
+
+#: components/plasmoid/package/contents/ui/CompactRepresentation.qml:40
+msgctxt "@info:status tray icon"
+msgid "Smart card could not be read"
+msgstr "Pametna kartica ne može da se pročita"
+
+#: components/plasmoid/package/contents/ui/CompactRepresentation.qml:45
+msgctxt "@title tray icon accessible name"
+msgid "LibreSCRS smart card"
+msgstr "LibreSCRS pametna kartica"
+
+# --- ConfigGeneral.qml ----------------------------------------------------
+#: components/plasmoid/package/contents/ui/ConfigGeneral.qml:29
+msgctxt "@item:inlistbox reader binding follows the active card"
+msgid "Auto (follow active card)"
+msgstr "Automatski (prati aktivnu karticu)"
+
+#: components/plasmoid/package/contents/ui/ConfigGeneral.qml:33
+msgctxt "@label:listbox plasmoid reader binding"
+msgid "Reader:"
+msgstr "Čitač:"
+
+#: components/plasmoid/package/contents/ui/ConfigGeneral.qml:142
+msgctxt "@info:tooltip re-scan for readers"
+msgid "Re-scan for readers"
+msgstr "Ponovo potraži čitače"
+
+#: components/plasmoid/package/contents/ui/ConfigGeneral.qml:100
+msgctxt "@info plasmoid reader-binding help"
+msgid ""
+"Bind this widget to a specific reader by name, or choose Auto to follow "
+"whichever card is active. A name that is not currently present is remembered "
+"until the reader is plugged in."
+msgstr ""
+"Vežite ovaj vidžet za određeni čitač po imenu, ili izaberite „Automatski“ da "
+"prati aktivnu karticu. Ime koje trenutno nije prisutno pamti se dok se čitač "
+"ne priključi."
+
+# --- ErrorState.qml -------------------------------------------------------
+#: components/plasmoid/package/contents/ui/ErrorState.qml:20
+msgctxt "@info plasmoid error placeholder title"
+msgid "Could not read this card"
+msgstr "Nije moguće pročitati ovu karticu"
+
+#: components/plasmoid/package/contents/ui/ErrorState.qml:27
+msgctxt "@info plasmoid error placeholder fallback explanation"
+msgid "Open LibreCelik for more details."
+msgstr "Otvorite LibreCelik za više detalja."
+
+# --- Shared "Open in LibreCelik" (Pki/Error/IdentityView/UnknownCard) -----
+#: components/plasmoid/package/contents/ui/ErrorState.qml:37
+#: components/plasmoid/package/contents/ui/IdentityView.qml:197
+#: components/plasmoid/package/contents/ui/PkiState.qml:53
+#: components/plasmoid/package/contents/ui/UnknownCardState.qml:30
+msgctxt "@action:button open card in LibreCelik"
+msgid "Open in LibreCelik"
+msgstr "Otvori u LibreCelik-u"
+
+#: components/plasmoid/package/contents/ui/ErrorState.qml:44
+#: components/plasmoid/package/contents/ui/IdentityView.qml:202
+#: components/plasmoid/package/contents/ui/PkiState.qml:60
+msgctxt "@info:whatsthis open in librecelik button"
+msgid "Opens this card in LibreCelik for full details."
+msgstr "Otvara ovu karticu u LibreCelik-u za potpune detalje."
+
+# --- HybridState.qml ------------------------------------------------------
+#: components/plasmoid/package/contents/ui/HybridState.qml:21
+msgctxt "@title plasmoid hybrid-card header generic"
+msgid "Identity + PKI card"
+msgstr "Lična karta + PKI"
+
+# --- IdentityState.qml ----------------------------------------------------
+#: components/plasmoid/package/contents/ui/IdentityState.qml:20
+msgctxt "@title plasmoid identity-card section header generic"
+msgid "Identity card"
+msgstr "Lična karta"
+
+# --- IdentityView.qml -----------------------------------------------------
+#: components/plasmoid/package/contents/ui/IdentityView.qml:53
+msgctxt "@info:label accessible name for the ID photo"
+msgid "Cardholder photo"
+msgstr "Fotografija vlasnika kartice"
+
+#: components/plasmoid/package/contents/ui/IdentityView.qml:55
+msgctxt "@info:whatsthis ID photo description"
+msgid "The identity photo read from the smart card."
+msgstr "Identifikaciona fotografija pročitana sa pametne kartice."
+
+#: components/plasmoid/package/contents/ui/IdentityView.qml:65
+msgctxt "@info plasmoid reading card"
+msgid "Reading card…"
+msgstr "Čitanje kartice…"
+
+#: components/plasmoid/package/contents/ui/IdentityView.qml:100
+#: components/plasmoid/package/contents/ui/IdentityView.qml:104
+#: components/plasmoid/package/contents/ui/IdentityView.qml:150
+#: components/plasmoid/package/contents/ui/IdentityView.qml:154
+msgctxt "@info:tooltip copy this field to the clipboard"
+msgid "Copy to clipboard"
+msgstr "Kopiraj u ostavu"
+
+#: components/plasmoid/package/contents/ui/IdentityView.qml:118
+msgctxt "@action:button hide all identity fields"
+msgid "Hide details"
+msgstr "Sakrij podatke"
+
+#: components/plasmoid/package/contents/ui/IdentityView.qml:119
+msgctxt "@action:button reveal all identity fields"
+msgid "Show all details"
+msgstr "Prikaži sve podatke"
+
+#: components/plasmoid/package/contents/ui/IdentityView.qml:177
+msgctxt "@action:button save the cardholder photo to a file"
+msgid "Save photo…"
+msgstr "Sačuvaj fotografiju…"
+
+#: components/plasmoid/package/contents/ui/IdentityView.qml:190
+msgctxt "@action:button open this card in the file manager"
+msgid "Open in File Manager"
+msgstr "Otvori u menadžeru fajlova"
+
+#: components/plasmoid/package/contents/ui/IdentityView.qml:209
+msgctxt "@title:window save cardholder photo file dialog"
+msgid "Save cardholder photo"
+msgstr "Čuvanje fotografije vlasnika kartice"
+
+#: components/plasmoid/package/contents/ui/IdentityView.qml:210
+msgctxt "@item:inlistbox image file filter"
+msgid "Images"
+msgstr "Slike"
+
+#: components/plasmoid/package/contents/ui/IdentityView.qml:219
+msgctxt "@info:status saving the cardholder photo failed"
+msgid "Could not save the photo to %1."
+msgstr "Nije moguće sačuvati fotografiju u %1."
+
+# --- MultiCardState.qml ---------------------------------------------------
+#: components/plasmoid/package/contents/ui/MultiCardState.qml:22
+msgctxt "@title plasmoid multi-card reader picker"
+msgid "Select a reader"
+msgstr "Izaberite čitač"
+
+# --- NoCardState.qml ------------------------------------------------------
+#: components/plasmoid/package/contents/ui/NoCardState.qml:33
+msgctxt "@info plasmoid a card is seated but not yet readable"
+msgid "Detecting a card…"
+msgstr "Otkrivanje kartice…"
+
+#: components/plasmoid/package/contents/ui/NoCardState.qml:42
+msgctxt "@info plasmoid the bound reader is present but holds no card"
+msgid "Insert a card into %1"
+msgstr "Ubacite karticu u %1"
+
+#: components/plasmoid/package/contents/ui/NoCardState.qml:44
+msgctxt "@info plasmoid the bound reader is not on the bus"
+msgid "Reader %1 not connected"
+msgstr "Čitač %1 nije povezan"
+
+#: components/plasmoid/package/contents/ui/NoCardState.qml:40
+msgctxt "@info plasmoid no card"
+msgid "Insert a supported card"
+msgstr "Ubacite podržanu karticu"
+
+# --- RefreshButton.qml ----------------------------------------------------
+#: components/plasmoid/package/contents/ui/RefreshButton.qml:22
+msgctxt "@action:button re-check the reader for a card"
+msgid "Refresh"
+msgstr "Osveži"
+
+#: components/plasmoid/package/contents/ui/RefreshButton.qml:31
+msgctxt "@info:whatsthis refresh button"
+msgid "Re-checks the readers for smart cards."
+msgstr "Ponovo proverava čitače za pametne kartice."
+
+# --- PkiState.qml ---------------------------------------------------------
+#: components/plasmoid/package/contents/ui/PkiState.qml:22
+msgctxt "@title plasmoid pki-card section header generic"
+msgid "PKI token"
+msgstr "PKI token"
+
+#: components/plasmoid/package/contents/ui/PkiState.qml:44
+msgctxt "@info plasmoid pki-card placeholder title"
+msgid "Signing token"
+msgstr "Token za potpisivanje"
+
+#: components/plasmoid/package/contents/ui/PkiState.qml:49
+msgctxt "@info plasmoid pki-card placeholder explanation"
+msgid "This card has no identity data."
+msgstr "Ova kartica nema podatke o identitetu."
+
+# --- PreAuthState.qml -----------------------------------------------------
+#: components/plasmoid/package/contents/ui/PreAuthState.qml:22
+msgctxt "@info plasmoid pre-read auth required"
+msgid "This card must be unlocked before it can be read"
+msgstr "Ova kartica mora da se otključa pre čitanja"
+
+#: components/plasmoid/package/contents/ui/PreAuthState.qml:27
+msgctxt "@info plasmoid pre-read auth explanation"
+msgid ""
+"When you read the card, the LibreSCRS service opens a secure prompt to enter "
+"the card's CAN or scan its MRZ."
+msgstr ""
+"Kada pročitate karticu, LibreSCRS servis otvara bezbedni upit za unos CAN-a "
+"kartice ili skeniranje njenog MRZ-a."
+
+#: components/plasmoid/package/contents/ui/PreAuthState.qml:38
+msgctxt "@action:button start reading a pre-auth card"
+msgid "Read Card…"
+msgstr "Pročitaj karticu…"
+
+#: components/plasmoid/package/contents/ui/PreAuthState.qml:47
+msgctxt "@info:whatsthis read pre-auth card button"
+msgid ""
+"Reads this card. A secure prompt from the LibreSCRS service will ask for the "
+"card's CAN or MRZ."
+msgstr ""
+"Čita ovu karticu. Bezbedni upit LibreSCRS servisa će zatražiti CAN ili MRZ "
+"kartice."
+
+# --- SignFileAction.qml ---------------------------------------------------
+#: components/plasmoid/package/contents/ui/SignFileAction.qml:44
+msgctxt "@action:button sign a document with the smart card"
+msgid "Sign a file…"
+msgstr "Potpiši fajl…"
+
+#: components/plasmoid/package/contents/ui/SignFileAction.qml:55
+msgctxt "@info:whatsthis sign a file button"
+msgid "Choose a file and sign it with this card."
+msgstr "Izaberite fajl i potpišite ga ovom karticom."
+
+#: components/plasmoid/package/contents/ui/SignFileAction.qml:60
+msgctxt "@title:window choose a file to sign"
+msgid "Choose a file to sign"
+msgstr "Izaberite fajl za potpisivanje"
+
+#: components/plasmoid/package/contents/ui/SignFileAction.qml:79
+msgctxt ""
+"@info:status a file was signed with an implicitly picked certificate; %1 "
+"file name, %2 certificate name"
+msgid "Signed %1 with certificate %2"
+msgstr "Potpisano: %1 sertifikatom %2"
+
+#: components/plasmoid/package/contents/ui/SignFileAction.qml:82
+msgctxt "@info:status a file was signed"
+msgid "Signed %1"
+msgstr "Potpisano: %1"
+
+# --- UnknownCardState.qml -------------------------------------------------
+#: components/plasmoid/package/contents/ui/UnknownCardState.qml:19
+msgctxt "@info plasmoid unknown card"
+msgid "Unrecognized card"
+msgstr "Nepoznata kartica"
+
+#: components/plasmoid/package/contents/ui/UnknownCardState.qml:21
+msgctxt "@info plasmoid unknown card explanation"
+msgid "This card is not recognized by any installed LibreSCRS plugin."
+msgstr "Ovu karticu ne prepoznaje nijedan instalirani LibreSCRS priključak."

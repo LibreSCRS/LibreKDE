@@ -1,0 +1,23 @@
+{
+    "KDE-KIO-Protocols": {
+        "card": {
+            "Class": ":local",
+            "Icon": "secure-card",
+            "X-DocPath": "kioworker6/card/index.html",
+            "defaultMimetype": "application/octet-stream",
+            "determineMimetypeFromExtension": false,
+            "input": "none",
+            "output": "filesystem",
+            "protocol": "card",
+            "reading": true,
+            "listing": [
+                "Name",
+                "Type",
+                "Size",
+                "MimeType",
+                "Date"
+            ],
+            "source": false
+        }
+    }
+}
