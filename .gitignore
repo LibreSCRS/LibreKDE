@@ -7,3 +7,4 @@ install*/
 *.user.*
 compile_commands.json
 .clangd/
+__pycache__/

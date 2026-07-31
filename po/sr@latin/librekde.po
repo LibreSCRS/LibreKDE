@@ -191,11 +191,6 @@ msgid "Could not read the card."
 msgstr "Nije moguće pročitati karticu."
 
 # --- SmartCardHandler.cpp -------------------------------------------------
-#: components/plasmoid/src/SmartCardHandler.cpp:258
-msgctxt "@info plasmoid identity read failed to start"
-msgid "Could not start reading this card. Please try again."
-msgstr "Nije moguće započeti čitanje ove kartice. Pokušajte ponovo."
-
 #: components/plasmoid/src/SmartCardHandler.cpp
 msgctxt "@item reader label: <model> on the contact interface"
 msgid "%1 — contact"
@@ -295,6 +290,74 @@ msgstr "Mehanizam za potpisivanje je prijavio grešku."
 #: shared/agentclient/ErrorText.cpp:50
 msgid "Too many signing requests. Try again shortly."
 msgstr "Previše zahteva za potpisivanje. Pokušajte ponovo uskoro."
+
+# --- shared/agentclient/ErrorText.cpp (transport failures, ki18ndc) ---------
+# These seven cover a failure that never got an answer over the wire, so it
+# carries no error code of its own — one per transport outcome, plus a floor
+# for a failure that classified on neither axis and said nothing.
+#
+# DRAFT, awaiting a native review. The Serbian below is a first pass and is not
+# settled copy. Two of the English strings also have open wording questions,
+# and their Serbian follows whatever the English settles on:
+#   * the access-denied string sends the reader to a system administrator,
+#     which misdirects for the member of that bucket that means nobody is
+#     logged in rather than a permission being withheld;
+#   * the refusal string's "before it could be carried out" faintly implies the
+#     request might have gone through later, which is untrue when the two sides
+#     simply speak different versions.
+#: shared/agentclient/ErrorText.cpp
+msgctxt "@info:status the operation failed without reporting any reason"
+msgid "The operation did not finish, and no reason was reported."
+msgstr "Operacija nije završena, a razlog nije prijavljen."
+
+#: shared/agentclient/ErrorText.cpp
+msgctxt "@info:status the smart-card service could not be reached at all"
+msgid ""
+"Could not reach the smart-card service. Check that it is installed and "
+"running."
+msgstr ""
+"Nije moguće pristupiti servisu za pametne kartice. Proverite da li je "
+"instaliran i pokrenut."
+
+#: shared/agentclient/ErrorText.cpp
+msgctxt "@info:status the smart-card service did not answer in time"
+msgid "The smart-card service did not answer in time. Try again."
+msgstr "Servis za pametne kartice nije odgovorio na vreme. Pokušajte ponovo."
+
+#: shared/agentclient/ErrorText.cpp
+msgctxt ""
+"@info:status the system denied this application access to the smart-card "
+"service"
+msgid ""
+"Permission to use the smart-card service was denied. Ask your system "
+"administrator if this should be allowed."
+msgstr ""
+"Pristup servisu za pametne kartice je odbijen. Pitajte administratora "
+"sistema da li ovo treba da bude dozvoljeno."
+
+#: shared/agentclient/ErrorText.cpp
+msgctxt ""
+"@info:status the request was rejected before any work on it started; do not "
+"name who rejected it, it may be this application, the smart-card service, or "
+"the message bus"
+msgid "This request was refused before it could be carried out."
+msgstr "Ovaj zahtev je odbijen pre nego što je mogao da bude izvršen."
+
+#: shared/agentclient/ErrorText.cpp
+msgctxt ""
+"@info:status the connection to the smart-card service broke during the "
+"request"
+msgid "The connection to the smart-card service was lost. Try again."
+msgstr "Veza sa servisom za pametne kartice je prekinuta. Pokušajte ponovo."
+
+#: shared/agentclient/ErrorText.cpp
+msgctxt "@info:status the smart-card service's reply could not be understood"
+msgid ""
+"The smart-card service replied in a way this application does not "
+"understand. The two may be different versions."
+msgstr ""
+"Servis za pametne kartice je odgovorio na način koji ovaj program ne razume. "
+"Moguće je da su različitih verzija."
 
 # --- shared/signing/SignSeams.cpp -------------------------------------------
 #: shared/signing/SignSeams.cpp:31
@@ -757,9 +820,11 @@ msgstr "Operacija nije završena."
 # --- Agent guidance keys (runtime message keys; not xgettext-extractable) ---
 # Emitted by the agent (LibreMiddleware pin_family_quirks.cpp) and resolved via
 # ki18nd("librekde", key). Kept in sync with the LM source strings by hand.
+# no-extract: the key arrives at run time, so no extractor can find a call site
 msgid "librescrs.pin.blocked.issuer"
 msgstr "Deblokadu obavlja izdavalac kartice."
 
+# no-extract: the key arrives at run time, so no extractor can find a call site
 msgid "librescrs.pin.keyActivation.issuer"
 msgstr "Aktivaciju ključa za potpisivanje obavlja izdavalac."
 

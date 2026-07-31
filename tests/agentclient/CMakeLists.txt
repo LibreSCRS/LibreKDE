@@ -71,6 +71,13 @@ if(MSGFMT_EXECUTABLE)
     # language. CI must have en_US.UTF-8 generated (see the workflow's locale
     # step); a developer desktop already carries a UTF-8 locale.
     #
+    # The pin below covers LANG only, and LC_ALL outranks LANG in the C
+    # library's category resolution — so an LC_ALL=C inherited from the
+    # invoking shell still reaches this test and still suppresses the
+    # translation, and the test fails with the English label. That failure is
+    # the environment, not the catalog. (It is also the proof this test cannot
+    # pass vacuously: strip the locale and it goes red.)
+    #
     # XDG_DATA_HOME is pinned to the private catalog root for the same reason
     # CredentialGuidanceLocaleTest pins it: QStandardPaths::GenericDataLocation
     # searches XDG_DATA_HOME BEFORE XDG_DATA_DIRS, so a librekde catalog

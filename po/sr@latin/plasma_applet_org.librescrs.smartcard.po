@@ -191,11 +191,6 @@ msgctxt "@info:whatsthis ID photo description"
 msgid "The identity photo read from the smart card."
 msgstr "Identifikaciona fotografija pročitana sa pametne kartice."
 
-#: components/plasmoid/package/contents/ui/IdentityView.qml:65
-msgctxt "@info plasmoid reading card"
-msgid "Reading card…"
-msgstr "Čitanje kartice…"
-
 #: components/plasmoid/package/contents/ui/IdentityView.qml:100
 #: components/plasmoid/package/contents/ui/IdentityView.qml:104
 #: components/plasmoid/package/contents/ui/IdentityView.qml:150
