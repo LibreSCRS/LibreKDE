@@ -190,6 +190,11 @@ def main():
         except subprocess.CalledProcessError as exc:
             print("extraction failed (exit %d)" % exc.returncode, file=sys.stderr)
             return 2
+        except OSError as exc:
+            # A missing xgettext (or sh) is a tooling failure, not a catalog
+            # finding: report it as one instead of ending in a traceback.
+            print("extraction could not run: %s" % exc, file=sys.stderr)
+            return 2
         if not pots:
             print("extraction produced no .pot files", file=sys.stderr)
             return 2
@@ -206,8 +211,12 @@ def main():
                     problems.append("%s/%s.po is missing" % (language, domain))
                     continue
 
-                check = subprocess.run(["msgfmt", "--check", "-o", os.devnull, str(catalog)],
-                                       capture_output=True, text=True)
+                try:
+                    check = subprocess.run(["msgfmt", "--check", "-o", os.devnull, str(catalog)],
+                                           capture_output=True, text=True)
+                except OSError as exc:
+                    print("msgfmt could not run: %s" % exc, file=sys.stderr)
+                    return 2
                 if check.returncode != 0:
                     problems.append("msgfmt --check rejected %s/%s.po:\n%s"
                                     % (language, domain, check.stderr.rstrip()))
