@@ -94,26 +94,32 @@ void CardWorkerLogic::addFileEntry(UDSEntry& entry, const QString& name, const Q
     }
 }
 
-QString CardWorkerLogic::stableCertFolderName(const CertInfoView& cert)
+QString CardWorkerLogic::stableCertFolderName(const LibreSCRS::AgentClient::CertificateInfo& cert)
 {
     // STABLE URL segment: English purpose (defaultRenderLabels), QStringLiteral
     // format — NEVER i18n. A folder name is a URL path segment and the get()
     // resolution key; deriving it from the active locale would make folder URLs
     // diverge across a language switch and break a get() done under a different
     // locale than the listDir that produced the name (cross-locale instability).
+    //
+    // The id half is equally load-bearing and equally frozen: it is the
+    // certificate id the agent hands over, forwarded verbatim with no
+    // normalization anywhere between the wire and this call, so an existing
+    // bookmark keeps resolving.
     const QString purpose = primaryPurpose(cert.keyUsageBits, defaultRenderLabels());
-    const QString shortId = cert.certId.left(8);
+    const QString shortId = cert.id.left(8);
     if (purpose.isEmpty()) {
         return QStringLiteral("Certificate (%1)").arg(shortId);
     }
     return QStringLiteral("%1 (%2)").arg(purpose, shortId);
 }
 
-QString CardWorkerLogic::displayCertFolderName(const CertInfoView& cert, const RenderLabels& labels)
+QString CardWorkerLogic::displayCertFolderName(const LibreSCRS::AgentClient::CertificateInfo& cert,
+                                               const RenderLabels& labels)
 {
     // Localized presentation only (UDS_DISPLAY_NAME) — never a URL key.
     const QString purpose = primaryPurpose(cert.keyUsageBits, labels);
-    const QString shortId = cert.certId.left(8);
+    const QString shortId = cert.id.left(8);
     if (purpose.isEmpty()) {
         return i18nc("certificate folder fallback name, %1 = short id", "Certificate (%1)", shortId);
     }
@@ -123,13 +129,14 @@ QString CardWorkerLogic::displayCertFolderName(const CertInfoView& cert, const R
 QList<CardWorkerLogic::CertFolder> CardWorkerLogic::buildCertFolders(const CertListResult& certs)
 {
     // The SINGLE source of truth for the folder set, shared by listDir and doGet.
-    // Two signing certs that share purpose AND the first 8 hex of certId would
-    // otherwise emit duplicate URL segments (the second cert unreachable); a
-    // stable per-name index suffix keeps every name distinct and resolvable.
+    // Two signing certs that share purpose AND the first 8 characters of the
+    // certificate id would otherwise emit duplicate URL segments (the second
+    // cert unreachable); a stable per-name index suffix keeps every name
+    // distinct and resolvable.
     const RenderLabels display = workerRenderLabels();
     QList<CertFolder> folders;
     QHash<QString, int> seen; // base stable name -> count
-    for (const CertInfoView& c : certs.certs) {
+    for (const LibreSCRS::AgentClient::CertificateInfo& c : certs.certs) {
         if (!c.signingCapable) {
             continue; // PKI folders are per signing-capable cert
         }
@@ -146,15 +153,15 @@ QList<CardWorkerLogic::CertFolder> CardWorkerLogic::buildCertFolders(const CertL
         f.displayName = n == 0 ? displayBase
                                : i18nc("disambiguator for same-purpose cert folders: %1 = base name, %2 = ordinal",
                                        "%1 (%2)", displayBase, n + 1);
-        f.certId = c.certId;
+        f.certId = c.id;
         folders << f;
     }
     return folders;
 }
 
-QString CardWorkerLogic::resolveCertId(const QString& cardPath, const QString& certFolder, CertListResult& outCerts)
+QString CardWorkerLogic::resolveCertId(const QString& cardId, const QString& certFolder, CertListResult& outCerts)
 {
-    outCerts = m_source.readCertificates(cardPath);
+    outCerts = m_source.readCertificates(cardId);
     if (outCerts.status != ReadStatus::Ok) {
         return {};
     }
@@ -168,7 +175,7 @@ QString CardWorkerLogic::resolveCertId(const QString& cardPath, const QString& c
     return {};
 }
 
-WorkerResult CardWorkerLogic::failForRead(ReadStatus status, bool isDirOp) const
+WorkerResult CardWorkerLogic::failForRead(ReadStatus status, bool isDirOp, const QString& message) const
 {
     switch (status) {
     case ReadStatus::Cancelled:
@@ -180,10 +187,15 @@ WorkerResult CardWorkerLogic::failForRead(ReadStatus status, bool isDirOp) const
     case ReadStatus::Unavailable: {
         // Operation-aware: a directory enter reports "could not enter folder";
         // a leaf get() reports "could not open for reading". The
-        // client cannot distinguish bus-gone from card-vanished here, so do NOT
-        // special-case ERR_WORKER_DIED.
+        // client cannot distinguish service-gone from card-vanished here, so do
+        // NOT special-case ERR_WORKER_DIED.
+        //
+        // @p message, when the read produced one, is the SHARED rule's copy for
+        // the transport failure that actually happened — reaching it beats this
+        // component's own single sentence for every cause. The sentence stays as
+        // the floor for a read that reported no reason at all.
         return WorkerResult::fail(isDirOp ? ERR_CANNOT_ENTER_DIRECTORY : ERR_CANNOT_OPEN_FOR_READING,
-                                  i18n("The smart-card service is unavailable."));
+                                  message.isEmpty() ? i18n("The smart-card service is unavailable.") : message);
     }
     case ReadStatus::CapabilityMissing:
     case ReadStatus::NotAvailable:
@@ -192,12 +204,12 @@ WorkerResult CardWorkerLogic::failForRead(ReadStatus status, bool isDirOp) const
     case ReadStatus::Ok:
         break;
     }
-    return WorkerResult::fail(ERR_WORKER_DIED, i18n("Could not read the card."));
+    return WorkerResult::fail(ERR_WORKER_DIED, message.isEmpty() ? i18n("Could not read the card.") : message);
 }
 
-QList<CardWorkerLogic::CertFolder> CardWorkerLogic::pkiCertFolders(const QString& cardPath, CertListResult& outResult)
+QList<CardWorkerLogic::CertFolder> CardWorkerLogic::pkiCertFolders(const QString& cardId, CertListResult& outResult)
 {
-    outResult = m_source.readCertificates(cardPath);
+    outResult = m_source.readCertificates(cardId);
     if (outResult.status != ReadStatus::Ok) {
         return {};
     }
@@ -265,9 +277,9 @@ WorkerResult CardWorkerLogic::doListDir(const QUrl& url)
         // The one listDir path that reads the card: entering the data folder
         // resolves the cert list (lazy PACE acceptable here).
         CertListResult certs;
-        const QList<CertFolder> folders = pkiCertFolders(node.presence.cardPath, certs);
+        const QList<CertFolder> folders = pkiCertFolders(node.presence.cardId, certs);
         if (certs.status != ReadStatus::Ok) {
-            return failForRead(certs.status, /*isDirOp=*/true);
+            return failForRead(certs.status, /*isDirOp=*/true, certs.message);
         }
         UDSEntry entry;
         for (const CertFolder& folder : folders) {
@@ -284,8 +296,8 @@ WorkerResult CardWorkerLogic::doListDir(const QUrl& url)
     }
     case NodeKind::CertDir: {
         // info.txt (rendered metadata) plus the raw-cert exports the agent serves
-        // from Pkcs11_1.CertDer (public data). No card read here — the names are
-        // static for any cert folder; get() does the I/O.
+        // from its public certificate-export surface. No card read here — the
+        // names are static for any cert folder; get() does the I/O.
         UDSEntry entry;
         addFileEntry(entry, CardTree::certInfoTxt(), QStringLiteral("text/plain"));
         emitListEntry(entry);
@@ -400,9 +412,9 @@ WorkerResult CardWorkerLogic::doGet(const QUrl& url)
         return WorkerResult::pass();
     }
     case NodeKind::IdentityLeaf: {
-        const IdentityResult id = m_source.readIdentity(node.presence.cardPath);
+        const IdentityResult id = m_source.readIdentity(node.presence.cardId);
         if (id.status != ReadStatus::Ok) {
-            return failForRead(id.status, /*isDirOp=*/false);
+            return failForRead(id.status, /*isDirOp=*/false, id.message);
         }
         emitMimeType(QStringLiteral("text/plain"));
         emitData(renderIdentityTxt(id.fields).toUtf8());
@@ -410,9 +422,9 @@ WorkerResult CardWorkerLogic::doGet(const QUrl& url)
         return WorkerResult::pass();
     }
     case NodeKind::PhotoLeaf: {
-        const PhotoResult photo = m_source.getPhoto(node.presence.cardPath);
+        const PhotoResult photo = m_source.getPhoto(node.presence.cardId);
         if (photo.status != ReadStatus::Ok) {
-            return failForRead(photo.status, /*isDirOp=*/false);
+            return failForRead(photo.status, /*isDirOp=*/false, photo.message);
         }
         emitMimeType(sniffImageMime(photo.bytes)); // true MIME, no rename/transcode
         emitData(photo.bytes);
@@ -424,13 +436,13 @@ WorkerResult CardWorkerLogic::doGet(const QUrl& url)
         // render that exact cert. resolveCertId maps via the SAME dedup-guarded
         // folder set listDir built — locale-independent and collision-safe.
         CertListResult certs;
-        const QString wantCertId = resolveCertId(node.presence.cardPath, node.certFolder, certs);
+        const QString wantCertId = resolveCertId(node.presence.cardId, node.certFolder, certs);
         if (certs.status != ReadStatus::Ok) {
-            return failForRead(certs.status, /*isDirOp=*/false);
+            return failForRead(certs.status, /*isDirOp=*/false, certs.message);
         }
         if (!wantCertId.isEmpty()) {
-            for (const CertInfoView& c : certs.certs) {
-                if (c.certId == wantCertId) {
+            for (const LibreSCRS::AgentClient::CertificateInfo& c : certs.certs) {
+                if (c.id == wantCertId) {
                     emitMimeType(QStringLiteral("text/plain"));
                     emitData(renderCertInfoTxt(c, workerRenderLabels()).toUtf8());
                     emitData(QByteArray());
@@ -443,19 +455,19 @@ WorkerResult CardWorkerLogic::doGet(const QUrl& url)
     case NodeKind::CertDerLeaf:
     case NodeKind::CertPemLeaf: {
         // Resolve the folder to its certId (one cert read), then fetch the raw DER
-        // from the agent's public Pkcs11_1.CertDer surface. PEM is the same DER
-        // wrapped in base64 framing — no parse, so the LM-free contract holds.
+        // from the agent's public certificate-export surface. PEM is the same DER
+        // wrapped in base64 framing — no parse, so the card-core-free contract holds.
         CertListResult certs;
-        const QString wantCertId = resolveCertId(node.presence.cardPath, node.certFolder, certs);
+        const QString wantCertId = resolveCertId(node.presence.cardId, node.certFolder, certs);
         if (certs.status != ReadStatus::Ok) {
-            return failForRead(certs.status, /*isDirOp=*/false);
+            return failForRead(certs.status, /*isDirOp=*/false, certs.message);
         }
         if (wantCertId.isEmpty()) {
             return WorkerResult::fail(ERR_DOES_NOT_EXIST, url.toDisplayString());
         }
-        const CertDerResult der = m_source.getCertificateDer(node.presence.cardPath, wantCertId);
+        const CertDerResult der = m_source.getCertificateDer(node.presence.cardId, wantCertId);
         if (der.status != ReadStatus::Ok) {
-            return failForRead(der.status, /*isDirOp=*/false);
+            return failForRead(der.status, /*isDirOp=*/false, der.message);
         }
         const bool pem = node.kind == NodeKind::CertPemLeaf;
         emitMimeType(pem ? QLatin1String(kCertPemMime) : QLatin1String(kCertDerMime));

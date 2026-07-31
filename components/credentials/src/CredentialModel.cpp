@@ -7,6 +7,13 @@
 #include <KLocalizedString>
 
 namespace LibreKDE::Credentials {
+
+// Short local spelling for the agent client library, which owns the credential
+// record and its vocabulary. The localized copy this model renders
+// (CredentialText) is keyed on those same types, so a record's kind/state goes
+// straight from the wire value to its display string with nothing in between.
+namespace Client = LibreSCRS::AgentClient;
+
 namespace {
 
 // The counters line: each present counter as "<Type>: m of n" (or "<Type>: m"
@@ -15,7 +22,7 @@ namespace {
 // DOCP reset counter (unblocksLeft, tag 99) is intentionally NOT rendered — its
 // meaning is applet-specific and it has no max; it stays on the wire, unshown.
 // Returns empty when the record carries no rendered counter.
-QString countersText(const CredentialRecord& r)
+QString countersText(const Client::CredentialRecord& r)
 {
     QStringList parts;
     if (r.retriesLeft.has_value()) {
@@ -43,9 +50,9 @@ QString countersText(const CredentialRecord& r)
 // else empty (the delegate hides the line). Both resolve through
 // CredentialText::guidance, which prefers a shipped translation of the agent's
 // frozen key and falls back to the agent's English string.
-QString guidanceText(const CredentialRecord& r)
+QString guidanceText(const Client::CredentialRecord& r)
 {
-    if (r.state == CredentialState::Blocked) {
+    if (r.state == Client::CredentialState::Blocked) {
         return LibreKDE::CredentialText::guidance(r.blockedGuidanceKey, r.blockedGuidanceFallback);
     }
     if (r.keyActivationPending) {
@@ -70,7 +77,7 @@ QVariant CredentialModel::data(const QModelIndex& index, int role) const
     if (!index.isValid() || index.row() < 0 || index.row() >= int(m_records.size())) {
         return {};
     }
-    const CredentialRecord& r = m_records.at(index.row());
+    const Client::CredentialRecord& r = m_records.at(index.row());
     switch (role) {
     case IdRole:
         return r.id;
@@ -79,6 +86,11 @@ QVariant CredentialModel::data(const QModelIndex& index, int role) const
     case StateNameRole:
         return LibreKDE::CredentialText::stateName(r.state);
     case StateRole:
+        // The int the QML state chip styles on. Its values are the client
+        // library's CredentialState enumerators, whose order the delegate's
+        // switch spells out literally (0 Unknown … 4 Blocked) — so a reorder
+        // there has to be mirrored in CredentialDelegate.qml, which is why that
+        // enum's own documentation ties it to the wire state tokens.
         return int(r.state);
     case CountersRole:
         return countersText(r);
@@ -116,16 +128,16 @@ QHash<int, QByteArray> CredentialModel::roleNames() const
     };
 }
 
-void CredentialModel::setRecords(const CredentialList& records)
+void CredentialModel::setRecords(const Client::CredentialList& records)
 {
     beginResetModel();
     m_records = records;
     endResetModel();
 }
 
-std::optional<CredentialRecord> CredentialModel::recordById(const QString& id) const
+std::optional<Client::CredentialRecord> CredentialModel::recordById(const QString& id) const
 {
-    for (const CredentialRecord& r : m_records) {
+    for (const Client::CredentialRecord& r : m_records) {
         if (r.id == id) {
             return r;
         }
@@ -133,7 +145,7 @@ std::optional<CredentialRecord> CredentialModel::recordById(const QString& id) c
     return std::nullopt;
 }
 
-int CredentialModel::rowOfKind(CredentialKind kind) const
+int CredentialModel::rowOfKind(Client::CredentialKind kind) const
 {
     for (int row = 0; row < int(m_records.size()); ++row) {
         if (m_records.at(row).kind == kind) {

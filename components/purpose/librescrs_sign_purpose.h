@@ -14,10 +14,13 @@
 ///        only adapts Purpose's `QJsonObject` data + KF6 dialogs to the SDK-free
 ///        core.
 
-namespace LibreKDE {
+namespace LibreSCRS::AgentClient {
 class AgentClient;
+}
+
+namespace LibreKDE {
 class SignJob;
-} // namespace LibreKDE
+}
 
 namespace LibreKDE::Purpose {
 
@@ -41,7 +44,7 @@ public:
 private:
     void finishWithError(int code, const QString& message);
 
-    std::shared_ptr<LibreKDE::AgentClient> m_client;
+    std::shared_ptr<LibreSCRS::AgentClient::AgentClient> m_client;
     LibreKDE::SignJob* m_signJob = nullptr;
 };
 

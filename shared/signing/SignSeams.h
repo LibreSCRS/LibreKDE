@@ -20,7 +20,8 @@
 namespace LibreKDE::Signing {
 
 /// @brief A `CertChooser` backed by a modal QInputDialog single-selection list
-///        of the signing certificates' display CNs (+ notAfter where present).
+///        of the signing certificates' display subjects (+ the expiry date
+///        where present).
 [[nodiscard]] LibreKDE::CertChooser widgetCertChooser();
 
 /// @brief An `OverwriteConfirmer` backed by a modal QMessageBox Yes/No question.

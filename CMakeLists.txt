@@ -40,10 +40,11 @@ include(ECMQtDeclareLoggingCategory)
 include(ECMInstallIcons)
 include(ECMPoQmTools)
 
-# LibreKDE is a thin client of org.librescrs.Agent over D-Bus (the shared
-# `librekde-agentclient` library). The client closure links NO LibreMiddleware
-# target — card I/O and secret entry live in the agent — so there is no
-# `find_package(LibreMiddleware)` here.
+# LibreKDE is a thin client of org.librescrs.Agent, over the shared agent client
+# library (`LibreAgent::ClientQt`); `librekde-agentclient` adds only the host-side
+# localized copy that library will not render itself. The client closure links NO
+# LibreMiddleware target — card I/O and secret entry live in the agent — so there
+# is no `find_package(LibreMiddleware)` here.
 # Qt6::Widgets is NOT in the always-on base set: it is used only by the shared
 # signing seams (QInputDialog / QMessageBox in shared/signing/SignSeams.cpp). It
 # is found — at ROOT directory scope, gated on a signing surface — just before
@@ -65,10 +66,12 @@ option(LIBREKDE_BUILD_CREDENTIALS "Build the credential-management window" ON)
 option(BUILD_TESTING "Build tests" ON)
 include(CTest)
 
-# LibreAgent::ClientQt — the Qt client library for org.librescrs.Agent over
-# D-Bus. Nothing links it yet (shared/agentclient still carries LibreKDE's own
-# vendored client); this makes the shared library available to the build so a
-# later phase can migrate onto it without also having to plumb its discovery.
+# LibreAgent::ClientQt — the Qt client library for org.librescrs.Agent. Found
+# at ROOT scope, before add_subdirectory(shared), so every subdirectory resolves
+# the imported target. shared/signing links it for the card and operation types
+# in its public interface; shared/agentclient links it for the CallError and
+# ErrorCode value types ErrorText's composed entry point takes. The surfaces
+# still holding LibreKDE's own vendored client do not yet.
 include(cmake/FindOrUseLibreAgent.cmake)
 
 # Qt6::Widgets at root scope (see the note above) — created whenever a signing

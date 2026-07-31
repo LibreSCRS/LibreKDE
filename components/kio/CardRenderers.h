@@ -71,7 +71,14 @@ struct RenderLabels
 /// @brief Render a certificate's metadata as `info.txt`: subject/issuer/
 ///        validity, Purpose (from keyUsage), EKU, signingCapable, Trust (not
 ///        yet evaluated), Qualified (unknown until the agent signal).
-[[nodiscard]] QString renderCertInfoTxt(const CertInfoView& cert, const RenderLabels& labels = defaultRenderLabels());
+///
+/// `info.txt` is a file users diff and script against, so every value it prints
+/// is formatted locale-independently — including the validity date, which
+/// arrives as a `QDateTime` and is written back as ISO-8601 in UTC. That is the
+/// opposite of the choice a dialog label makes, and deliberately so: nothing
+/// parses a label back, whereas this file's whole point is that it is stable.
+[[nodiscard]] QString renderCertInfoTxt(const LibreSCRS::AgentClient::CertificateInfo& cert,
+                                        const RenderLabels& labels = defaultRenderLabels());
 
 /// @brief Render the reader/card `info.txt`: reader name, capability flags,
 ///        pre-read auth method.

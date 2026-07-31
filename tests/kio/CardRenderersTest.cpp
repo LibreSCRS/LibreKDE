@@ -6,9 +6,13 @@
 
 #include "CardRenderers.h"
 
-#include "AgentCapabilities.h"
+#include <LibreSCRS/AgentClient/AgentCapabilities.h>
 
+#include <QDateTime>
+#include <QLocale>
 #include <gtest/gtest.h>
+
+namespace Client = LibreSCRS::AgentClient;
 
 using namespace LibreKDE;
 
@@ -24,17 +28,72 @@ TEST(CardRenderers, SniffsImageMime)
 
 TEST(CardRenderers, CertInfoShowsPurposeTrustNotEvaluatedQualifiedUnknown)
 {
-    CertInfoView v;
-    v.subjectCn = QStringLiteral("Pera");
-    v.issuerCn = QStringLiteral("MUP CA");
+    LibreSCRS::AgentClient::CertificateInfo v;
+    v.subject = QStringLiteral("Pera");
+    v.issuer = QStringLiteral("MUP CA");
     v.keyUsageBits = 0x01u; // digitalSignature (ordinal 0, agent wire 1u<<0)
-    v.trustStatus = 255;
+    v.trust = LibreSCRS::AgentClient::TrustStatus::Unknown;
     const QString txt = renderCertInfoTxt(v);
     EXPECT_TRUE(txt.contains(QStringLiteral("Purpose: Digital Signature"))) << txt.toStdString();
     EXPECT_TRUE(txt.contains(QStringLiteral("Trust: not yet evaluated"))) << txt.toStdString();
     EXPECT_TRUE(txt.contains(QStringLiteral("Qualified: unknown"))) << txt.toStdString();
     EXPECT_TRUE(txt.contains(QStringLiteral("Subject: Pera")));
     EXPECT_TRUE(txt.contains(QStringLiteral("Issuer: MUP CA")));
+}
+
+// The validity line in a cert info.txt is a STABLE FILE's contents: users diff
+// and script against it, so it must read the same under every locale and every
+// reader's time zone. Both halves are asserted here, because both can drift:
+// the FORMAT (a locale-aware formatter renders "1. 1. 2030. 00:00" under a
+// Serbian locale) and the ZONE SPELLING (a renderer that does not normalize
+// echoes whatever offset the producer happened to write, so the same instant
+// reaches two users as two different strings).
+//
+// The zone half needs an input deliberately offset from UTC to show up at all:
+// 01:00+01:00 is 00:00Z, and only a normalizing renderer prints the Z form.
+TEST(CardRenderers, CertInfoValidUntilIsIsoUtcRegardlessOfLocaleAndZone)
+{
+    LibreSCRS::AgentClient::CertificateInfo v;
+    v.notAfter = QDateTime::fromString(QStringLiteral("2030-01-01T01:00:00+01:00"), Qt::ISODate);
+    ASSERT_TRUE(v.notAfter.isValid());
+
+    const QString expected = QStringLiteral("Valid until: 2030-01-01T00:00:00Z");
+    EXPECT_TRUE(renderCertInfoTxt(v).contains(expected)) << renderCertInfoTxt(v).toStdString();
+
+    // Same assertion with a non-English default locale installed in-process. A
+    // renderer that reached for QLocale would change its output here; this one
+    // must not move a byte.
+    const QLocale previous = QLocale();
+    QLocale::setDefault(QLocale(QStringLiteral("sr_RS")));
+    const QString underOtherLocale = renderCertInfoTxt(v);
+    QLocale::setDefault(previous);
+    EXPECT_TRUE(underOtherLocale.contains(expected)) << underOtherLocale.toStdString();
+
+    // An absent validity date prints no line at all (rather than an empty one).
+    LibreSCRS::AgentClient::CertificateInfo noDate;
+    EXPECT_FALSE(renderCertInfoTxt(noDate).contains(QStringLiteral("Valid until")));
+}
+
+// The counterpart the test above cannot cover, and the one that makes
+// normalizing to UTC conditional rather than unconditional: a datetime carrying
+// NO zone at all. There is nothing to normalize, and converting it anyway would
+// interpret it in the READING machine's zone — turning a fixed wall clock into
+// three different instants on three desks. It must print itself, verbatim.
+//
+// Drive it with a time deliberately close to midnight, since that is where an
+// unwanted conversion changes the DATE and not merely the clock. Measured
+// against an unconditionally-normalizing renderer: 2029-12-31T15:30:00Z under
+// TZ=Asia/Tokyo, 2030-01-01T08:30:00Z under TZ=America/Los_Angeles — and even
+// under TZ=UTC it fails, because normalizing stamps a "Z" this value never had.
+TEST(CardRenderers, CertInfoValidUntilLeavesAnUnzonedDateAlone)
+{
+    LibreSCRS::AgentClient::CertificateInfo v;
+    v.notAfter = QDateTime::fromString(QStringLiteral("2030-01-01T00:30:00"), Qt::ISODate);
+    ASSERT_TRUE(v.notAfter.isValid());
+    ASSERT_EQ(v.notAfter.timeSpec(), Qt::LocalTime) << "fixture no longer exercises the unzoned case";
+
+    EXPECT_TRUE(renderCertInfoTxt(v).contains(QStringLiteral("Valid until: 2030-01-01T00:30:00\n")))
+        << renderCertInfoTxt(v).toStdString();
 }
 
 TEST(CardRenderers, KeyUsageDecodesMultipleBits)
@@ -108,7 +167,7 @@ TEST(CardRenderers, IdentityTxtGroupsAndLabels)
 
 TEST(CardRenderers, InfoTxtListsCapabilities)
 {
-    CardPresence p{QStringLiteral("Gemalto"), QStringLiteral("/card/0"), Cap::Pki | Cap::IdentityData,
+    CardPresence p{QStringLiteral("Gemalto"), QStringLiteral("/card/0"), Client::Cap::Pki | Client::Cap::IdentityData,
                    QStringLiteral("Can")};
     const QString txt = renderInfoTxt(p);
     EXPECT_TRUE(txt.contains(QStringLiteral("Reader: Gemalto")));
@@ -119,23 +178,23 @@ TEST(CardRenderers, InfoTxtListsCapabilities)
 
 // eMRTD + PIN-management edges: a passport (IdentityData|EmrtdCrypto) lists eMRTD,
 // and the PIN-management bit lists "PIN management". Closes the capability-label
-// gap left by the bit-literal → Cap::/has() change.
+// gap left by the bit-literal → Client::Cap::/has() change.
 TEST(CardRenderers, InfoTxtListsEmrtdAndPinManagementCapabilities)
 {
-    CardPresence passport{QStringLiteral("NFC"), QStringLiteral("/card/0"), Cap::IdentityData | Cap::EmrtdCrypto,
-                          QStringLiteral("Mrz")};
+    CardPresence passport{QStringLiteral("NFC"), QStringLiteral("/card/0"),
+                          Client::Cap::IdentityData | Client::Cap::EmrtdCrypto, QStringLiteral("Mrz")};
     const QString ptxt = renderInfoTxt(passport);
     EXPECT_TRUE(ptxt.contains(QStringLiteral("Identity"))) << ptxt.toStdString();
     EXPECT_TRUE(ptxt.contains(QStringLiteral("eMRTD"))) << ptxt.toStdString();
     EXPECT_FALSE(ptxt.contains(QStringLiteral("PKI"))) << ptxt.toStdString();
 
-    CardPresence pinCard{QStringLiteral("R"), QStringLiteral("/card/1"), Cap::Pki | Cap::PinManagement,
+    CardPresence pinCard{QStringLiteral("R"), QStringLiteral("/card/1"), Client::Cap::Pki | Client::Cap::PinManagement,
                          QStringLiteral("None")};
     const QString ptxt2 = renderInfoTxt(pinCard);
     EXPECT_TRUE(ptxt2.contains(QStringLiteral("PIN management"))) << ptxt2.toStdString();
 
     // An empty capability set renders the "none" sentinel and "None" pre-read auth.
-    CardPresence empty{QStringLiteral("E"), QStringLiteral("/card/2"), Cap::None, QString()};
+    CardPresence empty{QStringLiteral("E"), QStringLiteral("/card/2"), Client::Cap::None, QString()};
     const QString etxt = renderInfoTxt(empty);
     EXPECT_TRUE(etxt.contains(QStringLiteral("Capabilities: none"))) << etxt.toStdString();
     EXPECT_TRUE(etxt.contains(QStringLiteral("Pre-read authentication: None"))) << etxt.toStdString();

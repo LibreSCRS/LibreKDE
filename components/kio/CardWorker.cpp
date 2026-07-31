@@ -4,7 +4,8 @@
 #include "CardWorker.h"
 
 #include "AgentCardDataSource.h"
-#include "AgentClient.h"
+
+#include <LibreSCRS/AgentClient/AgentClient.h>
 
 #include <KIO/WorkerFactory>
 #include <KPluginFactory>
@@ -18,7 +19,8 @@ using namespace KIO;
 namespace LibreKDE {
 
 CardWorkerOwnership::CardWorkerOwnership()
-    : m_client(std::make_unique<AgentClient>()), m_source(std::make_unique<AgentCardDataSource>(*m_client))
+    : m_client(std::make_unique<LibreSCRS::AgentClient::AgentClient>()),
+      m_source(std::make_unique<AgentCardDataSource>(*m_client))
 {}
 
 CardWorkerOwnership::~CardWorkerOwnership() = default;

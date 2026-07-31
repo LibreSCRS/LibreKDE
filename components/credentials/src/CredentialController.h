@@ -4,6 +4,9 @@
 
 #include "CredentialModel.h"
 
+#include <LibreSCRS/AgentClient/CredentialTypes.h> // CredentialKind — the presented-credential attribution
+#include <LibreSCRS/AgentClient/SyncError.h>       // the named refusal a verb can come back with
+
 #include <QObject>
 #include <QPointer>
 #include <QString>
@@ -11,12 +14,11 @@
 
 #include <memory>
 
-namespace LibreKDE {
+namespace LibreSCRS::AgentClient {
 class AgentClient;
 class AgentCard;
 class AgentOperation;
-class AgentReader;
-} // namespace LibreKDE
+} // namespace LibreSCRS::AgentClient
 
 namespace LibreKDE::Credentials {
 
@@ -100,9 +102,10 @@ public:
     /// @brief QML-instantiation ctor: co-owns the process-wide
     ///        `sharedAgentClient()`.
     explicit CredentialController(QObject* parent = nullptr);
-    /// @brief Inject a client (tests pass a `FakeAgent`-backed `AgentClient`).
+    /// @brief Inject a client (tests pass one pointed at a `FakeAgent` peer).
     ///        Co-owned, mirroring the production shared-client shape.
-    explicit CredentialController(std::shared_ptr<LibreKDE::AgentClient> client, QObject* parent = nullptr);
+    explicit CredentialController(std::shared_ptr<LibreSCRS::AgentClient::AgentClient> client,
+                                  QObject* parent = nullptr);
     ~CredentialController() override;
 
     CredentialController(const CredentialController&) = delete;
@@ -137,11 +140,11 @@ public:
         return m_removalNotice;
     }
 
-    /// @brief Bind (or re-target) to a reader by its D-Bus object path (the
+    /// @brief Bind (or re-target) to a reader by its opaque agent-side id (the
     ///        `--reader` argument the plasmoid passes). Re-classifies the bound
-    ///        reader's card; a re-bind of the same path still refreshes (a
+    ///        reader's card; a re-bind of the same id still refreshes (a
     ///        second launch may re-target after the card was swapped).
-    Q_INVOKABLE void bindReader(const QString& readerPath);
+    Q_INVOKABLE void bindReader(const QString& readerId);
     /// @brief Re-resolve the bound reader's card from the client and re-classify.
     ///        A missing/stale binding falls back to `firstReaderWithCard()`
     ///        before resting on NoCard; the explicit binding stays
@@ -157,18 +160,18 @@ public:
     /// PUK/CAN), drives the window through `Working`, renders the typed `PinResult`
     /// in `Result`, then runs the MANDATORY post-mutation re-list.
     /// @{
-    /// Change a PIN (`ManagePin(id, "change", {})`).
+    /// Change a PIN (`managePin(id, PinVerb::Change)`).
     Q_INVOKABLE void changePin(const QString& id);
     /// Pre-flight for unblocking @p id: format the PUK's remaining budget from the
     /// current model and emit `unblockConfirmRequested(id, budgetText)`. The actual
     /// PUK entry happens in the agent's prompter after `confirmUnblock`.
     Q_INVOKABLE void requestUnblock(const QString& id);
-    /// User confirmed the unblock sheet (`ManagePin(id, "unblock", {})`).
+    /// User confirmed the unblock sheet (`managePin(id, PinVerb::Unblock)`).
     Q_INVOKABLE void confirmUnblock(const QString& id);
-    /// Activate a transport PIN (`ManagePin(id, "activate_pin", {activateKey})`),
+    /// Activate a transport PIN (`managePin(id, PinVerb::ActivatePin, {activateKey})`),
     /// bringing up the on-card signing key in the same flow when it is pending.
     Q_INVOKABLE void activate(const QString& id);
-    /// Activate the on-card signing key on its own (`ActivateSigningKey`), the
+    /// Activate the on-card signing key on its own (`activateSigningKey()`), the
     /// standalone affordance the re-list advertises after a partial bring-up.
     Q_INVOKABLE void activateSigningKey(const QString& id);
     /// @}
@@ -201,7 +204,7 @@ Q_SIGNALS:
 private:
     void wireClient();
     /// Track the bound card + its capability-change signal (re-classify on change).
-    void bindCard(LibreKDE::AgentCard* card);
+    void bindCard(LibreSCRS::AgentClient::AgentCard* card);
     /// Classify the currently bound card into a State.
     void classify();
     /// Kick a `ListCredentials` on the bound card (unless already in flight or
@@ -209,13 +212,13 @@ private:
     /// terminal `finished`.
     void startListCredentials();
     /// A `ListCredentials` operation reached its terminal status. Drives the whole
-    /// outcome off `finished` alone (the credentials result is guaranteed
-    /// populated by then — the Credentials Result races with Finished, so reading
-    /// it here is race-free): Ok → Ready/Empty; non-Ok → ReadFailed. Clears
-    /// `m_listOp` on EVERY path; latches `m_listSettled` on success and on an
-    /// explicit user cancel, but NOT on a transient error (which stays
-    /// re-fetchable on the next card/availability event or an explicit refresh()).
-    void onListFinished(int status, LibreKDE::AgentOperation* op);
+    /// outcome off `finished` alone (every polled value and the typed result are
+    /// settled before it fires, so reading them here is race-free): Ok →
+    /// Ready/Empty; non-Ok → ReadFailed. Clears `m_listOp` on EVERY path; latches
+    /// `m_listSettled` on success and on an explicit user cancel, but NOT on a
+    /// transient error (which stays re-fetchable on the next card/availability
+    /// event or an explicit refresh()).
+    void onListFinished(LibreSCRS::AgentClient::AgentOperation* op);
     /// Tear down our interest in the in-flight list op (disconnect + reap) and
     /// clear the settled latch (and the result-hold), so the next classify
     /// re-fetches. Does not change state — the caller sets it.
@@ -229,25 +232,29 @@ private:
     void transitionTo(State next);
     void setReaderName(const QString& name);
 
-    /// Start a `ManagePin(id, verb, options)` mutation (or, when @p op is minted by
-    /// the caller for `ActivateSigningKey`, adopt it): on a live op → `Working` +
-    /// wire `finished`/`phaseChanged`; on a nullptr entry-throw → `handleEntryError`.
+    /// Adopt a freshly minted `ManagePin` / `ActivateSigningKey` mutation: enter
+    /// `Working` and wire `finished`/`phaseChanged`. Every minted operation is
+    /// non-null — a call the agent refuses at method entry comes back as an
+    /// operation that terminalizes immediately with the refusal, so a refusal is
+    /// reached through `onMutationDone` like any other outcome, never here.
     /// @p presented is stashed for the result's attribution.
-    void beginMutation(LibreKDE::AgentOperation* op, LibreKDE::CredentialKind presented);
-    /// A mutation reached its terminal `finished`. Drive the outcome off
-    /// `op->pinResult()` alone (NOT the terminal status — a soft-fail invalidPin/
-    /// blocked legitimately finishes Error yet carries a real outcome): set the
-    /// attributed result banner, enter `Result`, then run the MANDATORY re-list.
-    void onMutationDone(LibreKDE::AgentOperation* op);
-    /// A `ManagePin`/`ActivateSigningKey` threw at method entry (no Operation).
-    /// Branch on `AgentCard::lastCredentialError()`: `UnknownCredential` → neutral
-    /// notice + recovery re-list (the agent dropped its cache — a stale id);
-    /// `RateLimited` → neutral "please wait" (the listing is still valid, no
-    /// re-list); `InvalidRequest` → a USER-REACHABLE refusal (the agent maps an
-    /// ambiguous-credential card condition onto it) — neutral notice, no re-list
-    /// (persistent for the card); anything else → a neutral generic notice + a
-    /// defensive re-list. Entry errors are NEVER red banners.
-    void handleEntryError();
+    void beginMutation(LibreSCRS::AgentClient::AgentOperation* op, LibreSCRS::AgentClient::CredentialKind presented);
+    /// A mutation reached its terminal `finished`. A refusal the agent NAMED
+    /// (`syncError()` engaged) never reached the card and is handed to
+    /// `handleRefusal`; everything else is driven off `op->pinResult()` alone (NOT
+    /// the terminal status — a soft-fail invalidPin/blocked legitimately finishes
+    /// Error yet carries a real outcome): set the attributed result banner, enter
+    /// `Result`, then run the MANDATORY re-list.
+    void onMutationDone(LibreSCRS::AgentClient::AgentOperation* op);
+    /// A `ManagePin`/`ActivateSigningKey` the agent refused at method entry, by
+    /// name. Branch on that name: `UnknownCredential` → neutral notice + recovery
+    /// re-list (the agent dropped its cache — a stale id); `RateLimited` → neutral
+    /// "please wait" (the request never reached the card, the listing is still
+    /// valid, no re-list); `InvalidRequest` → a USER-REACHABLE refusal (the agent
+    /// maps an ambiguous-credential card condition onto it) — neutral notice, no
+    /// re-list (persistent for the card); any other name → a neutral generic
+    /// notice + a defensive re-list. Named refusals are NEVER red banners.
+    void handleRefusal(LibreSCRS::AgentClient::SyncError named, LibreSCRS::AgentClient::AgentOperation* op);
     /// The MANDATORY post-mutation re-list: the agent invalidates its
     /// listing cache on any mutation that reached the card, so re-fetch before
     /// offering another action. Keeps the `Result` banner up while the fresh list
@@ -257,7 +264,7 @@ private:
     void relistAfterMutation();
     /// The credential kind PRESENTED in @p id's failing step, for the result
     /// attribution: the record's own kind (or `Unknown` when the id is stale).
-    [[nodiscard]] LibreKDE::CredentialKind kindOf(const QString& id) const;
+    [[nodiscard]] LibreSCRS::AgentClient::CredentialKind kindOf(const QString& id) const;
     /// A verb may start only on a bound (manageable) card with no verb already in
     /// flight — the public invokables guard on this (the Working scrim is UI-only).
     [[nodiscard]] bool canStartMutation() const;
@@ -266,31 +273,31 @@ private:
     void setRemovalNotice(const QString& notice);
 
     // Co-owned, process-shared agent client (sharedAgentClient() in production;
-    // tests inject a FakeAgent-backed one).
-    std::shared_ptr<LibreKDE::AgentClient> m_client;
-    QPointer<LibreKDE::AgentCard> m_card;
+    // tests inject one pointed at a fake peer).
+    std::shared_ptr<LibreSCRS::AgentClient::AgentClient> m_client;
+    QPointer<LibreSCRS::AgentClient::AgentCard> m_card;
     /// The in-flight (or last) ListCredentials op, parented to the bound card.
-    QPointer<LibreKDE::AgentOperation> m_listOp;
+    QPointer<LibreSCRS::AgentClient::AgentOperation> m_listOp;
     /// The in-flight PIN/signing-key mutation op, parented to the bound card.
-    QPointer<LibreKDE::AgentOperation> m_mutationOp;
+    QPointer<LibreSCRS::AgentClient::AgentOperation> m_mutationOp;
     /// The dashboard's model; owned by (parented to) this controller.
     CredentialModel* m_model = nullptr;
-    QString m_readerPath; ///< Bound reader OBJECT PATH ("" = none bound).
+    QString m_readerId;   ///< Bound reader id ("" = none bound).
     QString m_readerName; ///< Friendly Name of the bound reader.
-    /// Object path of the reader the binding last RESOLVED to (explicit target
-    /// or fallback; "" = none). Lets bindReader() recognize an explicit re-bind
+    /// Id of the reader the binding last RESOLVED to (explicit target or
+    /// fallback; "" = none). Lets bindReader() recognize an explicit re-bind
     /// of the reader already being managed, which must never abandon a running
     /// verb the way a genuine re-target does.
-    QString m_resolvedReaderPath;
+    QString m_resolvedReaderId;
     QString m_resultMessage;      ///< Last verb's banner text ("" = none).
     bool m_resultIsError = false; ///< Last verb's result is an error banner.
     double m_progress = 0.0;      ///< In-flight verb progress [0,1].
     /// Card-removed outcome carried on the NoCard surface (see the property).
     QString m_removalNotice;
     /// Kind PRESENTED by the in-flight mutation, stashed at invoke time for the
-    /// result's attribution: change/activate_pin → the record's kind,
-    /// unblock → Puk, activateSigningKey → Sign.
-    LibreKDE::CredentialKind m_pendingPresentedKind = LibreKDE::CredentialKind::Unknown;
+    /// result's attribution: Change/ActivatePin → the record's kind,
+    /// Unblock → Puk, activateSigningKey → Sign.
+    LibreSCRS::AgentClient::CredentialKind m_pendingPresentedKind = LibreSCRS::AgentClient::CredentialKind::Unknown;
     /// True while a finished verb's `Result` banner must stay up across the
     /// mandatory re-list: suppresses the re-list's `Loading` transition so the
     /// outcome remains visible until fresh rows land (then onListFinished clears it

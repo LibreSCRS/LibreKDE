@@ -4,8 +4,9 @@
 # The Purpose "Sign with LibreSCRS Smart Card" Share-menu plugin: a thin KF6
 # Purpose shell over the shared LibreKDE::SignJob (librekde-signing). A client of
 # org.librescrs.Agent: it forwards an input fd + a non-secret {format,packaging}
-# choice to Card1.Sign via librekde-agentclient and writes the returned artifact
-# next to the input. NO card I/O, NO secrets, NO LibreMiddleware.
+# choice to the agent's card signing method via the shared agent client library
+# and writes the returned artifact next to the input. NO card I/O, NO secrets,
+# NO LibreMiddleware.
 
 set(CMAKE_AUTOMOC ON)
 
@@ -21,12 +22,16 @@ kcoreaddons_add_plugin(librescrs_sign_purpose
         librescrs_sign_purpose.h
         librescrs_sign_purpose.cpp
 )
+# LibreAgent::ClientQt is named explicitly rather than picked up through
+# librekde-signing: this shim includes the client library's own headers (the
+# shared client accessor, the card/reader registry view, the capability helpers)
+# in its own translation unit, so the dependency is direct, not inherited.
 target_link_libraries(librescrs_sign_purpose
     PRIVATE
         Qt6::Core Qt6::DBus
         KF6::I18n KF6::CoreAddons
         KF6::Purpose
-        librekde-agentclient
+        LibreAgent::ClientQt
         librekde-signing
 )
 target_compile_features(librescrs_sign_purpose PRIVATE cxx_std_23)

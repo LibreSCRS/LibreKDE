@@ -1,18 +1,19 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # SPDX-FileCopyrightText: 2026 hirashix0
 #
-# card:/ KIO worker (read-only virtual filesystem over org.librescrs.Agent). A
-# thin agent client: NO card I/O, NO secrets, NO LibreMiddleware. The pure
-# layout/render core (CardTree + renderers) is KIO-free and D-Bus-free so it is
-# unit-tested against an in-memory fake; AgentCardDataSource is the only I/O
-# seam (over librekde-agentclient); CardWorker is the KIO::WorkerBase glue.
+# card:/ KIO worker (read-only virtual filesystem over the card agent). A thin
+# agent client: NO card I/O, NO secrets, NO card middleware. The pure
+# layout/render core (CardTree + renderers) is KIO-free and transport-free so it
+# is unit-tested against an in-memory fake; AgentCardDataSource is the only I/O
+# seam (over the shared agent client library); CardWorker is the KIO::WorkerBase
+# glue.
 
 set(CMAKE_AUTOMOC ON)
 
 # Pure core + the agent-backed data source, shared by the worker and the tests.
-# CardTree + CardRenderers are pure (no KIO, no D-Bus). AgentCardDataSource adds
-# the QtDBus/agentclient dependency but stays KIO-free (driven by the worker's
-# own event loop via a scoped QEventLoop).
+# CardTree + CardRenderers are pure (no KIO, no transport). AgentCardDataSource
+# adds the agent-client dependency but stays KIO-free (driven by the worker
+# process's own event loop via a scoped QEventLoop).
 add_library(librekde-kio-core STATIC
     CardDataSource.h
     CardTree.h
@@ -25,9 +26,14 @@ add_library(librekde-kio-core STATIC
     CardWorkerLogic.cpp
 )
 target_include_directories(librekde-kio-core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+# LibreAgent::ClientQt is PUBLIC because CardDataSource.h — the public seam every
+# consumer of this target compiles against — carries the client library's own
+# CertificateInfo in CertListResult. The alternative was a re-copied view struct,
+# i.e. a second hand-kept mirror of the same fields, with the certificate id that
+# becomes a URL path segment riding on the copy.
 target_link_libraries(librekde-kio-core
-    PUBLIC  Qt6::Core KF6::KIOCore
-    PRIVATE Qt6::DBus KF6::I18n librekde-agentclient
+    PUBLIC  Qt6::Core KF6::KIOCore LibreAgent::ClientQt
+    PRIVATE KF6::I18n librekde-agentclient
 )
 target_compile_features(librekde-kio-core PUBLIC cxx_std_23)
 # CardWorkerLogic's bare i18n()/i18nc() (cert-folder names, error copy) must
@@ -48,8 +54,9 @@ kcoreaddons_add_plugin(card
 )
 target_link_libraries(card
     PRIVATE
-        Qt6::Core Qt6::DBus
+        Qt6::Core
         KF6::KIOCore KF6::I18n KF6::CoreAddons
+        LibreAgent::ClientQt
         librekde-agentclient
         librekde-kio-core
 )

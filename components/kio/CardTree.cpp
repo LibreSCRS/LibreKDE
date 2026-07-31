@@ -3,7 +3,10 @@
 
 #include "CardTree.h"
 
-#include "AgentCapabilities.h" // LibreKDE::Cap, has()
+#include <LibreSCRS/AgentClient/AgentCapabilities.h> // Client::Cap::*, Client::has()
+
+// Short local spelling for the agent client library, as in AgentCardDataSource.
+namespace Client = LibreSCRS::AgentClient;
 
 namespace LibreKDE {
 
@@ -34,7 +37,8 @@ QString CardTree::photoLeafName(std::uint32_t caps)
     // eMRTD DG2 photos are virtually always JPEG2000; a plain eID photo is JPEG.
     // The extension is a capability-derived hint (no card read) so a file manager
     // can open the leaf directly; get()'s byte sniff confirms the true MIME.
-    return photoNodeName() + (has(caps, Cap::EmrtdCrypto) ? QStringLiteral(".jp2") : QStringLiteral(".jpg"));
+    return photoNodeName() +
+           (Client::has(caps, Client::Cap::EmrtdCrypto) ? QStringLiteral(".jp2") : QStringLiteral(".jpg"));
 }
 QString CardTree::certInfoTxt()
 {
@@ -89,8 +93,8 @@ CardNode CardTree::resolve(const QUrl& url) const
         return CardNode{}; // unknown reader
     }
     const std::uint32_t caps = presence->capabilities;
-    const bool hasIdentity = has(caps, Cap::IdentityData);
-    const bool hasPki = has(caps, Cap::Pki);
+    const bool hasIdentity = Client::has(caps, Client::Cap::IdentityData);
+    const bool hasPki = Client::has(caps, Client::Cap::Pki);
 
     CardNode node;
     node.readerName = presence->readerName;
@@ -182,17 +186,17 @@ QStringList CardTree::list(const QUrl& url) const
     // Reader dir: info.txt + the capability dirs (zero I/O).
     if (seg.size() == 1) {
         QStringList children{infoTxt()};
-        if (has(caps, Cap::IdentityData)) {
+        if (Client::has(caps, Client::Cap::IdentityData)) {
             children << identityDirName();
         }
-        if (has(caps, Cap::Pki)) {
+        if (Client::has(caps, Client::Cap::Pki)) {
             children << pkiDirName();
         }
         return children;
     }
 
     // Identity dir: fixed children (identity.txt + photo node), zero I/O.
-    if (seg.size() == 2 && seg.at(1) == identityDirName() && has(caps, Cap::IdentityData)) {
+    if (seg.size() == 2 && seg.at(1) == identityDirName() && Client::has(caps, Client::Cap::IdentityData)) {
         return identityChildren(caps);
     }
 

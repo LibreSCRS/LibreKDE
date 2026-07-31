@@ -2,16 +2,17 @@
 // SPDX-FileCopyrightText: 2026 hirashix0
 //
 // Pure capability → UI-state classification. No D-Bus, no LibreMiddleware:
-// the classifier consumes the agent client's `LibreKDE::Cap` mirror.
+// the classifier consumes the agent client library's own `Cap` mirror.
 
-#include "AgentCapabilities.h"
+#include <LibreSCRS/AgentClient/AgentCapabilities.h>
+
 #include "CardStateModel.h"
 
 #include <gtest/gtest.h>
 
-namespace Cap = LibreKDE::Cap;
-using LibreKDE::UiState;
+namespace Cap = LibreSCRS::AgentClient::Cap;
 using LibreKDE::Plasmoid::CardStateModel;
+using LibreSCRS::AgentClient::UiState;
 
 TEST(CardStateModelClassify, NoCapabilitiesYieldsUnknownCard)
 {

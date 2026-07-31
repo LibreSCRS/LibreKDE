@@ -6,31 +6,8 @@
 #include <KLocalizedString>
 
 #include <QHash>
-#include <QLatin1String>
 
 namespace LibreKDE {
-
-QList<IdentityRow> flattenIdentityFields(const IdentityFields& fields)
-{
-    QList<IdentityRow> rows;
-    for (auto groupIt = fields.constBegin(); groupIt != fields.constEnd(); ++groupIt) {
-        const IdentityFieldGroup& group = groupIt.value();
-        for (auto fieldIt = group.constBegin(); fieldIt != group.constEnd(); ++fieldIt) {
-            const IdentityField& field = fieldIt.value();
-            if (field.type == QLatin1String("binary")) {
-                continue; // raw photos etc. are not text rows
-            }
-            IdentityRow row;
-            row.groupKey = groupIt.key();
-            row.fieldKey = fieldIt.key();
-            row.labelKey = field.labelKey;
-            row.labelFallback = field.labelFallback;
-            row.value = field.value.variant().toString();
-            rows.append(row);
-        }
-    }
-    return rows;
-}
 
 namespace {
 
@@ -163,7 +140,7 @@ const QHash<QString, KLocalizedString>& labelTable()
 
 } // namespace
 
-QString localizedFieldLabel(const IdentityRow& row)
+QString localizedFieldLabel(const LibreSCRS::AgentClient::IdentityRow& row)
 {
     if (const auto it = labelTable().constFind(row.labelKey); it != labelTable().constEnd()) {
         return it->toString();

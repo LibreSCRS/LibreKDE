@@ -26,6 +26,11 @@ set_tests_properties(CardRenderersTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=o
 # and pulls the card mid-loop to exercise the card-removed-mid-read UAF window.
 # Reuses the shared FakeAgent peer + TestMain (a QCoreApplication-owning
 # main), and runs under dbus-run-session on a private bus.
+#
+# LibreAgent::ClientQt is named EXPLICITLY even though librekde-kio-core carries
+# it PUBLIC: this suite includes that library's own headers, and a test's
+# dependency on headers it includes itself must not rest on another target's
+# public interface, which a later change there could withdraw.
 add_executable(AgentCardDataSourceTest
     AgentCardDataSourceTest.cpp
 )
@@ -33,7 +38,8 @@ set_target_properties(AgentCardDataSourceTest PROPERTIES AUTOMOC ON)
 target_include_directories(AgentCardDataSourceTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(AgentCardDataSourceTest PRIVATE
     GTest::gtest
-    librekde-kio-core librekde-agentclient librekde-test-support librekde-test-main
+    librekde-kio-core librekde-agentclient LibreAgent::ClientQt
+    librekde-test-support librekde-test-main
     Qt6::Core Qt6::DBus Qt6::Gui Qt6::Test
 )
 target_compile_features(AgentCardDataSourceTest PRIVATE cxx_std_23)

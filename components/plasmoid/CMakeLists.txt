@@ -77,14 +77,27 @@ target_include_directories(librekde-plasmoid PRIVATE
 # catalogs shipped under THAT domain in po/ — the stock Plasma applet layout.
 target_compile_definitions(librekde-plasmoid PRIVATE TRANSLATION_DOMAIN="librekde")
 
-# The plasmoid is a thin client of org.librescrs.Agent: it links the shared
-# `librekde-agentclient` (QtDBus) and NO LibreMiddleware target. Card I/O and
-# secret entry live in the agent.
+# The plasmoid is a thin client of org.librescrs.Agent: it links the agent
+# client library and NO LibreMiddleware target. Card I/O and secret entry live
+# in the agent.
+#
+# LibreAgent::ClientQt is named here EXPLICITLY even though it would already
+# arrive transitively — BOTH librekde-signing and librekde-agentclient carry it
+# PUBLIC (for their own public headers' sake). This component includes the
+# client's own headers directly (the card/reader/operation proxies, the
+# capability tokens, the bounded-payload reader), so its dependency on them must
+# not rest on either sibling's public interface, which a later change to that
+# sibling could withdraw.
+#
+# librekde-agentclient supplies the two host-side pieces the client library has
+# no counterpart for and never will: the localized error copy (ErrorText) and the
+# identity-label table keyed on the frozen label keys the agent ships.
 target_link_libraries(librekde-plasmoid
     PRIVATE
         Qt6::Core Qt6::Gui Qt6::DBus Qt6::Qml Qt6::Quick
         KF6::I18n KF6::CoreAddons KF6::Notifications KF6::KIOGui KF6::Service
         Plasma::Plasma
+        LibreAgent::ClientQt
         librekde-agentclient
         librekde-signing
         LibreKDELogging

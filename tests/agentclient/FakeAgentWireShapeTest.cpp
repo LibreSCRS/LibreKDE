@@ -18,16 +18,19 @@
 // registrations the shared test entry point performs are pinned the same way and
 // for the same reason.
 //
-// Honest limitation, the same one WireContractGuardTest states for its half:
-// this repo has no build edge to the agent's published interface XML, so the
-// literals below cannot auto-follow a change made there — a genuine cross-repo
-// drift has to be caught agent-side, where the XML is canonical. What these pins
-// DO catch is drift on this side: a mirror edited here stops matching the
-// literal, and the literals are additionally held in step with the client's own
-// demarshallers by tests/agentclient/AgentResultSignatureTest.cpp, which pins the
-// same signature strings against the client types independently of the fake. Two
-// hand-transcribed copies that must agree is not a build edge, but it does mean
-// a one-sided edit fails something.
+// Honest limitation: this repo has no build edge to the agent's published
+// interface XML, so the literals below cannot auto-follow a change made there —
+// a genuine cross-repo drift has to be caught agent-side, where the XML is
+// canonical, and the client library pins these same signature strings against
+// its own demarshalling types in its own suite.
+//
+// What these pins DO catch is drift on this side: a mirror edited here stops
+// matching its literal and fails immediately, by name, in this file. That is
+// worth having because the failure it prevents is otherwise silent and remote —
+// the component suites in this repo drive the REAL client against this fake, so
+// a mirror that stopped matching the client's demarshalling types would surface
+// there as an unexplained no-reply in whichever payload path happened to touch
+// it, rather than as anything pointing back at the mirror.
 
 #include "TestBus.h"
 

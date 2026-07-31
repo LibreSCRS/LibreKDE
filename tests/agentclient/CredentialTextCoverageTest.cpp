@@ -32,8 +32,8 @@
 
 namespace {
 
-using LibreKDE::CredentialKind;
-using LibreKDE::CredentialOutcome;
+using LibreSCRS::AgentClient::CredentialKind;
+using LibreSCRS::AgentClient::CredentialOutcome;
 
 // The contract each outcome must satisfy, split so both dimensions
 // (isNeutral + whether outcomeMessage carries copy) are pinned. Ok and

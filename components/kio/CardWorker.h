@@ -18,11 +18,13 @@
 ///        only `get()` of a leaf (and `listDir` of `PKI/`) reads the card —
 ///        lazy PACE.
 
+namespace LibreSCRS::AgentClient {
+class AgentClient;
+}
+
 namespace LibreKDE {
 
-class AgentClient;
-
-/// @brief Owns the worker's `AgentClient` + agent-backed `CardDataSource`. A
+/// @brief Owns the worker's agent client + agent-backed `CardDataSource`. A
 ///        base class (listed BEFORE `CardWorkerLogic`) so the source is alive
 ///        when `CardWorkerLogic`'s ctor binds its reference — base subobjects
 ///        are constructed in declaration order.
@@ -36,7 +38,7 @@ protected:
     [[nodiscard]] CardDataSource& source() const;
 
 private:
-    std::unique_ptr<AgentClient> m_client;
+    std::unique_ptr<LibreSCRS::AgentClient::AgentClient> m_client;
     std::unique_ptr<CardDataSource> m_source;
 };
 

@@ -14,13 +14,16 @@
 
 #include "IdentityRows.h"
 
+#include <LibreSCRS/AgentClient/IdentityRows.h>
+
 #include <KLocalizedString>
 
 #include <QCoreApplication>
 
 #include <gtest/gtest.h>
 
-using namespace LibreKDE;
+using LibreKDE::localizedFieldLabel;
+using LibreSCRS::AgentClient::IdentityRow;
 
 namespace {
 

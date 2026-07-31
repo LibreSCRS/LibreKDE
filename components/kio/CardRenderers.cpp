@@ -3,7 +3,10 @@
 
 #include "CardRenderers.h"
 
-#include "AgentCapabilities.h" // LibreKDE::Cap, has()
+#include <LibreSCRS/AgentClient/AgentCapabilities.h> // Cap::*, has()
+
+// Short local spelling for the agent client library, as in AgentCardDataSource.
+namespace Client = LibreSCRS::AgentClient;
 
 namespace LibreKDE {
 
@@ -118,17 +121,32 @@ QString renderIdentityTxt(const QList<IdentityFieldView>& fields)
     return out;
 }
 
-QString renderCertInfoTxt(const CertInfoView& cert, const RenderLabels& labels)
+QString renderCertInfoTxt(const LibreSCRS::AgentClient::CertificateInfo& cert, const RenderLabels& labels)
 {
     QString out;
     const auto line = [&out](const QString& key, const QString& value) {
         out += QStringLiteral("%1: %2\n").arg(key, value);
     };
 
-    line(labels.labelSubject, cert.subjectCn);
-    line(labels.labelIssuer, cert.issuerCn);
-    if (!cert.notAfter.isEmpty()) {
-        line(labels.labelValidUntil, cert.notAfter);
+    line(labels.labelSubject, cert.subject);
+    line(labels.labelIssuer, cert.issuer);
+    if (cert.notAfter.isValid()) {
+        // LOCALE-INDEPENDENT on purpose: Qt::ISODate is a fixed spelling that no
+        // QLocale setting can alter, unlike QLocale::toString. This file is one
+        // users diff and script against, so it must read the same everywhere.
+        //
+        // The zone half is normalized ONLY when there is a zone to normalize.
+        // A certificate's validity dates are zoned in the wire format the agent
+        // parses them from, and converting those to UTC gives one canonical
+        // spelling instead of echoing whatever offset the producer wrote. But
+        // converting a value that carries NO zone is the very instability this
+        // line is avoiding: an unzoned datetime is interpreted in the reading
+        // machine's local zone, so "2030-01-01T00:30:00" would come out as
+        // 2029-12-31T15:30:00Z in Tokyo and 2030-01-01T08:30:00Z in Los Angeles
+        // (measured). Left alone it prints its own wall clock, the same on every
+        // machine — which is all an unzoned value ever meant.
+        const QDateTime stamp = cert.notAfter.timeSpec() == Qt::LocalTime ? cert.notAfter : cert.notAfter.toUTC();
+        line(labels.labelValidUntil, stamp.toString(Qt::ISODate));
     }
 
     const QStringList purposes = keyUsagePurposes(cert.keyUsageBits, labels);
@@ -140,8 +158,11 @@ QString renderCertInfoTxt(const CertInfoView& cert, const RenderLabels& labels)
 
     line(labels.labelSigningCapable, cert.signingCapable ? labels.valueYes : labels.valueNo);
 
-    // trustStatus is Unknown (255) until the trust verdict — never imply a
-    // Trusted/Untrusted verdict before the trust evaluation lands.
+    // The client hands back a deduced `trust` verdict, but rendering it needs a
+    // localized name per verdict and none exists yet — so this line still says
+    // "not yet evaluated" rather than inventing copy for a verdict it would then
+    // have to translate. The verdict is deliberately NOT read from `cert.extra`
+    // either: the typed member is the one source of truth.
     line(labels.labelTrust, labels.trustNotEvaluated);
     // No agent qualified/QSCD signal yet (deferred) — always "unknown".
     line(labels.labelQualified, labels.qualifiedUnknown);
@@ -160,19 +181,20 @@ QString renderInfoTxt(const CardPresence& presence, const RenderLabels& labels)
     };
     line(labels.labelReader, presence.readerName);
 
-    // Authoritative capability bits — see AgentCapabilities.h (the values carry a
-    // "do not renumber" warning). PKI/eMRTD are acronyms and stay untranslated.
+    // Authoritative capability bits — the client library's mirror of the wire
+    // contract (its values carry a "do not renumber" warning). PKI/eMRTD are
+    // acronyms and stay untranslated.
     QStringList caps;
-    if (has(presence.capabilities, Cap::Pki)) {
+    if (Client::has(presence.capabilities, Client::Cap::Pki)) {
         caps << QStringLiteral("PKI");
     }
-    if (has(presence.capabilities, Cap::IdentityData)) {
+    if (Client::has(presence.capabilities, Client::Cap::IdentityData)) {
         caps << labels.capIdentity;
     }
-    if (has(presence.capabilities, Cap::EmrtdCrypto)) {
+    if (Client::has(presence.capabilities, Client::Cap::EmrtdCrypto)) {
         caps << QStringLiteral("eMRTD");
     }
-    if (has(presence.capabilities, Cap::PinManagement)) {
+    if (Client::has(presence.capabilities, Client::Cap::PinManagement)) {
         caps << labels.capPinManagement;
     }
     line(labels.labelCapabilities, caps.isEmpty() ? labels.valueNone : caps.join(QStringLiteral(", ")));

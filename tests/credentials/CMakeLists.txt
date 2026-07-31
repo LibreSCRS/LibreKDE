@@ -1,10 +1,21 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # SPDX-FileCopyrightText: 2026 hirashix0
 #
-# CredentialController driven by the FakeAgent over a private session bus (reuses
-# the shared D-Bus test harness + its QCoreApplication TestMain). Runs under
-# dbus-run-session, headless (QT_QPA_PLATFORM=offscreen). The test links the
+# CredentialController driven by the FakeAgent over a private session bus (the
+# shared D-Bus test harness + its QCoreApplication TestMain). Runs under
+# dbus-run-session, headless (QT_QPA_PLATFORM=offscreen). The tests link the
 # credentials-core backing library directly (no app / QML engine needed).
+#
+# Every target below links BOTH harness targets — librekde-test-support (the fake
+# peer, no main()) and librekde-test-main (the QCoreApplication-owning gtest entry
+# point) — except CredentialGuidanceLocaleTest, which supplies its own main().
+# Linking librekde-test-main alongside a suite's own main() would be two main()
+# definitions; omitting it from a suite that has none would be zero.
+#
+# LibreAgent::ClientQt is named EXPLICITLY on the targets that include the client
+# library's own headers, even though credentials-core carries it PUBLIC: a test's
+# dependency on headers it includes itself must not rest on another target's
+# public interface, which a later change there could withdraw.
 
 set(CMAKE_AUTOMOC ON)
 
@@ -15,7 +26,7 @@ add_executable(CredentialModelTest
     CredentialModelTest.cpp
 )
 target_link_libraries(CredentialModelTest PRIVATE
-    GTest::gtest credentials-core librekde-agentclient librekde-test-main
+    GTest::gtest credentials-core LibreAgent::ClientQt librekde-agentclient librekde-test-main
     Qt6::Core Qt6::Gui Qt6::Test KF6::I18n
 )
 target_compile_features(CredentialModelTest PRIVATE cxx_std_23)
@@ -28,7 +39,8 @@ add_executable(CredentialControllerTest
     CredentialControllerTest.cpp
 )
 target_link_libraries(CredentialControllerTest PRIVATE
-    GTest::gtest credentials-core librekde-agentclient librekde-test-support librekde-test-main
+    GTest::gtest credentials-core LibreAgent::ClientQt librekde-agentclient
+    librekde-test-support librekde-test-main
     Qt6::Core Qt6::DBus Qt6::Test
 )
 target_compile_features(CredentialControllerTest PRIVATE cxx_std_23)
@@ -45,7 +57,8 @@ add_executable(CredentialsE2ETest
     CredentialsE2ETest.cpp
 )
 target_link_libraries(CredentialsE2ETest PRIVATE
-    GTest::gtest credentials-core librekde-agentclient librekde-test-support librekde-test-main
+    GTest::gtest credentials-core LibreAgent::ClientQt librekde-agentclient
+    librekde-test-support librekde-test-main
     Qt6::Core Qt6::DBus Qt6::Test
 )
 target_compile_features(CredentialsE2ETest PRIVATE cxx_std_23)

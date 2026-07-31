@@ -941,8 +941,18 @@ QDBusObjectPath CredentialsAdaptor::ManagePin(const QString& pinId, const QStrin
     //   - verb is the CLOSED set change | unblock | activate_pin;
     //   - options is the CLOSED key set {activateKey: bool}, legal only with
     //     activate_pin (there is no open options container on this wire).
-    // A client that misspells a verb, invents an option, or mistypes a value
-    // fails the suite here instead of passing against a permissive double.
+    // Reachability, stated plainly so this is neither trusted as a live guard
+    // nor deleted as dead code: nothing in THIS repo reaches these refusals any
+    // more. The option branches cannot be constructed through the client's typed
+    // entry point at all — its options struct carries a single bool, so there is
+    // no key to invent and no value to mistype, and the client withholds that
+    // bool unless the verb is activate_pin. The verb branch is reachable only by
+    // deliberately marshalling an out-of-range enumerator, which converts to the
+    // empty token; the suite that did so is the client library's, which owns the
+    // conversion and tests it there. The gate stays anyway, because the fake's
+    // job is to refuse precisely what the real agent's entry validation refuses:
+    // a permissive double would let a malformed request pass wherever some later
+    // client IS exercised against it.
     static const QStringList kVerbs = {QStringLiteral("change"), QStringLiteral("unblock"),
                                        QStringLiteral("activate_pin")};
     if (!kVerbs.contains(verb)) {

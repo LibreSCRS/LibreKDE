@@ -3,6 +3,19 @@
 #include "CredentialText.h"
 #include <KLocalizedString>
 namespace LibreKDE::CredentialText {
+// File-local short spellings for the agent client library's credential
+// vocabulary. Every switch below is exhaustive with NO `default:` arm, and that
+// is deliberate and safe here — unlike `ErrorCode`, these enums are closed on
+// the decode path: the library maps every wire token it does not recognise onto
+// `Unknown` / `Unspecified` before a caller sees it, so no out-of-range value
+// can arrive. Omitting `default:` therefore keeps a `-Wswitch` diagnostic
+// pointing at this file when an enumerator is appended. The trailing `return {}`
+// after each switch exists for the compiler (a function must return on every
+// path); the coverage tests assert no enumerated value reaches it.
+using LibreSCRS::AgentClient::CredentialKind;
+using LibreSCRS::AgentClient::CredentialOutcome;
+using LibreSCRS::AgentClient::CredentialState;
+
 QString kindName(CredentialKind k)
 {
     switch (k) {

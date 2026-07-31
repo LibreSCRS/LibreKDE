@@ -1,43 +1,40 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # SPDX-FileCopyrightText: 2026 hirashix0
 #
-# librekde-agentclient — shared QtDBus client for org.librescrs.Agent. Every
-# LibreKDE surface (plasmoid, Purpose, …) consumes this and ONLY this for card
-# access. Deliberately LibreMiddleware-free: a thin D-Bus client
-# holds no card connection, no secrets, links no LM target.
+# librekde-agentclient — the host-side text layer over the shared agent client
+# library. Card access itself, the transport and every wire value type belong to
+# LibreAgent::ClientQt; what is left here is the one thing that library will not
+# do, because it renders no text at all: turn its error taxonomy, its credential
+# vocabulary and the frozen identity label keys into localized, user-facing
+# strings. Every LibreKDE surface (plasmoid, credential window, card:/ worker,
+# Purpose signing) draws its copy from here, so the wording is decided once.
+#
+# Deliberately LibreMiddleware-free, as before: this links no card core.
 
 add_library(librekde-agentclient STATIC
-    AgentDBus.h
-    CappedCall.h
-    CappedCall.cpp
-    AgentCapabilities.h
-    SealedFd.h
     ErrorText.h
     ErrorText.cpp
-    CredentialTypes.h
-    CredentialTypes.cpp
     CredentialText.h
     CredentialText.cpp
-    AgentOperation.h
-    AgentOperation.cpp
     IdentityRows.h
     IdentityRows.cpp
-    AgentReader.h
-    AgentReader.cpp
-    AgentCard.h
-    AgentCard.cpp
-    AgentClient.h
-    AgentClient.cpp
-    SharedAgentClient.h
-    SharedAgentClient.cpp
 )
 target_include_directories(librekde-agentclient PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+# LibreAgent::ClientQt is PUBLIC because all three public headers here name that
+# library's types in their own signatures: ErrorText takes its ErrorCode and
+# CallError, CredentialText its credential vocabulary, IdentityRows its
+# IdentityRow. A consumer of these headers therefore needs its headers too.
+#
+# Those types are consumed rather than mirrored. A hand-kept copy of a wire
+# contract has to be diffed against the contract by a human on every change, and
+# this repo has no build edge to the agent to catch a missed one — so the copy is
+# not worth its upkeep when the client library already publishes the type.
 target_link_libraries(librekde-agentclient
-    PUBLIC  Qt6::Core Qt6::DBus
+    PUBLIC  Qt6::Core LibreAgent::ClientQt
     PRIVATE KF6::I18n
 )
 target_compile_features(librekde-agentclient PUBLIC cxx_std_23)
-set_target_properties(librekde-agentclient PROPERTIES
-    POSITION_INDEPENDENT_CODE ON
-    AUTOMOC ON
-)
+# No AUTOMOC: nothing here derives from QObject any more — the D-Bus proxies that
+# did are the client library's. PIC stays, because a plugin (the card:/ worker,
+# the Purpose shim) links this static library into a shared object.
+set_target_properties(librekde-agentclient PROPERTIES POSITION_INDEPENDENT_CODE ON)

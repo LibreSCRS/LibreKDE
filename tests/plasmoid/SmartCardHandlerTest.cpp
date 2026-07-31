@@ -6,9 +6,13 @@
 // the card demands a pre-read unlock (and identity has not been read), and
 // Error when an agent operation finishes non-Ok. No LibreMiddleware, no card.
 
-#include "AgentCapabilities.h"
-#include "AgentCard.h"
-#include "AgentClient.h"
+#include <LibreSCRS/AgentClient/AgentCapabilities.h>
+#include <LibreSCRS/AgentClient/AgentCard.h>
+#include <LibreSCRS/AgentClient/AgentClient.h>
+#include <LibreSCRS/AgentClient/AgentReader.h>
+#include <LibreSCRS/AgentClient/OperationPhase.h>
+#include <LibreSCRS/AgentClient/Types.h>
+
 #include "CardPhotoProvider.h"
 #include "CardPhotoStore.h"
 #include "CardStateModel.h"
@@ -35,15 +39,54 @@ using namespace LibreKDETest;
 using State = LibreKDE::Plasmoid::CardStateModel::State;
 using LibreKDE::Plasmoid::SmartCardHandler;
 
+// The agent client library, spelled through an alias rather than pulled in
+// wholesale with a using-directive. NOT a collision fix — the host's own
+// ErrorCode mirror, which the superseded rationale here named as the colliding
+// spelling, no longer exists; ErrorText consumes the library's enum directly.
+// The measurement also has to be the discriminating one: a using-directive added
+// while every name here stays `Client::`-qualified proves nothing, because
+// ambiguity between using-directives is diagnosed only at UNQUALIFIED lookup.
+// What was actually run is the alias deleted, the directive put in its place,
+// and all 102 `Client::` qualifications stripped — this file then compiles
+// clean, so no name here collides with the host's. The alias stays for
+// readability: it keeps each name below visibly the LIBRARY's rather than the
+// host's, in a file that draws value types from both.
+namespace Client = LibreSCRS::AgentClient;
+
 namespace {
 
-// Build a handler over the harness' client connection + fake service. The
-// client is co-owned (shared_ptr), mirroring the production sharedAgentClient()
-// shape — several handlers may share one client (see the two-instance test).
+// Build a handler over a client of its own. The client is co-owned
+// (shared_ptr), mirroring the production sharedAgentClient() shape — several
+// handlers may share one client (see the two-instance test).
+//
+// It is the PRODUCTION constructor: the client binds itself to the agent's real
+// well-known bus name, with no service-name hook to point elsewhere. Which is
+// why every Harness here is built with BusNames::UniqueAndWellKnown — the fake
+// has to answer to that name for the handler to see it at all.
 std::unique_ptr<SmartCardHandler> makeHandler(Harness& h)
 {
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
-    return std::make_unique<SmartCardHandler>(std::move(client));
+    EXPECT_TRUE(h.claimsWellKnownService())
+        << "the handler's client binds the agent's well-known name; a Harness that does not claim it "
+           "leaves every assertion below measuring an absent agent";
+    return std::make_unique<SmartCardHandler>(std::make_shared<Client::AgentClient>());
+}
+
+// The first card advertising @p cap, over the client's own deterministic
+// `readers()` view. A pure function of that list, so the library does not carry
+// it; the sign-parity case below re-adds the one finder it needs, exactly as the
+// component itself does.
+Client::AgentCard* cardWithCapability(Client::AgentClient& client, std::uint32_t cap)
+{
+    for (Client::AgentReader* reader : client.readers()) {
+        if (reader == nullptr) {
+            continue;
+        }
+        Client::AgentCard* card = reader->card();
+        if (card != nullptr && Client::has(Client::capabilityBits(card->capabilities()), cap)) {
+            return card;
+        }
+    }
+    return nullptr;
 }
 
 // Encode a tiny 2x2 image to PNG so the FakeAgent's Photo1.Result memfd carries
@@ -198,8 +241,8 @@ TEST(SmartCardHandler, ReaderDisplayLabelsUniqueAndSafe)
 TEST(SmartCardHandler, HybridCardClassifiesHybrid)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData | Cap::Pki;
-    Harness h(cfg);
+    cfg.capabilities = Client::Cap::IdentityData | Client::Cap::Pki;
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::Hybrid); }));
@@ -209,8 +252,8 @@ TEST(SmartCardHandler, HybridCardClassifiesHybrid)
 TEST(SmartCardHandler, PkiOnlyCard)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::Pki;
-    Harness h(cfg);
+    cfg.capabilities = Client::Cap::Pki;
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PkiOnly); }));
@@ -219,8 +262,8 @@ TEST(SmartCardHandler, PkiOnlyCard)
 TEST(SmartCardHandler, IdentityOnlyCard)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
-    Harness h(cfg);
+    cfg.capabilities = Client::Cap::IdentityData;
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::IdentityOnly); }));
@@ -230,8 +273,8 @@ TEST(SmartCardHandler, NoCardWhenReaderEmpty)
 {
     FakeAgent::Config cfg;
     cfg.hasCard = false;
-    cfg.capabilities = Cap::Pki;
-    Harness h(cfg);
+    cfg.capabilities = Client::Cap::Pki;
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::NoCard); }));
@@ -243,8 +286,8 @@ TEST(SmartCardHandler, EmptyReaderIsNotCardDetected)
 {
     FakeAgent::Config cfg;
     cfg.hasCard = false;
-    cfg.capabilities = Cap::Pki;
-    Harness h(cfg);
+    cfg.capabilities = Client::Cap::Pki;
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::NoCard); }));
@@ -259,8 +302,8 @@ TEST(SmartCardHandler, CardDetectedDuringDeferredPublishThenRefreshResolves)
 {
     FakeAgent::Config cfg;
     cfg.hasCard = false; // discovered empty
-    cfg.capabilities = Cap::IdentityData | Cap::Pki;
-    Harness h(cfg);
+    cfg.capabilities = Client::Cap::IdentityData | Client::Cap::Pki;
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::NoCard); }));
@@ -290,8 +333,8 @@ TEST(SmartCardHandler, CardDetectedDuringDeferredPublishThenRefreshResolves)
 TEST(SmartCardHandler, RefreshRecoversHotPluggedReaderMissedByLiveRoster)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData | Cap::Pki;
-    Harness h(cfg);
+    cfg.capabilities = Client::Cap::IdentityData | Client::Cap::Pki;
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::Hybrid); }));
@@ -318,8 +361,8 @@ TEST(SmartCardHandler, NoCardToHybridOnLiveInsert)
 {
     FakeAgent::Config cfg;
     cfg.hasCard = false;
-    cfg.capabilities = Cap::IdentityData | Cap::Pki;
-    Harness h(cfg);
+    cfg.capabilities = Client::Cap::IdentityData | Client::Cap::Pki;
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::NoCard); }));
@@ -331,9 +374,9 @@ TEST(SmartCardHandler, NoCardToHybridOnLiveInsert)
 TEST(SmartCardHandler, PreAuthRequiredWhenPreReadAuthNotNone)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
+    cfg.capabilities = Client::Cap::IdentityData;
     cfg.preReadAuth = QStringLiteral("Can");
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     // Identity has not been read yet, so a pre-read-locked card surfaces the
@@ -344,9 +387,9 @@ TEST(SmartCardHandler, PreAuthRequiredWhenPreReadAuthNotNone)
 TEST(SmartCardHandler, PreAuthRequiredForMrz)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
+    cfg.capabilities = Client::Cap::IdentityData;
     cfg.preReadAuth = QStringLiteral("Mrz");
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     // A BAC-MRZ pre-read card (e.g. an ICAO eMRTD) gates on the secure prompt
@@ -355,11 +398,57 @@ TEST(SmartCardHandler, PreAuthRequiredForMrz)
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PreAuthRequired); }));
 }
 
+// A card announcing an unlock method this build has no name for must read as
+// "an unlock is required", never as "no unlock needed". The decoder in the
+// client library maps every unrecognised token onto None, so deciding the
+// requirement off the decoded method would classify such a card by its
+// capabilities alone and then AUTO-READ it — unlocking nothing, prompting for
+// nothing, and handing the holder's identity to a widget that never asked the
+// card to be unlocked. Forward-compatibility only: no shipping agent emits such
+// a token.
+//
+// The two preconditions are what make this measure the new branch rather than
+// pass by accident:
+//   - Cap::IdentityData, so the fallback classification is IdentityOnly — a
+//     state ensureFreeRead() will actually act on (its own gate admits only
+//     IdentityOnly / Hybrid);
+//   - setViewActive(true), so the free read is genuinely armed.
+// Without either, "no read happened" is true no matter which branch runs.
+TEST(SmartCardHandler, UnrecognisedPreReadAuthTokenRequiresUnlockAndBlocksTheFreeRead)
+{
+    FakeAgent::Config cfg;
+    cfg.capabilities = Client::Cap::IdentityData; // precondition: a free-read-eligible surface
+    // A non-empty token outside this build's vocabulary ("None"/"Can"/"Mrz").
+    cfg.preReadAuth = QStringLiteral("FutureUnlockMethod");
+    cfg.operationDelayMs = 5;
+    cfg.finalStatus = 0; // Ok — so a read, if one were issued, would SUCCEED and be visible
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+
+    auto handler = makeHandler(h);
+    // Deliberately EXPECT, not ASSERT: if the classification regresses, the
+    // free-read assertions below are the ones that show what it COSTS (the card
+    // gets read with no unlock), and a fatal assertion here would hide them.
+    EXPECT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PreAuthRequired); }))
+        << "an unlock method this build cannot name must still gate the card behind the unlock affordance";
+
+    // Precondition: the free read is armed. With the requirement read off the
+    // decoded method instead, this card would classify IdentityOnly and the
+    // popup-open below would read it without any unlock.
+    handler->setViewActive(true);
+    handler->ensureFreeRead();
+    waitFor([]() { return false; }, 80);
+
+    EXPECT_EQ(handler->state(), static_cast<int>(State::PreAuthRequired));
+    EXPECT_EQ(h.operationCount(), 0) << "no card read may be issued for a card whose unlock this build cannot name";
+    EXPECT_FALSE(handler->hasIdentity());
+    EXPECT_FALSE(handler->hasCardPhoto());
+}
+
 TEST(SmartCardHandler, HybridToNoCardOnLiveRemove)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData | Cap::Pki;
-    Harness h(cfg);
+    cfg.capabilities = Client::Cap::IdentityData | Client::Cap::Pki;
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::Hybrid); }));
@@ -373,24 +462,24 @@ TEST(SmartCardHandler, HybridToNoCardOnLiveRemove)
 TEST(SmartCardHandler, OperationPhaseTracksActiveReadOp)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
+    cfg.capabilities = Client::Cap::IdentityData;
     cfg.announceConsentPhase = true; // the read op emits AwaitingConsent(2) at 50 ms
     cfg.operationDelayMs = 120;      // complete AFTER the phase so it is observable
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::IdentityOnly); }));
 
     handler->readIdentity();
-    ASSERT_TRUE(
-        waitFor([&]() { return handler->operationPhase() == static_cast<int>(OperationPhase::AwaitingConsent); }));
+    ASSERT_TRUE(waitFor(
+        [&]() { return handler->operationPhase() == static_cast<int>(Client::OperationPhase::AwaitingConsent); }));
 }
 
 TEST(SmartCardHandler, OperationPhaseLabelNonEmptyForEveryPhase)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::Pki;
-    Harness h(cfg);
+    cfg.capabilities = Client::Cap::Pki;
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
     auto handler = makeHandler(h);
     for (int p = 0; p <= 7; ++p) { // Created..Done
         EXPECT_FALSE(handler->operationPhaseLabel(p).isEmpty()) << "phase " << p;
@@ -400,11 +489,11 @@ TEST(SmartCardHandler, OperationPhaseLabelNonEmptyForEveryPhase)
 TEST(SmartCardHandler, PreAuthCardAdvancesAfterSuccessfulRead)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
+    cfg.capabilities = Client::Cap::IdentityData;
     cfg.preReadAuth = QStringLiteral("Can");
     cfg.operationDelayMs = 5;
     cfg.finalStatus = 0; // Ok
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PreAuthRequired); }));
@@ -423,7 +512,7 @@ TEST(SmartCardHandler, ReaderArrivesAlreadyHoldingCardConverges)
 {
     FakeAgent::Config cfg;
     cfg.hasCard = false; // reader/0 stays empty; the active card arrives on reader/1
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::NoCard); }));
@@ -434,7 +523,7 @@ TEST(SmartCardHandler, ReaderArrivesAlreadyHoldingCardConverges)
     EXPECT_EQ(handler->state(), static_cast<int>(State::NoCard));
 
     // (b) the card's interface appears (reader still reports Card="/").
-    h.emitArrivedReaderCardAdded(Cap::IdentityData | Cap::Pki);
+    h.emitArrivedReaderCardAdded(Client::Cap::IdentityData | Client::Cap::Pki);
     waitFor([]() { return false; }, 50); // let the client register the card match rule
 
     // (c) the reader flips HasCard=true / Card=<cardPath>: now it converges to the
@@ -456,10 +545,10 @@ TEST(SmartCardHandler, ReaderArrivesAlreadyHoldingCardConverges)
 TEST(SmartCardHandler, OperationFinishedBeforeSubscribeStillTransitions)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
+    cfg.capabilities = Client::Cap::IdentityData;
     cfg.preReadAuth = QStringLiteral("Can");
     cfg.raceResultBeforeReturn = true; // finish before readIdentity() returns the path
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PreAuthRequired); }));
@@ -477,13 +566,13 @@ TEST(SmartCardHandler, OperationFinishedBeforeSubscribeStillTransitions)
 TEST(SmartCardHandler, ErrorOnOperationFinishedNonOk)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
+    cfg.capabilities = Client::Cap::IdentityData;
     cfg.preReadAuth = QStringLiteral("Can");
     cfg.operationDelayMs = 5;
-    cfg.finalStatus = 2;                                           // Error
-    cfg.finalErrorCode = static_cast<uint>(ErrorCode::AuthFailed); // wrong CAN
+    cfg.finalStatus = 2;                                                   // Error
+    cfg.finalErrorCode = static_cast<uint>(Client::ErrorCode::AuthFailed); // wrong CAN
     cfg.suppressResult = true;
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PreAuthRequired); }));
@@ -493,6 +582,35 @@ TEST(SmartCardHandler, ErrorOnOperationFinishedNonOk)
     EXPECT_FALSE(handler->errorMessage().isEmpty());
 }
 
+// The composed copy rule's FLOOR: a read that finishes non-Ok must never leave
+// the banner blank, whatever its outcome carried. This fixture is the worst case
+// the rule exists for — a wire cancel, whose terminal carries no error code, no
+// call classification and no agent message at all (the fake sends msgKey /
+// msgFallback only for an Error terminal) — so every axis the copy could be
+// drawn from is empty and the rule's own localized floor is the only thing left.
+//
+// Resolving this through the error code alone renders NOTHING, and ErrorState's
+// banner comes up empty in a state whose whole job is to say what went wrong.
+// That is what this pins.
+TEST(SmartCardHandler, CancelledReadStillCarriesNonEmptyErrorCopy)
+{
+    FakeAgent::Config cfg;
+    cfg.capabilities = Client::Cap::IdentityData;
+    cfg.preReadAuth = QStringLiteral("Can"); // an EXPLICIT read — no free read to race
+    cfg.operationDelayMs = 5;
+    cfg.finalStatus = 1; // Cancelled; errorCode stays None and no message is sent
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+
+    auto handler = makeHandler(h);
+    ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PreAuthRequired); }));
+
+    handler->readIdentity();
+    ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::Error); }));
+    EXPECT_FALSE(handler->errorMessage().isEmpty())
+        << "a cancelled read must still draw copy from the shared rule's floor, never a blank banner";
+    EXPECT_FALSE(handler->busy()) << "the terminal must release the busy latch on a cancel too";
+}
+
 // On a successful identity read the handler ALSO fires a best-effort GetPhoto;
 // when the card yields a photo the handler decodes it into its CardPhotoStore
 // and flips hasCardPhoto true (driving the image:// URL the QML Image binds to).
@@ -500,12 +618,12 @@ TEST(SmartCardHandler, ErrorOnOperationFinishedNonOk)
 TEST(SmartCardHandler, ReadIdentityCapturesCardPhoto)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
+    cfg.capabilities = Client::Cap::IdentityData;
     cfg.preReadAuth = QStringLiteral("Can");
     cfg.operationDelayMs = 5;
     cfg.finalStatus = 0; // Ok
     cfg.photoBytes = tinyPngBytes();
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PreAuthRequired); }));
@@ -532,12 +650,12 @@ TEST(SmartCardHandler, ReadIdentityCapturesCardPhoto)
 TEST(SmartCardHandler, CardRemovalClearsCapturedPhoto)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
+    cfg.capabilities = Client::Cap::IdentityData;
     cfg.preReadAuth = QStringLiteral("Can");
     cfg.operationDelayMs = 5;
     cfg.finalStatus = 0; // Ok
     cfg.photoBytes = tinyPngBytes();
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PreAuthRequired); }));
@@ -571,13 +689,13 @@ TEST(SmartCardHandler, CardRemovalClearsCapturedPhoto)
 TEST(SmartCardHandler, ReadIdentityWithEmptyPhotoMapLeavesNoPhotoAndNoError)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
+    cfg.capabilities = Client::Cap::IdentityData;
     cfg.preReadAuth = QStringLiteral("Can");
     cfg.operationDelayMs = 5;
     cfg.finalStatus = 0;      // Ok
     cfg.photoEmptyMap = true; // GetPhoto emits a genuinely empty PhotoMap
 
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PreAuthRequired); }));
@@ -595,16 +713,16 @@ TEST(SmartCardHandler, ReadIdentityWithEmptyPhotoMapLeavesNoPhotoAndNoError)
 }
 
 // (2) empty-FD — the Result carries a "personal:photo" entry, but its sealed
-// memfd is empty (readSealedFd yields no bytes → the empty-fd guard).
+// memfd is empty (readBoundedPayload yields no bytes → the empty-fd guard).
 TEST(SmartCardHandler, ReadIdentityWithEmptyPhotoFdLeavesNoPhotoAndNoError)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
+    cfg.capabilities = Client::Cap::IdentityData;
     cfg.preReadAuth = QStringLiteral("Can");
     cfg.operationDelayMs = 5;
     cfg.finalStatus = 0;           // Ok
     cfg.photoBytes = QByteArray(); // entry present, but its memfd is empty
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PreAuthRequired); }));
@@ -629,12 +747,12 @@ TEST(SmartCardHandler, ReadIdentityWithEmptyPhotoFdLeavesNoPhotoAndNoError)
 TEST(SmartCardHandler, ReadIdentityWithLostPhotoResultLeavesNoPhotoAndNoError)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
+    cfg.capabilities = Client::Cap::IdentityData;
     cfg.preReadAuth = QStringLiteral("Can");
     cfg.operationDelayMs = 5;
     cfg.finalStatus = 0;            // Ok terminal...
     cfg.photoSuppressResult = true; // ...but the GetPhoto typed Result is never emitted
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PreAuthRequired); }));
@@ -653,13 +771,17 @@ TEST(SmartCardHandler, ReadIdentityWithLostPhotoResultLeavesNoPhotoAndNoError)
 
 // The agent is not on the bus: the plasmoid must reach AgentUnavailable
 // (client-availability state), never hang, never NoCard-masquerade.
+//
+// The client binds itself to the agent's real well-known name, so "absent" is
+// modelled by NOT claiming that name: this Harness deliberately keeps only its
+// per-test unique name (BusNames::UniqueOnly, the default), so a real fake is
+// running on the bus and the name the handler looks for is owned by nobody.
 TEST(SmartCardHandler, AgentUnavailableWhenServiceAbsent)
 {
-    FakeAgent::Config cfg; // a real fake exists, but we point the client at a name nobody owns
-    Harness h(cfg);
+    FakeAgent::Config cfg;
+    Harness unclaimed(cfg, BusNames::UniqueOnly);
 
-    auto client = std::make_shared<AgentClient>(h.client(), QStringLiteral("org.librescrs.Agent.Test.does-not-exist"));
-    auto handler = std::make_unique<SmartCardHandler>(std::move(client));
+    auto handler = std::make_unique<SmartCardHandler>(std::make_shared<Client::AgentClient>());
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::AgentUnavailable); }));
 }
 
@@ -697,8 +819,8 @@ TEST(SmartCardHandler, UnknownCardWhenCapabilitiesEmpty)
 {
     FakeAgent::Config cfg;
     cfg.hasCard = true;
-    cfg.capabilities = Cap::None; // no plugin matched
-    Harness h(cfg);
+    cfg.capabilities = Client::Cap::None; // no plugin matched
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::UnknownCard); }));
@@ -712,11 +834,11 @@ TEST(SmartCardHandler, UnknownCardWhenCapabilitiesEmpty)
 TEST(SmartCardHandler, ReadIdentityPopulatesQmlModel)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
+    cfg.capabilities = Client::Cap::IdentityData;
     cfg.preReadAuth = QStringLiteral("Can");
     cfg.operationDelayMs = 5;
     cfg.finalStatus = 0; // Ok
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PreAuthRequired); }));
@@ -842,11 +964,11 @@ TEST(SmartCardHandlerSummary, EmptyNameComponentDoesNotSuppressFullName)
 TEST(SmartCardHandler, CanCardIssuesNoImplicitCardIo)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData | Cap::Pki;
+    cfg.capabilities = Client::Cap::IdentityData | Client::Cap::Pki;
     cfg.preReadAuth = QStringLiteral("Can");
     cfg.operationDelayMs = 5;
     cfg.finalStatus = 0; // Ok
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PreAuthRequired); }));
@@ -872,11 +994,11 @@ TEST(SmartCardHandler, CanCardIssuesNoImplicitCardIo)
 TEST(SmartCardHandler, CardRemovalClearsIdentityModel)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
+    cfg.capabilities = Client::Cap::IdentityData;
     cfg.preReadAuth = QStringLiteral("Can");
     cfg.operationDelayMs = 5;
     cfg.finalStatus = 0; // Ok
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PreAuthRequired); }));
@@ -899,10 +1021,10 @@ TEST(SmartCardHandler, CardRemovalClearsIdentityModel)
 TEST(SmartCardHandler, NoneIdentityCardFreeReadsOnFirstViewOnly)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData; // preReadAuth defaults to "None"
+    cfg.capabilities = Client::Cap::IdentityData; // preReadAuth defaults to "None"
     cfg.operationDelayMs = 5;
     cfg.finalStatus = 0; // Ok
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::IdentityOnly); }));
@@ -937,10 +1059,10 @@ TEST(SmartCardHandler, NoneIdentityCardFreeReadsOnFirstViewOnly)
 TEST(SmartCardHandler, FreeReadFollowsChipSwitchBetweenSameStateCards)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData; // reader/0 "Fake": IdentityOnly, no pre-auth
+    cfg.capabilities = Client::Cap::IdentityData; // reader/0 "Fake": IdentityOnly, no pre-auth
     cfg.operationDelayMs = 5;
     cfg.finalStatus = 0; // Ok
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::IdentityOnly); }));
@@ -948,7 +1070,7 @@ TEST(SmartCardHandler, FreeReadFollowsChipSwitchBetweenSameStateCards)
     // A second reader "Fake2" holding a card of the SAME classification.
     h.emitReaderArrivesEmpty();
     waitFor([]() { return false; }, 50);
-    h.emitArrivedReaderCardAdded(Cap::IdentityData);
+    h.emitArrivedReaderCardAdded(Client::Cap::IdentityData);
     waitFor([]() { return false; }, 50);
     h.emitArrivedReaderHasCard();
     ASSERT_TRUE(waitFor([&]() { return handler->readersWithCards().size() == 2; }));
@@ -976,8 +1098,8 @@ TEST(SmartCardHandler, FreeReadFollowsChipSwitchBetweenSameStateCards)
 TEST(SmartCardHandler, BoundReaderPresentReflectsRoster)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
-    Harness h(cfg);
+    cfg.capabilities = Client::Cap::IdentityData;
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->availableReaderNames().size() == 1; }));
@@ -1011,7 +1133,7 @@ TEST(SmartCardHandler, BoundEmptyContactReaderIgnoresCardOnContactlessSibling)
     cfg.hasCard = false; // the bound contact slot stays EMPTY throughout
     cfg.readerName = contactName;
     cfg.reader2Name = contactlessName;
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->availableReaderNames().size() == 1; }));
@@ -1022,7 +1144,7 @@ TEST(SmartCardHandler, BoundEmptyContactReaderIgnoresCardOnContactlessSibling)
     // The contactless sibling arrives and resolves a card.
     h.emitReaderArrivesEmpty();
     waitFor([]() { return false; }, 50); // let the client register reader/1's match rule
-    h.emitArrivedReaderCardAdded(Cap::Pki);
+    h.emitArrivedReaderCardAdded(Client::Cap::Pki);
     waitFor([]() { return false; }, 50); // let the client register the card match rule
     h.emitArrivedReaderHasCard();
     ASSERT_TRUE(waitFor([&]() { return handler->readersWithCards().size() == 1; }));
@@ -1044,9 +1166,9 @@ TEST(SmartCardHandler, AbsentBoundReaderNeverMatchesDifferentModelSharingGeneric
 {
     FakeAgent::Config cfg;
     cfg.hasCard = true;
-    cfg.capabilities = Cap::Pki;
+    cfg.capabilities = Client::Cap::Pki;
     cfg.readerName = QStringLiteral("Giesecke & Devrient GmbH Star Sign Card Token 550 (ICCD) 00 00");
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PkiOnly); }));
@@ -1067,9 +1189,9 @@ TEST(SmartCardHandler, BoundReaderFollowsReEnumeratedIndexShift)
 {
     FakeAgent::Config cfg;
     cfg.hasCard = true;
-    cfg.capabilities = Cap::Pki;
+    cfg.capabilities = Client::Cap::Pki;
     cfg.readerName = QStringLiteral("Gemalto PC Twin Reader (69988A87) 00 00");
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PkiOnly); }));
@@ -1094,7 +1216,7 @@ TEST(SmartCardHandler, CardDetectedFollowsTheCandidateEntryNotTheFirstSerialMatc
     cfg.hasCard = false;
     cfg.readerName = QStringLiteral("Gemalto PC Twin Reader (69988A87) 00 00");  // stale empty twin
     cfg.reader2Name = QStringLiteral("Gemalto PC Twin Reader (69988A87) 01 00"); // re-enumerated unit
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->availableReaderNames().size() == 1; }));
@@ -1119,10 +1241,10 @@ TEST(SmartCardHandler, CardDetectedFollowsTheCandidateEntryNotTheFirstSerialMatc
 TEST(SmartCardHandler, FreeReadFollowsSameReaderCardSwapWhileViewActive)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData; // no pre-auth: a free-read card
+    cfg.capabilities = Client::Cap::IdentityData; // no pre-auth: a free-read card
     cfg.operationDelayMs = 5;
     cfg.finalStatus = 0; // Ok
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::IdentityOnly); }));
@@ -1239,14 +1361,14 @@ TEST(SmartCardHandlerDisplay, PlainDisplayNeutralizesMarkupAndPreservesPlainText
 
 // --- Manage credentials launch affordance ---------------------------
 
-// pinManagementAvailable mirrors the Cap::PinManagement bit on the active
+// pinManagementAvailable mirrors the Client::Cap::PinManagement bit on the active
 // card — gates the plasmoid's "Manage credentials…" action. Purely
 // capability-driven: no card read is issued to determine it.
 TEST(SmartCardHandler, PinManagementAvailableTrueWhenCapabilityBitSet)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::Pki | Cap::PinManagement;
-    Harness h(cfg);
+    cfg.capabilities = Client::Cap::Pki | Client::Cap::PinManagement;
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PkiOnly); }));
@@ -1256,8 +1378,8 @@ TEST(SmartCardHandler, PinManagementAvailableTrueWhenCapabilityBitSet)
 TEST(SmartCardHandler, PinManagementAvailableFalseWithoutCapabilityBit)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::Pki; // no PinManagement
-    Harness h(cfg);
+    cfg.capabilities = Client::Cap::Pki; // no PinManagement
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PkiOnly); }));
@@ -1270,7 +1392,7 @@ TEST(SmartCardHandler, PinManagementAvailableFalseWhenNoCard)
 {
     FakeAgent::Config cfg;
     cfg.hasCard = false;
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::NoCard); }));
@@ -1284,8 +1406,8 @@ TEST(SmartCardHandler, PinManagementAvailableFalseWhenNoCard)
 TEST(SmartCardHandler, PinManagementAvailableTracksLiveCapabilityFlip)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData | Cap::Pki; // Hybrid, no PinManagement
-    Harness h(cfg);
+    cfg.capabilities = Client::Cap::IdentityData | Client::Cap::Pki; // Hybrid, no PinManagement
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::Hybrid); }));
@@ -1295,14 +1417,14 @@ TEST(SmartCardHandler, PinManagementAvailableTracksLiveCapabilityFlip)
 
     // The agent surfaces PinManagement live; the coarse state does not change,
     // so no stateChanged fires — the property's own signal must.
-    h.emitCardCapabilitiesChanged(Cap::IdentityData | Cap::Pki | Cap::PinManagement);
+    h.emitCardCapabilitiesChanged(Client::Cap::IdentityData | Client::Cap::Pki | Client::Cap::PinManagement);
     ASSERT_TRUE(waitFor([&]() { return handler->pinManagementAvailable(); }))
         << "a live capability flip that keeps the coarse state must still flip the launcher gate";
     EXPECT_EQ(handler->state(), static_cast<int>(State::Hybrid));
     EXPECT_GE(spy.count(), 1);
 
     // And back off — the affordance must retract too.
-    h.emitCardCapabilitiesChanged(Cap::IdentityData | Cap::Pki);
+    h.emitCardCapabilitiesChanged(Client::Cap::IdentityData | Client::Cap::Pki);
     ASSERT_TRUE(waitFor([&]() { return !handler->pinManagementAvailable(); }))
         << "dropping the capability must retract the launcher affordance";
     EXPECT_EQ(handler->state(), static_cast<int>(State::Hybrid));
@@ -1334,8 +1456,8 @@ TEST(SmartCardHandler, CardUrlForReaderBuildsCardScheme)
 TEST(SmartCardHandler, CopyFieldSetsClipboard)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
-    Harness h(cfg);
+    cfg.capabilities = Client::Cap::IdentityData;
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
     auto handler = makeHandler(h);
 
     QClipboard* clipboard = QGuiApplication::clipboard();
@@ -1353,12 +1475,12 @@ TEST(SmartCardHandler, SavePhotoWritesRawBytes)
 {
     const QByteArray png = tinyPngBytes();
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
+    cfg.capabilities = Client::Cap::IdentityData;
     cfg.preReadAuth = QStringLiteral("Can");
     cfg.operationDelayMs = 5;
     cfg.finalStatus = 0; // Ok
     cfg.photoBytes = png;
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PreAuthRequired); }));
@@ -1402,12 +1524,12 @@ TEST(SmartCardHandler, SuggestedPhotoFileNameMatchesActualFormat)
 TEST(SmartCardHandler, PhotoSuggestedFileNameFollowsPhotoLifecycle)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
+    cfg.capabilities = Client::Cap::IdentityData;
     cfg.preReadAuth = QStringLiteral("Can");
     cfg.operationDelayMs = 5;
     cfg.finalStatus = 0; // Ok
     cfg.photoBytes = tinyPngBytes();
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PreAuthRequired); }));
@@ -1436,8 +1558,8 @@ TEST(SmartCardHandler, LibreCelikDetectionReflectsPath)
         QFile::setPermissions(exe, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
     }
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
-    Harness h(cfg);
+    cfg.capabilities = Client::Cap::IdentityData;
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     qputenv("PATH", withCelik.path().toLocal8Bit());
     auto present = makeHandler(h);
@@ -1455,11 +1577,11 @@ TEST(SmartCardHandler, LibreCelikDetectionReflectsPath)
 TEST(SmartCardHandler, BusyLatchesDuringRead)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
+    cfg.capabilities = Client::Cap::IdentityData;
     cfg.preReadAuth = QStringLiteral("Can");
     cfg.operationDelayMs = 20;
     cfg.finalStatus = 0; // Ok
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PreAuthRequired); }));
@@ -1482,11 +1604,11 @@ TEST(SmartCardHandler, BusyLatchesDuringRead)
 TEST(SmartCardHandler, BusyClearsWhenCardRemovedMidRead)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
+    cfg.capabilities = Client::Cap::IdentityData;
     cfg.preReadAuth = QStringLiteral("Can");
     cfg.operationDelayMs = 400; // long enough to pull the card mid-flight
     cfg.finalStatus = 0;        // Ok (never delivered — the op is discarded)
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PreAuthRequired); }));
@@ -1521,11 +1643,11 @@ TEST(SmartCardHandler, BusyClearsWhenCardRemovedMidRead)
 TEST(SmartCardHandler, BusyClearsWhenActiveCardSwitchedMidRead)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
+    cfg.capabilities = Client::Cap::IdentityData;
     cfg.preReadAuth = QStringLiteral("Can"); // reader/0 "Fake": pre-auth card
     cfg.operationDelayMs = 400;              // long enough to switch mid-flight
     cfg.finalStatus = 0;                     // Ok (never delivered — op discarded)
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PreAuthRequired); }));
@@ -1533,7 +1655,7 @@ TEST(SmartCardHandler, BusyClearsWhenActiveCardSwitchedMidRead)
     // A second reader "Fake2" holding a card (so the master-detail exists).
     h.emitReaderArrivesEmpty();
     waitFor([]() { return false; }, 50);
-    h.emitArrivedReaderCardAdded(Cap::IdentityData | Cap::Pki);
+    h.emitArrivedReaderCardAdded(Client::Cap::IdentityData | Client::Cap::Pki);
     waitFor([]() { return false; }, 50);
     h.emitArrivedReaderHasCard();
     ASSERT_TRUE(waitFor([&]() { return handler->readersWithCards().size() == 2; }));
@@ -1566,9 +1688,9 @@ TEST(SmartCardHandler, BusyClearsWhenActiveCardSwitchedMidRead)
 TEST(SmartCardHandler, SignFileDrivesWireSign)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::Pki;
+    cfg.capabilities = Client::Cap::Pki;
     cfg.certScript = {{QStringLiteral("cert-sign"), true, QStringLiteral("Signer")}};
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PkiOnly); }));
@@ -1600,10 +1722,10 @@ TEST(SmartCardHandler, SignSuccessNamesImplicitlyPickedCertOnlyForMultiCert)
     // Multi-cert: label = first cert's subjectCn.
     {
         FakeAgent::Config cfg;
-        cfg.capabilities = Cap::Pki;
+        cfg.capabilities = Client::Cap::Pki;
         cfg.certScript = {{QStringLiteral("cert-a"), true, QStringLiteral("Alpha")},
                           {QStringLiteral("cert-b"), true, QStringLiteral("Beta")}};
-        Harness h(cfg);
+        Harness h(cfg, BusNames::UniqueAndWellKnown);
         auto handler = makeHandler(h);
         ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PkiOnly); }));
 
@@ -1624,9 +1746,9 @@ TEST(SmartCardHandler, SignSuccessNamesImplicitlyPickedCertOnlyForMultiCert)
     // Lone cert: auto-selected without the chooser -> empty label.
     {
         FakeAgent::Config cfg;
-        cfg.capabilities = Cap::Pki;
+        cfg.capabilities = Client::Cap::Pki;
         cfg.certScript = {{QStringLiteral("cert-sign"), true, QStringLiteral("Signer")}};
-        Harness h(cfg);
+        Harness h(cfg, BusNames::UniqueAndWellKnown);
         auto handler = makeHandler(h);
         ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PkiOnly); }));
 
@@ -1655,9 +1777,9 @@ TEST(SmartCardHandler, SignSuccessNamesImplicitlyPickedCertOnlyForMultiCert)
 TEST(SignParity, PlasmoidAndPurposeProduceIdenticalWireSign)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::Pki;
+    cfg.capabilities = Client::Cap::Pki;
     cfg.certScript = {{QStringLiteral("cert-sign"), true, QStringLiteral("Signer")}};
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     const QByteArray content("%PDF-1.4\nparity\n");
 
@@ -1679,9 +1801,9 @@ TEST(SignParity, PlasmoidAndPurposeProduceIdenticalWireSign)
     const QByteArray inA = h.lastSignInputBytes();
 
     // --- Purpose path: a SignJob over the same card, as SignPurposeJob builds it ---
-    auto* client2 = new AgentClient(h.client(), h.service());
-    ASSERT_TRUE(waitFor([&]() { return client2->cardWithCapability(Cap::Pki) != nullptr; }));
-    AgentCard* card2 = client2->cardWithCapability(Cap::Pki);
+    auto* client2 = new Client::AgentClient();
+    ASSERT_TRUE(waitFor([&]() { return cardWithCapability(*client2, Client::Cap::Pki) != nullptr; }));
+    Client::AgentCard* card2 = cardWithCapability(*client2, Client::Cap::Pki);
     ASSERT_NE(card2, nullptr);
 
     QTemporaryDir dirB; // different dir -> the second run never hits the overwrite seam
@@ -1692,8 +1814,8 @@ TEST(SignParity, PlasmoidAndPurposeProduceIdenticalWireSign)
         fb.write(content);
     }
 
-    CertChooser pickFirst = [](const CertificateList& c) -> std::optional<QString> {
-        return c.isEmpty() ? std::nullopt : std::optional<QString>(c.first().certId);
+    CertChooser pickFirst = [](const QList<Client::CertificateInfo>& c) -> std::optional<QString> {
+        return c.isEmpty() ? std::nullopt : std::optional<QString>(c.first().id);
     };
     OverwriteConfirmer alwaysOverwrite = [](const QString&) { return true; };
     // Same shape as SignPurposeJob::start(): mimeType from Purpose data() (here
@@ -1724,8 +1846,8 @@ TEST(SmartCardHandler, BoundReaderSelectsOnlyThatReader)
 {
     FakeAgent::Config cfg;
     cfg.hasCard = true;
-    cfg.capabilities = Cap::Pki; // reader/0 "Fake" -> PkiOnly
-    Harness h(cfg);
+    cfg.capabilities = Client::Cap::Pki; // reader/0 "Fake" -> PkiOnly
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PkiOnly); }));
@@ -1734,7 +1856,7 @@ TEST(SmartCardHandler, BoundReaderSelectsOnlyThatReader)
     // Bring up a SECOND reader "Fake2" holding a Hybrid card (reader/1 / card/1).
     h.emitReaderArrivesEmpty();
     waitFor([]() { return false; }, 50); // let the client register reader/1's match rule
-    h.emitArrivedReaderCardAdded(Cap::IdentityData | Cap::Pki);
+    h.emitArrivedReaderCardAdded(Client::Cap::IdentityData | Client::Cap::Pki);
     waitFor([]() { return false; }, 50); // let the client register the card match rule
     h.emitArrivedReaderHasCard();
     ASSERT_TRUE(waitFor([&]() { return handler->readersWithCards().size() == 2; }));
@@ -1756,8 +1878,8 @@ TEST(SmartCardHandler, AbsentBoundReaderShowsWaitingState)
 {
     FakeAgent::Config cfg;
     cfg.hasCard = true;
-    cfg.capabilities = Cap::IdentityData | Cap::Pki; // reader/0 present + Hybrid
-    Harness h(cfg);
+    cfg.capabilities = Client::Cap::IdentityData | Client::Cap::Pki; // reader/0 present + Hybrid
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::Hybrid); }));
@@ -1775,15 +1897,15 @@ TEST(SmartCardHandler, AutoMultiCardSelectionIsDeterministicAndSelectable)
 {
     FakeAgent::Config cfg;
     cfg.hasCard = true;
-    cfg.capabilities = Cap::Pki; // reader/0 "Fake" -> PkiOnly
-    Harness h(cfg);
+    cfg.capabilities = Client::Cap::Pki; // reader/0 "Fake" -> PkiOnly
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PkiOnly); }));
 
     h.emitReaderArrivesEmpty();
     waitFor([]() { return false; }, 50);
-    h.emitArrivedReaderCardAdded(Cap::IdentityData | Cap::Pki); // reader/1 "Fake2" -> Hybrid
+    h.emitArrivedReaderCardAdded(Client::Cap::IdentityData | Client::Cap::Pki); // reader/1 "Fake2" -> Hybrid
     waitFor([]() { return false; }, 50);
     h.emitArrivedReaderHasCard();
     ASSERT_TRUE(waitFor([&]() { return handler->readersWithCards().size() == 2; }));
@@ -1812,8 +1934,8 @@ TEST(SmartCardHandler, AvailableReaderNamesListsEmptyReaders)
 {
     FakeAgent::Config cfg;
     cfg.hasCard = false; // reader/0 "Fake" present but empty
-    cfg.capabilities = Cap::Pki;
-    Harness h(cfg);
+    cfg.capabilities = Client::Cap::Pki;
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::NoCard); }));
@@ -1834,15 +1956,15 @@ TEST(SmartCardHandler, SelectReaderIsNoOpWhileBound)
 {
     FakeAgent::Config cfg;
     cfg.hasCard = true;
-    cfg.capabilities = Cap::Pki; // reader/0 "Fake" -> PkiOnly
-    Harness h(cfg);
+    cfg.capabilities = Client::Cap::Pki; // reader/0 "Fake" -> PkiOnly
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PkiOnly); }));
 
     h.emitReaderArrivesEmpty();
     waitFor([]() { return false; }, 50);
-    h.emitArrivedReaderCardAdded(Cap::IdentityData | Cap::Pki);
+    h.emitArrivedReaderCardAdded(Client::Cap::IdentityData | Client::Cap::Pki);
     waitFor([]() { return false; }, 50);
     h.emitArrivedReaderHasCard();
     ASSERT_TRUE(waitFor([&]() { return handler->readersWithCards().size() == 2; }));
@@ -1862,19 +1984,28 @@ TEST(SmartCardHandler, SelectReaderIsNoOpWhileBound)
 // handler must BOTH reach AgentUnavailable (the gate runs FIRST) and clear the
 // reader rosters — a stale readersWithCards would keep the QML master-detail (and
 // its dead reader chips) on screen around the AgentUnavailable detail.
+//
+// The vanish is modelled by tearing the whole peer down (the harness leaves
+// scope), not by the harness's drop-one-name helper: that helper releases only
+// the per-test unique name, while the handler's client is bound to the agent's
+// well-known name, so dropping the unique name alone leaves the handler still
+// looking at a live agent and the vanish never happens. Teardown releases BOTH
+// names and destroys the peer, which is what a daemon exiting actually does.
 TEST(SmartCardHandler, AgentVanishClearsReaderRosters)
 {
-    FakeAgent::Config cfg;
-    cfg.hasCard = true;
-    cfg.capabilities = Cap::Pki;
-    Harness h(cfg);
+    std::unique_ptr<SmartCardHandler> handler;
+    {
+        FakeAgent::Config cfg;
+        cfg.hasCard = true;
+        cfg.capabilities = Client::Cap::Pki;
+        Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto handler = makeHandler(h);
-    ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PkiOnly); }));
-    ASSERT_TRUE(waitFor([&]() { return handler->readersWithCards().size() == 1; }));
-    ASSERT_EQ(handler->availableReaderNames().size(), 1);
+        handler = makeHandler(h);
+        ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PkiOnly); }));
+        ASSERT_TRUE(waitFor([&]() { return handler->readersWithCards().size() == 1; }));
+        ASSERT_EQ(handler->availableReaderNames().size(), 1);
+    }
 
-    h.unregisterService();
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::AgentUnavailable); }));
     EXPECT_TRUE(handler->readersWithCards().isEmpty());
     EXPECT_TRUE(handler->availableReaderNames().isEmpty());
@@ -1891,10 +2022,10 @@ TEST(SmartCardHandler, TwoInstancesWithDifferentBindingsAreIndependent)
 {
     FakeAgent::Config cfg;
     cfg.hasCard = true;
-    cfg.capabilities = Cap::Pki; // reader/0 "Fake" -> PkiOnly
-    Harness h(cfg);
+    cfg.capabilities = Client::Cap::Pki; // reader/0 "Fake" -> PkiOnly
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     SmartCardHandler widgetA(client);
     SmartCardHandler widgetB(client);
     ASSERT_TRUE(waitFor([&]() {
@@ -1905,7 +2036,7 @@ TEST(SmartCardHandler, TwoInstancesWithDifferentBindingsAreIndependent)
     // Bring up a SECOND reader "Fake2" holding a Hybrid card (reader/1 / card/1).
     h.emitReaderArrivesEmpty();
     waitFor([]() { return false; }, 50);
-    h.emitArrivedReaderCardAdded(Cap::IdentityData | Cap::Pki);
+    h.emitArrivedReaderCardAdded(Client::Cap::IdentityData | Client::Cap::Pki);
     waitFor([]() { return false; }, 50);
     h.emitArrivedReaderHasCard();
     ASSERT_TRUE(
@@ -1948,9 +2079,9 @@ TEST(CardPhotoStore, SlotsAreIsolatedPerHandler)
 {
     // Distinct slots per handler instance.
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
-    Harness h(cfg);
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    cfg.capabilities = Client::Cap::IdentityData;
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    auto client = std::make_shared<Client::AgentClient>();
     SmartCardHandler widgetA(client);
     SmartCardHandler widgetB(client);
     EXPECT_NE(widgetA.photoSlot(), widgetB.photoSlot());
@@ -1984,12 +2115,12 @@ TEST(CardPhotoStore, SlotsAreIsolatedPerHandler)
 TEST(SmartCardHandler, CardPhotoUrlAddressesOwnStoreSlot)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
+    cfg.capabilities = Client::Cap::IdentityData;
     cfg.preReadAuth = QStringLiteral("Can");
     cfg.operationDelayMs = 5;
     cfg.finalStatus = 0; // Ok
     cfg.photoBytes = tinyPngBytes();
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PreAuthRequired); }));

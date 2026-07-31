@@ -7,33 +7,42 @@
 // QCoreApplication (ki18n needs an app for locale resolution).
 
 #include "CredentialModel.h"
-#include "CredentialTypes.h"
+
+#include <LibreSCRS/AgentClient/CredentialTypes.h>
 
 #include <QModelIndex>
 #include <QVariant>
 #include <gtest/gtest.h>
 
+#include <iterator>
+
 using namespace LibreKDE;
 using Credentials::CredentialModel;
+
+// The agent client library, qualified through an alias: it owns the credential
+// record and its vocabulary, and the model holds those types unchanged. There is
+// no second spelling of them to cross any more, so the alias is here for brevity
+// alone — nothing in this file names a credential type on two sides.
+namespace Client = LibreSCRS::AgentClient;
 
 namespace {
 
 // Build the two-record fixture the dashboard renders: an operational User PIN
 // the holder can change, and a transport Signing PIN awaiting activation.
-CredentialList twoRecordFixture()
+Client::CredentialList twoRecordFixture()
 {
-    CredentialRecord user;
+    Client::CredentialRecord user;
     user.id = QStringLiteral("user:0x86");
-    user.kind = CredentialKind::User;
-    user.state = CredentialState::Operational;
+    user.kind = Client::CredentialKind::User;
+    user.state = Client::CredentialState::Operational;
     user.retriesLeft = 3;
     user.retriesMax = 3;
     user.canChange = true;
 
-    CredentialRecord sign;
+    Client::CredentialRecord sign;
     sign.id = QStringLiteral("sign:0x81");
-    sign.kind = CredentialKind::Sign;
-    sign.state = CredentialState::Transport;
+    sign.kind = Client::CredentialKind::Sign;
+    sign.state = Client::CredentialState::Transport;
     sign.retriesLeft = 3;
     sign.retriesMax = 3;
     sign.activatable = true;
@@ -66,8 +75,67 @@ TEST(CredentialModel, LocalizedNamesArePopulated)
     // dependent; under LANGUAGE=en the source strings resolve).
     EXPECT_FALSE(roleAt(m, 0, CredentialModel::KindNameRole).toString().isEmpty());
     EXPECT_FALSE(roleAt(m, 0, CredentialModel::StateNameRole).toString().isEmpty());
-    EXPECT_EQ(roleAt(m, 0, CredentialModel::StateRole).toInt(), int(CredentialState::Operational));
-    EXPECT_EQ(roleAt(m, 1, CredentialModel::StateRole).toInt(), int(CredentialState::Transport));
+    // Spelled as LITERALS on purpose — see StateRoleMatchesTheLiteralsTheDelegate
+    // BranchesOn below, which owns the argument and covers all five values.
+    EXPECT_EQ(roleAt(m, 0, CredentialModel::StateRole).toInt(), 2); // Operational
+    EXPECT_EQ(roleAt(m, 1, CredentialModel::StateRole).toInt(), 1); // Transport
+}
+
+// The state role's int is a CONTRACT WITH QML, and this is the only thing that
+// holds the two ends together.
+//
+// CredentialDelegate.qml does not import the enum; it branches on bare integers
+// and documents them itself ("0 Unknown, 1 Transport, 2 Operational,
+// 3 NeedsChange, 4 Blocked"), styling 4 as negative, 1 and 3 as neutral, 2 as
+// positive. The model hands that int straight from the client library's
+// CredentialState (CredentialModel.cpp, StateRole). So the QML file and the
+// client library's enum are two independent declarations of one numbering, with
+// no compiler edge between them.
+//
+// The expectations below are therefore LITERALS, never
+// `int(Client::CredentialState::Operational)`. Written that way the assertion
+// would take both sides from the same declaration and compare it with itself: it
+// would pass under any renumbering, including one that silently repaints every
+// blocked credential green. Written as literals it fails, naming the value that
+// moved.
+//
+// No other guard in this repo constrains that numbering. The credential
+// vocabulary coverage guard next door pins each enumerator to its WIRE TOKEN and
+// anchors its counts on NAMED enumerators — both sides of every one of its
+// assertions move together under a reorder, and it never compares an enumerator
+// to an integer at all. Integers are what QML consumes, and this is the only
+// place they are written down twice.
+//
+// If this test fails, do not edit the numbers to match — decide which side is
+// right, and change CredentialDelegate.qml's switch in the same commit.
+TEST(CredentialModel, StateRoleMatchesTheLiteralsTheDelegateBranchesOn)
+{
+    const struct
+    {
+        Client::CredentialState state;
+        int delegateValue;
+    } cases[] = {
+        {Client::CredentialState::Unknown, 0},     {Client::CredentialState::Transport, 1},
+        {Client::CredentialState::Operational, 2}, {Client::CredentialState::NeedsChange, 3},
+        {Client::CredentialState::Blocked, 4},
+    };
+
+    Client::CredentialList records;
+    for (const auto& c : cases) {
+        Client::CredentialRecord r;
+        r.id = QStringLiteral("cred:%1").arg(c.delegateValue);
+        r.state = c.state;
+        records.append(r);
+    }
+
+    CredentialModel m;
+    m.setRecords(records);
+    ASSERT_EQ(m.rowCount(), int(std::size(cases))) << "the walk collapsed; every assertion below would be vacuous";
+
+    for (int row = 0; row < int(std::size(cases)); ++row) {
+        EXPECT_EQ(roleAt(m, row, CredentialModel::StateRole).toInt(), cases[row].delegateValue)
+            << "state role int diverged from the value CredentialDelegate.qml branches on, at row " << row;
+    }
 }
 
 TEST(CredentialModel, CapabilityFlagsGateStrictlyPerRecord)
@@ -106,18 +174,18 @@ TEST(CredentialModel, CountersAreTypedRetryAndUsageAndDropResetCounter)
     // delegate header carries it once), and does NOT render the DOCP reset
     // counter (unblocksLeft, tag 99). Tests run with LANGUAGE=en and no sr
     // catalog loaded, so the English source strings resolve.
-    CredentialRecord puk;
+    Client::CredentialRecord puk;
     puk.id = QStringLiteral("puk:0x93");
-    puk.kind = CredentialKind::Puk;
+    puk.kind = Client::CredentialKind::Puk;
     puk.retriesLeft = 5;
     puk.retriesMax = 5;
     puk.usesLeft = 16;
     puk.usesMax = 20;
     puk.unblocksLeft = 5; // DOCP tag 99 — must NOT appear in the rendered line
 
-    CredentialRecord oneTry;
+    Client::CredentialRecord oneTry;
     oneTry.id = QStringLiteral("user:0x86");
-    oneTry.kind = CredentialKind::User;
+    oneTry.kind = Client::CredentialKind::User;
     oneTry.retriesLeft = 1; // no retriesMax -> "Attempts: 1"
 
     CredentialModel m;

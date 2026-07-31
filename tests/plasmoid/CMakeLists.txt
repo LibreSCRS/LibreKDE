@@ -4,7 +4,7 @@
 set(CMAKE_AUTOMOC ON)
 
 # Pure (no D-Bus) capability → UI-state classification. Links only the agent
-# client's pure `AgentCapabilities` header + the classifier source.
+# client library's pure `AgentCapabilities` header + the classifier source.
 add_executable(CardStateModelTest
     CardStateModelTest.cpp
     ${CMAKE_SOURCE_DIR}/components/plasmoid/src/CardStateModel.cpp
@@ -13,7 +13,7 @@ target_include_directories(CardStateModelTest PRIVATE
     ${CMAKE_SOURCE_DIR}/components/plasmoid/src
 )
 target_link_libraries(CardStateModelTest
-    PRIVATE GTest::gtest_main Qt6::Core librekde-agentclient
+    PRIVATE GTest::gtest_main Qt6::Core LibreAgent::ClientQt
 )
 target_compile_features(CardStateModelTest PRIVATE cxx_std_23)
 add_test(NAME CardStateModelTest COMMAND CardStateModelTest)
@@ -21,8 +21,16 @@ set_tests_properties(CardStateModelTest PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en"
 )
 
-# SmartCardHandler driven by the FakeAgent over a private session bus (reuses
-# the agent-client D-Bus harness). Runs under dbus-run-session.
+# SmartCardHandler driven by the FakeAgent over a private session bus (the
+# shared D-Bus test harness). Runs under dbus-run-session.
+#
+# This target compiles the component's sources DIRECTLY rather than linking
+# librekde-plasmoid, so a source added to the component must be added below too
+# — otherwise it shows up as a link error that names none of the changed files.
+#
+# It links the fake-peer harness target ONLY (librekde-test-support), never the
+# entry-point target: PlasmoidTestMain.cpp below is this suite's own main(), and
+# linking both would be two main() definitions.
 ecm_qt_declare_logging_category(PlasmoidTestLogging_SRCS
     HEADER plasmoid_log_categories.h
     IDENTIFIER LibreKDE::Plasmoid::Logging
@@ -48,7 +56,7 @@ target_include_directories(SmartCardHandlerTest PRIVATE
     ${CMAKE_BINARY_DIR}/components/plasmoid
 )
 target_link_libraries(SmartCardHandlerTest
-    PRIVATE GTest::gtest librekde-agentclient librekde-test-support librekde-signing
+    PRIVATE GTest::gtest LibreAgent::ClientQt librekde-agentclient librekde-test-support librekde-signing
             Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::DBus Qt6::Test
             KF6::I18n KF6::CoreAddons KF6::KIOGui KF6::Service LibreKDELogging
 )

@@ -2,15 +2,24 @@
 // SPDX-FileCopyrightText: 2026 hirashix0
 //
 // CredentialController state-machine skeleton, driven by the FakeAgent over a
-// private session bus (reuses the agent-client D-Bus harness). Runs under
+// private session bus (the shared D-Bus test harness). Runs under
 // dbus-run-session, QT_QPA_PLATFORM=offscreen.
+//
+// The controller's client binds itself to the agent's real well-known bus name
+// and offers no hook to point it elsewhere, so every Harness here is built with
+// BusNames::UniqueAndWellKnown: the fake has to answer to that name for the
+// controller to see an agent at all.
 
-#include "AgentCapabilities.h"
-#include "AgentClient.h"
 #include "CredentialController.h"
 #include "CredentialModel.h"
-#include "TestBus.h" // Harness + FakeAgent + waitFor (reused agentclient test double)
+#include "TestBus.h" // Harness + FakeAgent + waitFor (the shared bus peer)
 
+#include <LibreSCRS/AgentClient/AgentCapabilities.h>
+#include <LibreSCRS/AgentClient/AgentClient.h>
+#include <LibreSCRS/AgentClient/AgentReader.h>
+#include <LibreSCRS/AgentClient/CredentialTypes.h>
+
+#include <QList>
 #include <QSignalSpy>
 #include <QTextDocument> // Qt::mightBeRichText (plainDisplay round-trip assertion)
 #include <QVariantMap>
@@ -20,17 +29,81 @@
 using namespace LibreKDE;
 using namespace LibreKDETest;
 
+// The agent client library, spelled through an alias rather than pulled in
+// wholesale with a using-directive. NOT a collision fix, and the measurement
+// behind that has to be the discriminating one: a using-directive added while
+// every name here stays `Client::`-qualified proves nothing, because ambiguity
+// between using-directives is diagnosed only at UNQUALIFIED lookup. What was
+// actually run is the alias deleted, the directive put in its place, and all 110
+// `Client::` qualifications stripped — this file then compiles clean, so no name
+// collides with the host's. The alias stays for readability: it keeps each name
+// below visibly the LIBRARY's rather than the host's, in a file that draws value
+// types from both.
+namespace Client = LibreSCRS::AgentClient;
+
 namespace {
 
-// The controller binds a reader by its D-Bus OBJECT PATH (the `--reader` arg),
+using ControllerState = Credentials::CredentialController::State;
+
+// Records the controller's state at every stateChanged, so a test can assert the
+// SEQUENCE of transitions rather than poll for one of them. Polling cannot see a
+// state the controller passes through and leaves within one poll interval, which
+// is exactly the shape of a refusal: Working, then Result on the next event-loop
+// turn, then — for the arms that re-list — Ready a few milliseconds later.
+class StateRecorder
+{
+public:
+    explicit StateRecorder(Credentials::CredentialController& controller)
+    {
+        m_connection =
+            QObject::connect(&controller, &Credentials::CredentialController::stateChanged, &controller,
+                             [this, &controller]() { m_states.append(ControllerState(controller.state())); });
+    }
+
+    /// Drops the connection, because the lambda captures THIS recorder and the
+    /// controller normally outlives it (declared first in a test body, destroyed
+    /// last). Without this, a transition emitted after the recorder went out of
+    /// scope would write into freed memory.
+    ~StateRecorder()
+    {
+        QObject::disconnect(m_connection);
+    }
+
+    StateRecorder(const StateRecorder&) = delete;
+    StateRecorder& operator=(const StateRecorder&) = delete;
+
+    [[nodiscard]] QList<ControllerState> states() const
+    {
+        return m_states;
+    }
+
+    /// The recorded sequence rendered for a failure message ("Working -> Result").
+    [[nodiscard]] std::string trace() const
+    {
+        std::string out;
+        for (const ControllerState s : m_states) {
+            if (!out.empty()) {
+                out += " -> ";
+            }
+            out += std::to_string(int(s));
+        }
+        return out.empty() ? std::string("<no transition>") : out;
+    }
+
+private:
+    QList<ControllerState> m_states;
+    QMetaObject::Connection m_connection;
+};
+
+// The controller binds a reader by its opaque agent-side id (the `--reader` arg),
 // so the state must classify off the card behind that reader.
 TEST(CredentialController, NoCardWhenReaderEmpty)
 {
     FakeAgent::Config cfg;
     cfg.hasCard = false; // reader present, but empty
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
 
     Credentials::CredentialController ctl(client);
@@ -72,10 +145,10 @@ TEST(CredentialController, PlainDisplayNeutralizesMarkupAndPreservesPlainText)
 TEST(CredentialController, NotManageableWithoutPinMgmtBit)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData; // no PinManagement
-    Harness h(cfg);
+    cfg.capabilities = Client::Cap::IdentityData; // no PinManagement
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
 
     Credentials::CredentialController ctl(client);
@@ -149,12 +222,12 @@ QVariantMap transportPinPendingKeyRecord()
 TEST(CredentialController, ReadyWhenCredentialsListed)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
     cfg.credRecords = {userPinRecord()};
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
 
     Credentials::CredentialController ctl(client);
@@ -173,12 +246,12 @@ TEST(CredentialController, ReadyWhenCredentialsListed)
 TEST(CredentialController, EmptyWhenNoCredentials)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
     cfg.credRecords = {}; // empty — a manageable card with nothing to act on
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
 
     Credentials::CredentialController ctl(client);
@@ -194,13 +267,13 @@ TEST(CredentialController, EmptyWhenNoCredentials)
 TEST(CredentialController, LoadingWhileFetchingThenReady)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.operationDelayMs = 300; // Loading persists long enough for waitFor to catch it
     cfg.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
     cfg.credRecords = {userPinRecord()};
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
 
     Credentials::CredentialController ctl(client);
@@ -218,12 +291,12 @@ TEST(CredentialController, LoadingWhileFetchingThenReady)
 TEST(CredentialController, AgentUnavailableWhenServiceVanishes)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
     cfg.credRecords = {userPinRecord()};
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
 
     Credentials::CredentialController ctl(client);
@@ -245,11 +318,11 @@ TEST(CredentialController, AgentUnavailableWhenServiceVanishes)
 TEST(CredentialController, NoCardWhenUnboundAndNoCardAnywhere)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement;
+    cfg.capabilities = Client::Cap::PinManagement;
     cfg.hasCard = false; // no reader holds a card -> no fallback target
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
 
     Credentials::CredentialController ctl(client); // never bindReader()
@@ -263,12 +336,12 @@ TEST(CredentialController, UnboundFallsBackToFirstReaderWithCard)
 {
     using State = Credentials::CredentialController::State;
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
     cfg.credRecords = {userPinRecord()};
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
 
     Credentials::CredentialController ctl(client); // never bindReader()
@@ -283,12 +356,12 @@ TEST(CredentialController, StaleReaderPathFallsBackToFirstReaderWithCard)
 {
     using State = Credentials::CredentialController::State;
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
     cfg.credRecords = {userPinRecord()};
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
 
     Credentials::CredentialController ctl(client);
@@ -305,11 +378,11 @@ TEST(CredentialController, TransientReadErrorRecoversOnRefetch)
 {
     using State = Credentials::CredentialController::State;
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.finalStatus = 2; // Error — a transient read failure
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
 
     Credentials::CredentialController ctl(client);
@@ -339,11 +412,11 @@ TEST(CredentialController, UserCancelledReadLatchesWithoutReprompt)
 {
     using State = Credentials::CredentialController::State;
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.operationDelayMs = 400; // keep the fetch in flight so cancel() has a live op
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
 
     Credentials::CredentialController ctl(client);
@@ -356,7 +429,7 @@ TEST(CredentialController, UserCancelledReadLatchesWithoutReprompt)
     const int opsAfterCancel = h.operationCount();
     // A same-card capability change drives classify(); the cancel latch must hold —
     // no fresh ListCredentials op is minted (no CAN re-prompt).
-    h.emitCardCapabilitiesChanged(Cap::PinManagement); // still manageable, different value
+    h.emitCardCapabilitiesChanged(Client::Cap::PinManagement); // still manageable, different value
     EXPECT_FALSE(waitFor([&]() { return h.operationCount() > opsAfterCancel; }, 300))
         << "a cancelled read must not auto-re-prompt on an incidental re-classify";
     EXPECT_EQ(ctl.state(), int(State::ReadFailed));
@@ -373,12 +446,12 @@ TEST(CredentialController, CancelledReadWithNoResultStillLatches)
 {
     using State = Credentials::CredentialController::State;
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.operationDelayMs = 400; // keep the fetch in flight so cancel() has a live op
     cfg.suppressResult = true;  // the abort delivers NO Result and retains nothing
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
 
     Credentials::CredentialController ctl(client);
@@ -391,7 +464,7 @@ TEST(CredentialController, CancelledReadWithNoResultStillLatches)
     const int opsAfterCancel = h.operationCount();
     // A same-card capability change drives classify(); the cancel latch must hold
     // even though the terminal arrived as Error/CommunicationError, not Cancelled.
-    h.emitCardCapabilitiesChanged(Cap::PinManagement); // still manageable, different value
+    h.emitCardCapabilitiesChanged(Client::Cap::PinManagement); // still manageable, different value
     EXPECT_FALSE(waitFor([&]() { return h.operationCount() > opsAfterCancel; }, 300))
         << "a cancelled read whose abort delivered no Result must still latch (no CAN re-prompt)";
     EXPECT_EQ(ctl.state(), int(State::ReadFailed));
@@ -407,13 +480,13 @@ TEST(CredentialController, ChangePinOkResultThenMandatoryRelist)
 {
     using State = Credentials::CredentialController::State;
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.operationDelayMs = 60; // keep Working/Result observable
     cfg.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
     cfg.credRecords = {userPinRecord()};
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
     Credentials::CredentialController ctl(client);
     ctl.bindReader(h.readerPath());
@@ -440,13 +513,13 @@ TEST(CredentialController, ChangePinInvalidPinRendersAttributedError)
 {
     using State = Credentials::CredentialController::State;
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.operationDelayMs = 60;
     cfg.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
     cfg.credRecords = {userPinRecord()};
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
     Credentials::CredentialController ctl(client);
     ctl.bindReader(h.readerPath());
@@ -479,13 +552,13 @@ TEST(CredentialController, ChangePinUserCancelledIsNeutral)
 {
     using State = Credentials::CredentialController::State;
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.operationDelayMs = 60;
     cfg.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
     cfg.credRecords = {userPinRecord()};
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
     Credentials::CredentialController ctl(client);
     ctl.bindReader(h.readerPath());
@@ -504,37 +577,47 @@ TEST(CredentialController, ChangePinUserCancelledIsNeutral)
     EXPECT_TRUE(ctl.resultMessage().isEmpty()) << "a cancel shows no banner text";
 }
 
-// A stale credential id: the agent dropped its listing cache, so ManagePin throws
-// UnknownCredential at method entry (no Operation). The controller must NOT show a
-// red error — it auto-re-lists (assert a ListCredentials op mints) to recover the
-// fresh ids, and surfaces a neutral notice.
+// A stale credential id: the agent dropped its listing cache, so it refuses
+// ManagePin at method entry, by name (UnknownCredential). The controller must NOT
+// show a red error — it auto-re-lists (assert a ListCredentials op mints) to
+// recover the fresh ids, and surfaces a neutral notice.
+//
+// The refusal now travels on the verb's own terminal, which the library queues to
+// the event loop, so the window passes through Working on the way to Result —
+// asserted as a SEQUENCE, since Working is too brief to poll for reliably.
 TEST(CredentialController, ManageEntryUnknownCredentialAutoRelistsNeutrally)
 {
     using State = Credentials::CredentialController::State;
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
     cfg.credRecords = {userPinRecord()};
     // ManagePin/ActivateSigningKey throw UnknownCredential at entry; ListCredentials
     // is id-less and stays exempt, so the re-list recovers.
     cfg.credEntryError = true;
     cfg.credEntryErrorName = QStringLiteral("org.librescrs.Agent.Error.UnknownCredential");
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
     Credentials::CredentialController ctl(client);
     ctl.bindReader(h.readerPath());
     ASSERT_TRUE(waitFor([&]() { return ctl.state() == int(State::Ready); }));
 
     const int opsBefore = h.operationCount();
+    StateRecorder seq(ctl);
     ctl.changePin(QStringLiteral("user:stale"));
+    EXPECT_EQ(ctl.state(), int(State::Working)) << "the verb enters Working before its refusal lands";
 
-    // No manage op mints (entry throw); the auto-re-list mints exactly one op.
+    // No manage op mints (the refusal beat it); the auto-re-list mints exactly one op.
     ASSERT_TRUE(waitFor([&]() { return h.operationCount() == opsBefore + 1; }))
-        << "an UnknownCredential entry error must trigger a recovery re-list";
+        << "an UnknownCredential refusal must trigger a recovery re-list";
     EXPECT_FALSE(ctl.resultIsError()) << "a stale id is a neutral refresh, not a red error";
     ASSERT_TRUE(waitFor([&]() { return ctl.state() == int(State::Ready); }));
+    // Working, then the notice, then the recovered dashboard — the re-listing arm.
+    EXPECT_EQ(seq.states(),
+              (QList<ControllerState>{ControllerState::Working, ControllerState::Result, ControllerState::Ready}))
+        << seq.trace();
 }
 
 // A RateLimited entry refusal: the request never reached the card, so the
@@ -545,30 +628,35 @@ TEST(CredentialController, ManageEntryRateLimitedNeutralNoticeWithoutRelist)
 {
     using State = Credentials::CredentialController::State;
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
     cfg.credRecords = {userPinRecord()};
     cfg.credEntryError = true;
     cfg.credEntryErrorName = QStringLiteral("org.librescrs.Agent.Error.RateLimited");
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
     Credentials::CredentialController ctl(client);
     ctl.bindReader(h.readerPath());
     ASSERT_TRUE(waitFor([&]() { return ctl.state() == int(State::Ready); }));
 
     const int opsBefore = h.operationCount(); // the initial ListCredentials
+    StateRecorder seq(ctl);
     ctl.changePin(QStringLiteral("user:0x86"));
+    EXPECT_EQ(ctl.state(), int(State::Working)) << "the verb enters Working before its refusal lands";
 
-    // The entry throw resolves synchronously (blocking call): neutral notice.
-    EXPECT_EQ(ctl.state(), int(State::Result));
+    ASSERT_TRUE(waitFor([&]() { return ctl.state() == int(State::Result); }));
     EXPECT_FALSE(ctl.resultIsError()) << "rate limiting is a neutral notice, never a red banner";
     EXPECT_TRUE(ctl.resultMessage().contains(QStringLiteral("wait"))) << ctl.resultMessage().toStdString();
     // The listing is still valid: no op may mint (neither a manage nor a re-list).
     EXPECT_FALSE(waitFor([&]() { return h.operationCount() > opsBefore; }, 300))
-        << "a RateLimited entry refusal must not re-list — the listing is still valid";
+        << "a RateLimited refusal must not re-list — the request never reached the card, so the listing still holds";
     EXPECT_EQ(ctl.state(), int(State::Result)) << "the notice stays up until the next event";
+    // Working, then the notice, and NOTHING further — the non-re-listing arm. A
+    // trailing Ready here would mean this arm had re-listed after all, which is
+    // precisely the collapse into the UnknownCredential arm that must not happen.
+    EXPECT_EQ(seq.states(), (QList<ControllerState>{ControllerState::Working, ControllerState::Result})) << seq.trace();
 }
 
 // An InvalidRequest entry refusal is USER-REACHABLE: the agent maps a real card
@@ -584,29 +672,34 @@ TEST(CredentialController, ManageEntryInvalidRequestShowsNeutralNotice)
 {
     using State = Credentials::CredentialController::State;
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
     cfg.credRecords = {userPinRecord()};
     cfg.credEntryError = true;
     cfg.credEntryErrorName = QStringLiteral("org.librescrs.Agent.Error.InvalidRequest");
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
     Credentials::CredentialController ctl(client);
     ctl.bindReader(h.readerPath());
     ASSERT_TRUE(waitFor([&]() { return ctl.state() == int(State::Ready); }));
 
     const int opsBefore = h.operationCount();
+    StateRecorder seq(ctl);
     ctl.changePin(QStringLiteral("user:0x86"));
+    EXPECT_EQ(ctl.state(), int(State::Working)) << "the verb enters Working before its refusal lands";
 
-    EXPECT_EQ(ctl.state(), int(State::Result)) << "the refusal must be visible, never silent";
-    EXPECT_FALSE(ctl.resultIsError()) << "entry refusals are never red banners";
+    ASSERT_TRUE(waitFor([&]() { return ctl.state() == int(State::Result); }))
+        << "the refusal must be visible, never silent";
+    EXPECT_FALSE(ctl.resultIsError()) << "named refusals are never red banners";
     EXPECT_TRUE(ctl.resultMessage().contains(QStringLiteral("refused"))) << ctl.resultMessage().toStdString();
     EXPECT_FALSE(waitFor([&]() { return h.operationCount() > opsBefore; }, 300))
-        << "no re-list for an InvalidRequest entry refusal — the condition is persistent for the card";
+        << "no re-list for an InvalidRequest refusal — the condition is persistent for the card";
     // No state regression: the rows survive, so the dashboard stays actionable.
     EXPECT_EQ(ctl.credentials()->rowCount(), 1);
+    // Working, then the notice, and NOTHING further — the other non-re-listing arm.
+    EXPECT_EQ(seq.states(), (QList<ControllerState>{ControllerState::Working, ControllerState::Result})) << seq.trace();
 }
 
 // Any OTHER entry refusal (e.g. NotAuthorized) takes the generic branch: a
@@ -616,33 +709,98 @@ TEST(CredentialController, ManageEntryGenericRefusalNeutralNoticeThenDefensiveRe
 {
     using State = Credentials::CredentialController::State;
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
     cfg.credRecords = {userPinRecord()};
     cfg.credEntryError = true;
     cfg.credEntryErrorName = QStringLiteral("org.librescrs.Agent.Error.NotAuthorized");
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
     Credentials::CredentialController ctl(client);
     ctl.bindReader(h.readerPath());
     ASSERT_TRUE(waitFor([&]() { return ctl.state() == int(State::Ready); }));
 
     const int opsBefore = h.operationCount();
+    StateRecorder seq(ctl);
     ctl.changePin(QStringLiteral("user:0x86"));
+    EXPECT_EQ(ctl.state(), int(State::Working)) << "the verb enters Working before its refusal lands";
 
-    EXPECT_EQ(ctl.state(), int(State::Result));
-    EXPECT_FALSE(ctl.resultIsError()) << "entry refusals are never red banners";
+    // No manage op mints (the refusal beat it); the DEFENSIVE re-list mints exactly one.
+    ASSERT_TRUE(waitFor([&]() { return h.operationCount() == opsBefore + 1; }))
+        << "a refusal this window has no specific recovery for must trigger the defensive re-list";
+    EXPECT_FALSE(ctl.resultIsError()) << "named refusals are never red banners";
     EXPECT_TRUE(ctl.resultMessage().contains(QStringLiteral("could not be started")))
         << ctl.resultMessage().toStdString();
-
-    // No manage op mints (entry throw); the DEFENSIVE re-list mints exactly one.
-    ASSERT_TRUE(waitFor([&]() { return h.operationCount() == opsBefore + 1; }))
-        << "a generic entry refusal must trigger the defensive recovery re-list";
     ASSERT_TRUE(waitFor([&]() { return ctl.state() == int(State::Ready); }))
         << "the recovery re-list settles the dashboard back to Ready";
     EXPECT_EQ(h.operationCount(), opsBefore + 1) << "exactly one recovery op — no manage op";
+    // Working, then the generic notice, then the recovered dashboard — the second
+    // re-listing arm, and the copy is what separates it from the first.
+    EXPECT_EQ(seq.states(),
+              (QList<ControllerState>{ControllerState::Working, ControllerState::Result, ControllerState::Ready}))
+        << seq.trace();
+}
+
+// The contrast case, and the one behaviour this relocation genuinely changed: a
+// verb whose call fails with an error the AGENT never named — a bus-daemon error,
+// here a no-reply timeout. The named-refusal axis stays disengaged for anything
+// outside the agent's own error namespace, so this is NOT one of the four refusal
+// arms; it takes the outcome path, where the shared rule composes the failure from
+// both of the operation's failure axes.
+//
+// Two things must hold, and they used to be one thing. The BANNER changed: this
+// once showed the same neutral generic refusal notice as the arm above, and now
+// shows red, localized transport copy naming what actually went wrong. The RE-LIST
+// did NOT change: the outcome path's mandatory re-list still runs, so the dashboard
+// is refreshed exactly as it was before, and there is no stale-list consequence to
+// this at all. Pinned here because the distinction is easy to assert wrongly.
+TEST(CredentialController, ManageCallFailureUnnamedByAgentShowsTransportCopyAndStillRelists)
+{
+    using State = Credentials::CredentialController::State;
+    FakeAgent::Config cfg;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
+    cfg.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
+    cfg.credRecords = {userPinRecord()};
+    cfg.credEntryError = true;
+    // Outside `org.librescrs.Agent.Error.*`, so the client classifies the call
+    // without borrowing the agent's named-error vocabulary: the name axis stays
+    // disengaged and only the coarse call classification carries the reason.
+    cfg.credEntryErrorName = QStringLiteral("org.freedesktop.DBus.Error.NoReply");
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+
+    auto client = std::make_shared<Client::AgentClient>();
+    ASSERT_TRUE(client->isAvailable());
+    Credentials::CredentialController ctl(client);
+    ctl.bindReader(h.readerPath());
+    ASSERT_TRUE(waitFor([&]() { return ctl.state() == int(State::Ready); }));
+
+    const int opsBefore = h.operationCount();
+    StateRecorder seq(ctl);
+    ctl.changePin(QStringLiteral("user:0x86"));
+    EXPECT_EQ(ctl.state(), int(State::Working));
+
+    ASSERT_TRUE(waitFor([&]() { return ctl.state() == int(State::Result); }));
+    // Tone: red, unlike every named refusal, because the attempt reported no
+    // outcome and a transport failure is a real error.
+    EXPECT_TRUE(ctl.resultIsError()) << "a call the agent never answered is an error, not a neutral notice";
+    // Copy: the composed transport text, NOT the generic refusal sentence and not
+    // the credential vocabulary's one-size-fits-all "did not complete".
+    EXPECT_FALSE(ctl.resultMessage().isEmpty());
+    EXPECT_FALSE(ctl.resultMessage().contains(QStringLiteral("could not be started")))
+        << "this path must not borrow the named-refusal copy — " << ctl.resultMessage().toStdString();
+    EXPECT_TRUE(ctl.resultMessage().contains(QStringLiteral("did not answer in time")))
+        << "the shared rule must name the transport failure it actually was — " << ctl.resultMessage().toStdString();
+
+    // And the re-list is UNCHANGED: exactly one recovery op, settling back to Ready.
+    ASSERT_TRUE(waitFor([&]() { return h.operationCount() == opsBefore + 1; }))
+        << "the outcome path's mandatory re-list still runs for a failure the agent did not name";
+    ASSERT_TRUE(waitFor([&]() { return ctl.state() == int(State::Ready); }));
+    EXPECT_EQ(h.operationCount(), opsBefore + 1) << "exactly one recovery op — no manage op reached the agent";
+    EXPECT_EQ(seq.states(),
+              (QList<ControllerState>{ControllerState::Working, ControllerState::Result, ControllerState::Ready}))
+        << seq.trace();
 }
 
 // The unblock pre-flight: requestUnblock formats the PUK's remaining budget from
@@ -654,13 +812,13 @@ TEST(CredentialController, RequestUnblockEmitsBudgetThenConfirmMintsOp)
 {
     using State = Credentials::CredentialController::State;
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.operationDelayMs = 60;
     cfg.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
     cfg.credRecords = {unblockablePinRecord(), pukRecord()};
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
     Credentials::CredentialController ctl(client);
     ctl.bindReader(h.readerPath());
@@ -696,13 +854,13 @@ TEST(CredentialController, ActivatePartialBringUpRendersKeyFailure)
 {
     using State = Credentials::CredentialController::State;
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.operationDelayMs = 60;
     cfg.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
     cfg.credRecords = {transportPinPendingKeyRecord()};
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
     Credentials::CredentialController ctl(client);
     ctl.bindReader(h.readerPath());
@@ -727,13 +885,13 @@ TEST(CredentialController, ActivateSigningKeyAttributedResultThenMandatoryRelist
 {
     using State = Credentials::CredentialController::State;
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.operationDelayMs = 60;
     cfg.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
     cfg.credRecords = {keyPendingSignRecord()};
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
     Credentials::CredentialController ctl(client);
     ctl.bindReader(h.readerPath());
@@ -756,27 +914,40 @@ TEST(CredentialController, ActivateSigningKeyAttributedResultThenMandatoryRelist
         << ctl.resultMessage().toStdString();
 }
 
-// A capability desync — the client's cached Card1 caps still advertise
+// A capability desync — the client's cached card capabilities still advertise
 // PinManagement while the agent refuses ListCredentials at entry
-// (UnsupportedOnThisCard) — must land on ReadFailed via the entry-throw →
-// nullptr branch, exercised against a real wire-shaped error reply.
-TEST(CredentialController, ListEntryThrowLandsReadFailed)
+// (UnsupportedOnThisCard) — must land on ReadFailed, exercised against a real
+// wire-shaped error reply. The refusal now arrives as a non-Ok terminal on the
+// operation the call still hands back, not as a null operation, so this pins that
+// the read's failure route reaches the same state it always did.
+//
+// It also pins the ONE visible difference that relocation brought to the read
+// path, so it cannot drift unnoticed: the refused read passes through Loading
+// first. Before, the null-operation branch returned ahead of the Loading
+// transition and the window reached ReadFailed with no spinner at all. This is the
+// list-path sibling of the mutation path's extra Working state.
+TEST(CredentialController, ListRefusedAtEntryLandsReadFailed)
 {
     using State = Credentials::CredentialController::State;
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
-    Harness h(cfg);
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     // The client snapshots the caps (with PinManagement) at discovery…
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
     // …then the agent-side caps drop WITHOUT a PropertiesChanged (the desync).
-    h.setCardCapabilitiesSilently(Cap::Pki);
+    h.setCardCapabilitiesSilently(Client::Cap::Pki);
 
     Credentials::CredentialController ctl(client);
+    StateRecorder seq(ctl);
     ctl.bindReader(h.readerPath());
     ASSERT_TRUE(waitFor([&]() { return ctl.state() == int(State::ReadFailed); }))
-        << "a ListCredentials entry throw must land ReadFailed (a read failure, not NotManageable)";
+        << "a refused ListCredentials must land ReadFailed (a read failure, not NotManageable)";
+    // The spinner turn, then the read-failure surface — and nothing else. Recorded
+    // rather than polled: Loading lasts one event-loop turn here.
+    EXPECT_EQ(seq.states(), (QList<ControllerState>{ControllerState::Loading, ControllerState::ReadFailed}))
+        << seq.trace();
 }
 
 // Re-entrancy guard: while a verb is in flight (Working), further verb clicks must
@@ -785,13 +956,13 @@ TEST(CredentialController, VerbIgnoredWhileMutationInFlight)
 {
     using State = Credentials::CredentialController::State;
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.operationDelayMs = 400; // hold the mutation in flight so re-entry is observable
     cfg.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
     cfg.credRecords = {userPinRecord()};
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
     Credentials::CredentialController ctl(client);
     ctl.bindReader(h.readerPath());
@@ -819,13 +990,13 @@ TEST(CredentialController, CancelledMutationRendersNeutralNotError)
 {
     using State = Credentials::CredentialController::State;
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.operationDelayMs = 400; // hold the mutation in flight so cancel() has a live op
     cfg.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
     cfg.credRecords = {userPinRecord()};
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
     Credentials::CredentialController ctl(client);
     ctl.bindReader(h.readerPath());
@@ -856,12 +1027,12 @@ TEST(CredentialController, CtorDoesNotProbeBeforeExplicitBindTarget)
 {
     using State = Credentials::CredentialController::State;
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
     cfg.credRecords = {userPinRecord()};
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
 
     // A second reader arrives holding its own manageable card — the launch
@@ -870,10 +1041,10 @@ TEST(CredentialController, CtorDoesNotProbeBeforeExplicitBindTarget)
     h.emitReaderArrivesEmpty();
     const QString reader2 = QStringLiteral("/org/librescrs/Agent/reader/1");
     ASSERT_TRUE(waitFor([&]() { return client->reader(reader2) != nullptr; }));
-    const QString card2 = h.emitArrivedReaderCardAdded(Cap::PinManagement | Cap::Pki);
+    const QString card2 = h.emitArrivedReaderCardAdded(Client::Cap::PinManagement | Client::Cap::Pki);
     ASSERT_TRUE(waitFor([&]() { return client->card(card2) != nullptr; }));
     h.emitArrivedReaderHasCard();
-    ASSERT_TRUE(waitFor([&]() { return client->reader(reader2)->cardPath() == card2; }));
+    ASSERT_TRUE(waitFor([&]() { return client->reader(reader2)->cardId() == card2; }));
 
     // main.cpp order: construction first…
     Credentials::CredentialController ctl(client);
@@ -896,22 +1067,22 @@ TEST(CredentialController, RetargetMidListCancelsAbandonedAgentSideOp)
 {
     using State = Credentials::CredentialController::State;
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.operationDelayMs = 400; // hold the first list in flight across the re-target
     cfg.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
     cfg.credRecords = {userPinRecord()};
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
 
     h.emitReaderArrivesEmpty();
     const QString reader2 = QStringLiteral("/org/librescrs/Agent/reader/1");
     ASSERT_TRUE(waitFor([&]() { return client->reader(reader2) != nullptr; }));
-    const QString card2 = h.emitArrivedReaderCardAdded(Cap::PinManagement | Cap::Pki);
+    const QString card2 = h.emitArrivedReaderCardAdded(Client::Cap::PinManagement | Client::Cap::Pki);
     ASSERT_TRUE(waitFor([&]() { return client->card(card2) != nullptr; }));
     h.emitArrivedReaderHasCard();
-    ASSERT_TRUE(waitFor([&]() { return client->reader(reader2)->cardPath() == card2; }));
+    ASSERT_TRUE(waitFor([&]() { return client->reader(reader2)->cardId() == card2; }));
 
     Credentials::CredentialController ctl(client);
     ctl.bindReader(h.readerPath()); // reader/0 — its list is now in flight
@@ -935,13 +1106,13 @@ TEST(CredentialController, RetargetToEmptyReaderMidMutationDetachesCleanly)
 {
     using State = Credentials::CredentialController::State;
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.operationDelayMs = 400; // hold the mutation in flight across the re-target
     cfg.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
     cfg.credRecords = {userPinRecord()};
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
     Credentials::CredentialController ctl(client);
     ctl.bindReader(h.readerPath());
@@ -981,13 +1152,13 @@ TEST(CredentialController, CardRemovedMidMutationLandsNoCardWithRemovalNotice)
 {
     using State = Credentials::CredentialController::State;
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.operationDelayMs = 400; // hold the mutation in flight so the pull races it
     cfg.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
     cfg.credRecords = {userPinRecord()};
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
     Credentials::CredentialController ctl(client);
     ctl.bindReader(h.readerPath());
@@ -1018,19 +1189,19 @@ TEST(CredentialController, CardRemovedMidMutationLandsNoCardWithRemovalNotice)
 // A mutation the AGENT ITSELF reports as cardRemoved — while the registry still
 // lists the card, so the card object outlives the pull — parks its truthful
 // outcome on removalNotice. A LATER recovery verb must clear that stale notice
-// even when it refuses at method entry: the entry-error return must not precede
-// the notice reset, or the obsolete removal copy survives under the new verb's
-// own Result surface.
-TEST(CredentialController, EntryErrorVerbClearsStaleRemovalNotice)
+// even when the agent refuses it at method entry, and must clear it as the verb
+// STARTS (not once its refusal lands), or the obsolete removal copy is on screen
+// for the whole round trip.
+TEST(CredentialController, RefusedVerbClearsStaleRemovalNotice)
 {
     using State = Credentials::CredentialController::State;
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
     cfg.credRecords = {userPinRecord()};
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
     Credentials::CredentialController ctl(client);
     ctl.bindReader(h.readerPath());
@@ -1052,9 +1223,14 @@ TEST(CredentialController, EntryErrorVerbClearsStaleRemovalNotice)
         c.credEntryErrorName = QStringLiteral("org.librescrs.Agent.Error.RateLimited");
     });
     ctl.changePin(QStringLiteral("user:0x86"));
+    // Synchronous on purpose: the notice must be gone the moment the verb starts,
+    // BEFORE its refusal comes back — which is now a whole round trip later.
     EXPECT_TRUE(ctl.removalNotice().isEmpty())
-        << "a stale removal notice must not survive a recovery verb that refuses at entry";
-    EXPECT_EQ(ctl.state(), int(State::Result));
+        << "a stale removal notice must not survive a recovery verb the agent refuses";
+    EXPECT_EQ(ctl.state(), int(State::Working));
+    // …and it is still gone once the refusal's own neutral notice replaces it.
+    ASSERT_TRUE(waitFor([&]() { return ctl.state() == int(State::Result); }));
+    EXPECT_TRUE(ctl.removalNotice().isEmpty());
     EXPECT_FALSE(ctl.resultIsError());
 }
 
@@ -1067,13 +1243,13 @@ TEST(CredentialController, RegistryEventDuringMutationDoesNotRetargetBinding)
 {
     using State = Credentials::CredentialController::State;
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.hasCard = false; // reader/0 (first by path — the fallback trap) starts EMPTY
     cfg.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
     cfg.credRecords = {userPinRecord()};
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
 
     // A second reader arrives holding a manageable card; the UNBOUND controller
@@ -1081,10 +1257,10 @@ TEST(CredentialController, RegistryEventDuringMutationDoesNotRetargetBinding)
     h.emitReaderArrivesEmpty();
     const QString reader2 = QStringLiteral("/org/librescrs/Agent/reader/1");
     ASSERT_TRUE(waitFor([&]() { return client->reader(reader2) != nullptr; }));
-    const QString card2 = h.emitArrivedReaderCardAdded(Cap::PinManagement | Cap::Pki);
+    const QString card2 = h.emitArrivedReaderCardAdded(Client::Cap::PinManagement | Client::Cap::Pki);
     ASSERT_TRUE(waitFor([&]() { return client->card(card2) != nullptr; }));
     h.emitArrivedReaderHasCard();
-    ASSERT_TRUE(waitFor([&]() { return client->reader(reader2)->cardPath() == card2; }));
+    ASSERT_TRUE(waitFor([&]() { return client->reader(reader2)->cardId() == card2; }));
 
     Credentials::CredentialController ctl(client); // never bindReader() — fallback binding
     ASSERT_TRUE(waitFor([&]() { return ctl.state() == int(State::Ready); }));
@@ -1124,12 +1300,12 @@ TEST(CredentialController, StaleRebindDuringMutationExitsWorking)
 {
     using State = Credentials::CredentialController::State;
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
     cfg.credRecords = {userPinRecord()};
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
     Credentials::CredentialController ctl(client);
     ctl.bindReader(h.readerPath());
@@ -1166,13 +1342,13 @@ TEST(CredentialController, CardRemovedMidListLandsNoCard)
 {
     using State = Credentials::CredentialController::State;
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.operationDelayMs = 400; // hold the list in flight so the pull races it
     cfg.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
     cfg.credRecords = {userPinRecord()};
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
     Credentials::CredentialController ctl(client);
     ctl.bindReader(h.readerPath());
@@ -1193,13 +1369,13 @@ TEST(CredentialController, VerbFromResultDetachesInflightRelist)
 {
     using State = Credentials::CredentialController::State;
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.operationDelayMs = 200; // first mutation + its re-list run at this pace
     cfg.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
     cfg.credRecords = {userPinRecord()};
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
     Credentials::CredentialController ctl(client);
     ctl.bindReader(h.readerPath());

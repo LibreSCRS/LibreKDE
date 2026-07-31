@@ -2,12 +2,15 @@
 // SPDX-FileCopyrightText: 2026 hirashix0
 #pragma once
 
-#include "AgentOperation.h" // OperationStatus / ErrorCode for the finished slot
 #include "CardPhotoStore.h"
 #include "CardStateModel.h"
 
+#include <LibreSCRS/AgentClient/OperationPhase.h> // the phase the spinner status line renders
+#include <LibreSCRS/AgentClient/Types.h>          // FieldGroup — the identity read's result shape
+
 #include <QByteArray>
 #include <QHash>
+#include <QList>
 #include <QObject>
 #include <QPointer>
 #include <QString>
@@ -18,12 +21,14 @@
 
 #include <memory>
 
-class QDBusPendingCallWatcher;
-
-namespace LibreKDE {
+namespace LibreSCRS::AgentClient {
 class AgentClient;
 class AgentCard;
+class AgentOperation;
 class AgentReader;
+} // namespace LibreSCRS::AgentClient
+
+namespace LibreKDE {
 class SignJob;
 } // namespace LibreKDE
 
@@ -148,10 +153,10 @@ public:
     ///        `sharedAgentClient()`, so every widget (and the config dialog)
     ///        reuses ONE agent connection + ObjectManager discovery.
     explicit SmartCardHandler(QObject* parent = nullptr);
-    /// @brief Inject a client (tests pass a FakeAgent-backed `AgentClient`).
+    /// @brief Inject a client (tests pass one driven by a fake agent peer).
     ///        Co-owned: several handlers may share one client, mirroring the
     ///        production sharedAgentClient() shape.
-    explicit SmartCardHandler(std::shared_ptr<LibreKDE::AgentClient> client, QObject* parent = nullptr);
+    explicit SmartCardHandler(std::shared_ptr<LibreSCRS::AgentClient::AgentClient> client, QObject* parent = nullptr);
     ~SmartCardHandler() override;
 
     /// QML-facing — returns `CardStateModel::State` cast to int (the QML
@@ -267,9 +272,10 @@ public:
     Q_INVOKABLE void manageCredentials();
 
     /// Pure, testable seam behind `manageCredentials()`: the exact argv the
-    /// standalone credentials window's `--reader` option expects for the Reader1
-    /// object path @p readerPath — `{"--reader", readerPath}`.
-    [[nodiscard]] static QStringList credentialsLaunchArgs(const QString& readerPath);
+    /// standalone credentials window's `--reader` option expects for the opaque
+    /// reader id @p readerId — `{"--reader", readerId}`. The id is forwarded
+    /// verbatim; nothing here parses it.
+    [[nodiscard]] static QStringList credentialsLaunchArgs(const QString& readerId);
 
     /// Pure, testable: friendly display labels for raw PC/SC reader names,
     /// index-aligned with @p rawNames. Strips the pcsc-lite boilerplate
@@ -455,18 +461,20 @@ private:
     void updateBoundReaderPresent();
     /// Resolve the reader whose card the widget should reflect, honouring the
     /// bound-reader pin and (in Auto) the transient master-detail selection.
-    LibreKDE::AgentReader* pickActiveReader();
-    void bindCard(LibreKDE::AgentCard* card);
+    LibreSCRS::AgentClient::AgentReader* pickActiveReader();
+    void bindCard(LibreSCRS::AgentClient::AgentCard* card);
     void classifyActiveCard();
-    void onOperationFinished(LibreKDE::OperationStatus status, LibreKDE::ErrorCode errorCode, const QString& msgKey,
-                             const QString& msgFallback);
+    /// The identity read reached its terminal. The operation carries the whole
+    /// outcome (status / error code / call classification / agent message), so
+    /// this reads them off `m_identityOp` rather than taking them as arguments.
+    void onOperationFinished();
 
     /// Best-effort: after a successful identity read, drive `AgentCard::getPhoto`
     /// async and decode the first sealed-memfd photo into the store. A missing or
     /// failed photo is NOT surfaced as an error — it just leaves `hasCardPhoto`
     /// false. Signal-driven; no nested event loop on the GUI thread.
     void startPhotoRead();
-    void onPhotoFinished(LibreKDE::OperationStatus status);
+    void onPhotoFinished();
     void clearPhoto();
 
     /// Fire-and-forget: warm the agent's shared certificate read cache so the
@@ -476,9 +484,11 @@ private:
     /// so it is ONE shared card read. Genuinely asynchronous — the entry call
     /// never blocks the GUI thread (see AgentCard::warmCertificates). No busy
     /// state, no UI, best-effort; a card without PKI certs refuses the method at
-    /// entry and the discarded reply is the whole story.
+    /// entry and nothing is reported either way. The client debounces a warm
+    /// issued while one is still in flight for the same card, so this needs no
+    /// re-issue guard of its own.
     void warmCertificateCache();
-    void rebuildIdentityModel(const LibreKDE::IdentityFields& fields);
+    void rebuildIdentityModel(const QList<LibreSCRS::AgentClient::FieldGroup>& groups);
     void clearIdentity();
 
     void setReaderName(const QString& name);
@@ -505,22 +515,18 @@ private:
 
     void setBusy(bool busy);
     /// Store + notify the current operation phase (no-op if unchanged).
-    void setOperationPhase(LibreKDE::OperationPhase phase);
+    void setOperationPhase(LibreSCRS::AgentClient::OperationPhase phase);
 
     /// @brief Allocate a process-unique photo slot (monotonic counter).
     [[nodiscard]] static quint64 nextPhotoSlot();
 
     // Co-owned, process-shared agent client (sharedAgentClient() in production;
-    // tests inject a FakeAgent-backed one, possibly shared across handlers).
-    std::shared_ptr<LibreKDE::AgentClient> m_client;
-    QPointer<LibreKDE::AgentCard> m_card;
-    QPointer<LibreKDE::AgentOperation> m_identityOp;
-    QPointer<LibreKDE::AgentOperation> m_photoOp;
-    /// The in-flight cert pre-warm ENTRY call for the file-manager view (the
-    /// warm mints no client-side operation). Guards against stacking entry
-    /// calls; cleared by the watcher's self-delete (QPointer auto-null) and
-    /// abandoned by bindCard() on a card switch so the next card can warm.
-    QPointer<QDBusPendingCallWatcher> m_certWarmCall;
+    // tests inject one driven by a fake agent peer, possibly shared across
+    // handlers).
+    std::shared_ptr<LibreSCRS::AgentClient::AgentClient> m_client;
+    QPointer<LibreSCRS::AgentClient::AgentCard> m_card;
+    QPointer<LibreSCRS::AgentClient::AgentOperation> m_identityOp;
+    QPointer<LibreSCRS::AgentClient::AgentOperation> m_photoOp;
     QPointer<LibreKDE::SignJob> m_signJob;
     QString m_lastSignCertLabel; // set by the multi-cert pick; cleared per signFile()
     bool m_signingBusy = false;

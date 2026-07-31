@@ -5,23 +5,25 @@
 
 namespace LibreKDE::Plasmoid {
 
-CardStateModel::State CardStateModel::fromUiState(UiState ui)
+namespace Client = LibreSCRS::AgentClient;
+
+CardStateModel::State CardStateModel::fromUiState(Client::UiState ui)
 {
     switch (ui) {
-    case UiState::NoCard:
+    case Client::UiState::NoCard:
         return State::NoCard;
-    case UiState::PreAuthRequired:
+    case Client::UiState::PreAuthRequired:
         return State::PreAuthRequired;
-    case UiState::IdentityOnly:
+    case Client::UiState::IdentityOnly:
         return State::IdentityOnly;
-    case UiState::PkiOnly:
+    case Client::UiState::PkiOnly:
         return State::PkiOnly;
-    case UiState::Hybrid:
+    case Client::UiState::Hybrid:
         return State::Hybrid;
-    case UiState::UnknownCard:
+    case Client::UiState::UnknownCard:
         return State::UnknownCard;
-    case UiState::None:
-    case UiState::Error:
+    case Client::UiState::None:
+    case Client::UiState::Error:
         return State::Error;
     }
     return State::Error;
@@ -33,7 +35,8 @@ CardStateModel::State CardStateModel::classify(std::uint32_t capabilities)
     // the grouping + promotion here: a present card with no pre-read unlock and
     // identity not yet read resolves exactly to the coarse capability surface
     // (UnknownCard for an empty set, Error for an ancillary-only one).
-    return fromUiState(resolveCardState(capabilities, PreReadAuth::None, /*present=*/true, /*identityRead=*/false));
+    return fromUiState(
+        Client::resolveCardState(capabilities, Client::PreReadAuth::None, /*present=*/true, /*identityRead=*/false));
 }
 
 } // namespace LibreKDE::Plasmoid

@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 hirashix0
 #pragma once
 
-#include "CredentialTypes.h" // LibreKDE::CredentialList / CredentialRecord
+#include <LibreSCRS/AgentClient/CredentialTypes.h> // CredentialList / CredentialRecord / CredentialKind
 
 #include <QAbstractListModel>
 #include <QByteArray>
@@ -60,21 +60,21 @@ public:
 
     /// @brief Replace the backing records (a full model reset). An empty list is
     ///        a legitimate value (the controller renders the Empty placeholder).
-    void setRecords(const CredentialList& records);
+    void setRecords(const LibreSCRS::AgentClient::CredentialList& records);
 
     /// @brief The record with the given opaque id, or `std::nullopt` when the
     ///        current list no longer carries it (a stale id — the controller then
     ///        lets the agent's `UnknownCredential` recovery re-list). Used by the
     ///        verb flow to read the presented kind + `keyActivationPending`.
-    [[nodiscard]] std::optional<CredentialRecord> recordById(const QString& id) const;
+    [[nodiscard]] std::optional<LibreSCRS::AgentClient::CredentialRecord> recordById(const QString& id) const;
 
     /// @brief Row of the first record of @p kind, or -1 when none is listed. Used
     ///        by the unblock pre-flight to locate the PUK row, whose usage budget
     ///        (`usesLeft`/`usesMax`) the confirm sheet surfaces.
-    [[nodiscard]] int rowOfKind(CredentialKind kind) const;
+    [[nodiscard]] int rowOfKind(LibreSCRS::AgentClient::CredentialKind kind) const;
 
 private:
-    CredentialList m_records;
+    LibreSCRS::AgentClient::CredentialList m_records;
 };
 
 } // namespace LibreKDE::Credentials

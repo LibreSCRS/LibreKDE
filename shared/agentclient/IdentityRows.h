@@ -2,32 +2,21 @@
 // SPDX-FileCopyrightText: 2026 hirashix0
 #pragma once
 
-#include "AgentOperation.h" // LibreKDE::IdentityFields
+#include <LibreSCRS/AgentClient/IdentityRows.h>
 
-#include <QList>
 #include <QString>
 
+/// @file
+/// @brief The host half of identity-row assembly: turning the frozen label KEY
+///        the agent ships into a localized display string.
+///
+/// Structural flattening is the agent client library's job and lives there
+/// (`LibreSCRS::AgentClient::flattenIdentityFields`, which produces the
+/// `IdentityRow` below). That library deliberately never translates, so the
+/// key→label mapping is the host's, and this is where it lives — once, for
+/// every LibreKDE surface that renders identity fields.
+
 namespace LibreKDE {
-
-/// @brief One flattened Identity1 field, neutral of any presentation layer.
-///        Both the card:/ KIO worker (adapts to `IdentityFieldView`) and the
-///        plasmoid (adapts to a QVariantMap row) consume this — the single
-///        skip-binary / stringify rule lives here, reused ≥2×.
-struct IdentityRow
-{
-    QString groupKey;      ///< Group key (e.g. "personal").
-    QString fieldKey;      ///< Field key (e.g. "given_name").
-    QString labelKey;      ///< Frozen i18n key the agent ships (e.g. "field.surname"); resolver input.
-    QString labelFallback; ///< Agent-authored English label (display fallback only).
-    QString value;         ///< Stringified value; binary fields are dropped entirely.
-};
-
-/// @brief Flatten group → (field → IdentityField) into a neutral row list.
-///        Skips `type == "binary"` fields (raw photos etc.); stringifies the
-///        QDBusVariant value of every text/date field. Empty values are
-///        RETAINED (the KIO renderer shows them); a caller that wants them
-///        dropped filters locally.
-[[nodiscard]] QList<IdentityRow> flattenIdentityFields(const IdentityFields& fields);
 
 /// @brief Resolve an identity field's display label, localized.
 ///
@@ -41,6 +30,6 @@ struct IdentityRow
 ///
 /// Resolution order: the translated label for a KNOWN `labelKey`; else the
 /// agent-authored `labelFallback`; else the raw `fieldKey` (never empty).
-[[nodiscard]] QString localizedFieldLabel(const IdentityRow& row);
+[[nodiscard]] QString localizedFieldLabel(const LibreSCRS::AgentClient::IdentityRow& row);
 
 } // namespace LibreKDE

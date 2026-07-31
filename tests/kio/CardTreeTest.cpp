@@ -5,11 +5,13 @@
 // capabilities ONLY (always-reader-dir) and performs ZERO card I/O — the
 // load-bearing invariant.
 
-#include "AgentCapabilities.h"
+#include <LibreSCRS/AgentClient/AgentCapabilities.h>
 #include "CardTree.h"
 #include "FakeCardDataSource.h"
 
 #include <gtest/gtest.h>
+
+namespace Client = LibreSCRS::AgentClient;
 
 using namespace LibreKDE;
 using namespace LibreKDETest;
@@ -23,8 +25,8 @@ CardPresence presence(const QString& reader, const QString& path, std::uint32_t 
 
 TEST(CardTree, HybridCardAlwaysHasReaderDirThenIdentityAndPki)
 {
-    FakeCardDataSource src{{presence(QStringLiteral("Gemalto"), QStringLiteral("/card/0"), Cap::Pki | Cap::IdentityData,
-                                     QStringLiteral("None"))}};
+    FakeCardDataSource src{{presence(QStringLiteral("Gemalto"), QStringLiteral("/card/0"),
+                                     Client::Cap::Pki | Client::Cap::IdentityData, QStringLiteral("None"))}};
     CardTree tree(src);
 
     // Always reader-dir (NO single-card flatten).
@@ -42,7 +44,7 @@ TEST(CardTree, HybridCardAlwaysHasReaderDirThenIdentityAndPki)
 TEST(CardTree, PassportHasIdentityNoPki) // capability edge
 {
     FakeCardDataSource src{{presence(QStringLiteral("NFC"), QStringLiteral("/card/1"),
-                                     Cap::IdentityData | Cap::EmrtdCrypto, QStringLiteral("Can"))}};
+                                     Client::Cap::IdentityData | Client::Cap::EmrtdCrypto, QStringLiteral("Can"))}};
     CardTree tree(src);
     const QStringList root = tree.list(QUrl(QStringLiteral("card:/NFC")));
     EXPECT_TRUE(root.contains(QStringLiteral("Identity")));
@@ -52,7 +54,7 @@ TEST(CardTree, PassportHasIdentityNoPki) // capability edge
 TEST(CardTree, PkiOnlyTokenHasPkiNoIdentity)
 {
     FakeCardDataSource src{
-        {presence(QStringLiteral("Reader"), QStringLiteral("/card/2"), Cap::Pki, QStringLiteral("None"))}};
+        {presence(QStringLiteral("Reader"), QStringLiteral("/card/2"), Client::Cap::Pki, QStringLiteral("None"))}};
     CardTree tree(src);
     const QStringList root = tree.list(QUrl(QStringLiteral("card:/Reader")));
     EXPECT_TRUE(root.contains(QStringLiteral("PKI")));
@@ -62,7 +64,7 @@ TEST(CardTree, PkiOnlyTokenHasPkiNoIdentity)
 TEST(CardTree, PinManagementOnlyTokenHasNeitherIdentityNorPki) // capability edge
 {
     FakeCardDataSource src{
-        {presence(QStringLiteral("R"), QStringLiteral("/card/3"), Cap::PinManagement, QStringLiteral("None"))}};
+        {presence(QStringLiteral("R"), QStringLiteral("/card/3"), Client::Cap::PinManagement, QStringLiteral("None"))}};
     CardTree tree(src);
     const QStringList root = tree.list(QUrl(QStringLiteral("card:/R")));
     EXPECT_TRUE(root.contains(QStringLiteral("info.txt")));
@@ -73,8 +75,8 @@ TEST(CardTree, PinManagementOnlyTokenHasNeitherIdentityNorPki) // capability edg
 TEST(CardTree, MultipleReadersEachListed)
 {
     FakeCardDataSource src{
-        {presence(QStringLiteral("Gemalto"), QStringLiteral("/card/0"), Cap::Pki, QStringLiteral("None")),
-         presence(QStringLiteral("NFC"), QStringLiteral("/card/1"), Cap::IdentityData, QStringLiteral("Can"))}};
+        {presence(QStringLiteral("Gemalto"), QStringLiteral("/card/0"), Client::Cap::Pki, QStringLiteral("None")),
+         presence(QStringLiteral("NFC"), QStringLiteral("/card/1"), Client::Cap::IdentityData, QStringLiteral("Can"))}};
     CardTree tree(src);
     const QStringList readers = tree.list(QUrl(QStringLiteral("card:/")));
     EXPECT_EQ(readers.size(), 2);
@@ -84,8 +86,8 @@ TEST(CardTree, MultipleReadersEachListed)
 
 TEST(CardTree, ResolveClassifiesNodes)
 {
-    FakeCardDataSource src{{presence(QStringLiteral("Gemalto"), QStringLiteral("/card/0"), Cap::Pki | Cap::IdentityData,
-                                     QStringLiteral("None"))}};
+    FakeCardDataSource src{{presence(QStringLiteral("Gemalto"), QStringLiteral("/card/0"),
+                                     Client::Cap::Pki | Client::Cap::IdentityData, QStringLiteral("None"))}};
     CardTree tree(src);
     EXPECT_EQ(tree.resolve(QUrl(QStringLiteral("card:/"))).kind, NodeKind::Root);
     EXPECT_EQ(tree.resolve(QUrl(QStringLiteral("card:/Gemalto"))).kind, NodeKind::Reader);
@@ -105,7 +107,7 @@ TEST(CardTree, ResolveClassifiesNodes)
 TEST(CardTree, UnknownReaderAndMissingCapabilityResolveInvalid)
 {
     FakeCardDataSource src{
-        {presence(QStringLiteral("Reader"), QStringLiteral("/card/2"), Cap::Pki, QStringLiteral("None"))}};
+        {presence(QStringLiteral("Reader"), QStringLiteral("/card/2"), Client::Cap::Pki, QStringLiteral("None"))}};
     CardTree tree(src);
     EXPECT_EQ(tree.resolve(QUrl(QStringLiteral("card:/Nope"))).kind, NodeKind::Invalid);
     // PKI-only card has no Identity dir.
@@ -114,8 +116,8 @@ TEST(CardTree, UnknownReaderAndMissingCapabilityResolveInvalid)
 
 TEST(CardTree, ListingDoesNoCardIo) // the load-bearing zero-card-I/O test
 {
-    FakeCardDataSource src{{presence(QStringLiteral("Gemalto"), QStringLiteral("/card/0"), Cap::Pki | Cap::IdentityData,
-                                     QStringLiteral("None"))}};
+    FakeCardDataSource src{{presence(QStringLiteral("Gemalto"), QStringLiteral("/card/0"),
+                                     Client::Cap::Pki | Client::Cap::IdentityData, QStringLiteral("None"))}};
     CardTree tree(src);
     (void)tree.list(QUrl(QStringLiteral("card:/")));
     (void)tree.list(QUrl(QStringLiteral("card:/Gemalto")));

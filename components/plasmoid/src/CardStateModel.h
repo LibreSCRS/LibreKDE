@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 hirashix0
 #pragma once
 
-#include "AgentCapabilities.h"
+#include <LibreSCRS/AgentClient/AgentCapabilities.h>
 
 #include <QObject>
 
@@ -22,10 +22,10 @@ class CardStateModel
     Q_GADGET
 public:
     /// UI states; mapped 1:1 onto the QML state components under
-    /// `contents/ui/<State>.qml` (and onto `LibreKDE::UiState`).
+    /// `contents/ui/<State>.qml` (and onto the client library's `UiState`).
     enum class State {
         NoCard,           ///< No card present in any monitored reader.        (0)
-        PreAuthRequired,  ///< Card present, preReadAuthMethod() != None.      (1)
+        PreAuthRequired,  ///< Card present, a pre-read unlock is announced.   (1)
         IdentityOnly,     ///< capabilities ⊇ IdentityData, NOT Pki.           (2)
         PkiOnly,          ///< capabilities ⊇ Pki, NOT IdentityData.           (3)
         Hybrid,           ///< capabilities ⊇ {IdentityData, Pki}.             (4)
@@ -35,8 +35,8 @@ public:
     };
     Q_ENUM(State)
 
-    /// Classify a `Card1.Capabilities` bitfield (as carried on the agent's
-    /// D-Bus surface, mirrored by `LibreKDE::Cap`). An empty capability set
+    /// Classify a card capability bitfield (the agent's own capability field,
+    /// mirrored by `LibreSCRS::AgentClient::Cap`). An empty capability set
     /// (`caps == 0`, no plugin matched) maps to `UnknownCard`; an
     /// ancillary-only set (EmrtdCrypto/PinManagement without IdentityData or
     /// Pki) has no plasmoid-visible surface and maps to `Error`.
@@ -46,7 +46,7 @@ public:
     /// `UnknownCard` (an empty capability set, produced by `resolveCardState`)
     /// passes through; `None` (an ancillary-only set) collapses to `Error`;
     /// `NoCard`/`PreAuthRequired`/`Error` pass through unchanged.
-    [[nodiscard]] static State fromUiState(UiState ui);
+    [[nodiscard]] static State fromUiState(LibreSCRS::AgentClient::UiState ui);
 };
 
 } // namespace LibreKDE::Plasmoid

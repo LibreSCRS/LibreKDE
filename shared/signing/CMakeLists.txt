@@ -44,11 +44,16 @@ target_include_directories(librekde-signing
     PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
 )
-# librekde-agentclient is PUBLIC: SignJob.h -> CertSelector.h -> AgentOperation.h
-# exposes agentclient types (CertificateList) in this lib's public interface.
+# LibreAgent::ClientQt is PUBLIC: SignJob.h -> CertSelector.h exposes the agent
+# client's own value types (CertificateInfo, OperationPhase) in this lib's public
+# interface, so every consumer needs its headers too.
+#
+# librekde-agentclient is PRIVATE and only for ErrorText, the client-side map
+# from the agent's error taxonomy to localized copy: it has no counterpart in
+# the agent client library, and nothing in this lib's public headers names it.
 target_link_libraries(librekde-signing
-    PUBLIC  Qt6::Core librekde-agentclient
-    PRIVATE Qt6::DBus KF6::I18n Qt6::Widgets LibreKDELogging
+    PUBLIC  Qt6::Core LibreAgent::ClientQt
+    PRIVATE librekde-agentclient KF6::I18n Qt6::Widgets LibreKDELogging
 )
 target_compile_features(librekde-signing PUBLIC cxx_std_23)
 set_target_properties(librekde-signing PROPERTIES

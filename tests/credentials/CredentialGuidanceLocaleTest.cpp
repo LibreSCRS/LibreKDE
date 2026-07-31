@@ -19,7 +19,8 @@
 // ki18n versions) without a system-wide install.
 
 #include "CredentialText.h"
-#include "CredentialTypes.h"
+
+#include <LibreSCRS/AgentClient/CredentialTypes.h>
 
 #include <KLocalizedString>
 
@@ -32,7 +33,7 @@ using namespace LibreKDE;
 TEST(CredentialGuidanceLocale, StateNameResolvesToSerbian)
 {
     KLocalizedString::setLanguages({QStringLiteral("sr")});
-    const QString blocked = CredentialText::stateName(CredentialState::Blocked);
+    const QString blocked = CredentialText::stateName(LibreSCRS::AgentClient::CredentialState::Blocked);
     // "Blocked" (msgid) → "Блокиран" in the sr catalog — proves a real
     // translation, not the English source, comes back.
     EXPECT_EQ(blocked, QString::fromUtf8("Блокиран"));

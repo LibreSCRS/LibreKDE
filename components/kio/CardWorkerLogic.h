@@ -55,7 +55,7 @@ protected:
     ///        URL names are dedup-guarded with an index suffix so two certs that
     ///        share purpose + short certId prefix still get distinct, resolvable
     ///        folders. The returned names/certIds are the SOLE resolution key.
-    [[nodiscard]] QList<CertFolder> pkiCertFolders(const QString& cardPath, CertListResult& outResult);
+    [[nodiscard]] QList<CertFolder> pkiCertFolders(const QString& cardId, CertListResult& outResult);
     /// @brief Build the dedup-guarded folder set from an already-read cert list
     ///        (no I/O) — the single source of truth shared by listDir and doGet so
     ///        the URL segment a get() resolves against is identical to the listed
@@ -67,19 +67,23 @@ protected:
     ///        der/pem export). On a read failure @p outCerts carries the non-Ok
     ///        status (caller routes through failForRead); on an unknown folder the
     ///        returned id is empty with @p outCerts Ok.
-    [[nodiscard]] QString resolveCertId(const QString& cardPath, const QString& certFolder, CertListResult& outCerts);
+    [[nodiscard]] QString resolveCertId(const QString& cardId, const QString& certFolder, CertListResult& outCerts);
     /// @brief The STABLE (locale-independent) folder name for a cert: English
-    ///        purpose (from keyUsage) + short certId suffix. Used as a URL
-    ///        segment, so it must NOT depend on the active locale.
-    [[nodiscard]] static QString stableCertFolderName(const CertInfoView& cert);
+    ///        purpose (from keyUsage) + short certificate-id suffix. Used as a
+    ///        URL segment, so it must NOT depend on the active locale.
+    [[nodiscard]] static QString stableCertFolderName(const LibreSCRS::AgentClient::CertificateInfo& cert);
     /// @brief The localized presentation form of @p cert's folder (UDS_DISPLAY_NAME).
-    [[nodiscard]] static QString displayCertFolderName(const CertInfoView& cert, const RenderLabels& labels);
+    [[nodiscard]] static QString displayCertFolderName(const LibreSCRS::AgentClient::CertificateInfo& cert,
+                                                       const RenderLabels& labels);
     /// @brief Map a non-Ok ReadStatus to a KIO error result with localized text.
     ///        @p isDirOp distinguishes a directory enter (ERR_CANNOT_ENTER_DIRECTORY
     ///        for Unavailable) from a leaf get() (ERR_CANNOT_OPEN_FOR_READING). KIO
     ///        synthesizes the standard messages, so the localized defaults here are
     ///        the only text the result carries.
-    [[nodiscard]] KIO::WorkerResult failForRead(ReadStatus status, bool isDirOp) const;
+    ///        @p message is the read's own localized reason when it has one (see
+    ///        `CardDataSource.h`); the per-status copy below is the floor for when
+    ///        it does not.
+    [[nodiscard]] KIO::WorkerResult failForRead(ReadStatus status, bool isDirOp, const QString& message = {}) const;
 
     void addDirEntry(KIO::UDSEntry& entry, const QString& name) const;
     void addFileEntry(KIO::UDSEntry& entry, const QString& name, const QString& mime) const;

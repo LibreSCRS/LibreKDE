@@ -3,11 +3,13 @@
 
 #include "SignSeams.h"
 
-#include "AgentOperation.h" // LibreKDE::CertificateList / CertificateInfo
+#include <LibreSCRS/AgentClient/Types.h> // LibreSCRS::AgentClient::CertificateInfo
 
 #include <KLocalizedString>
 
 #include <QInputDialog>
+#include <QList>
+#include <QLocale>
 #include <QMessageBox>
 #include <QString>
 #include <QStringList>
@@ -16,13 +18,26 @@ namespace LibreKDE::Signing {
 
 LibreKDE::CertChooser widgetCertChooser()
 {
-    return [](const LibreKDE::CertificateList& cands) -> std::optional<QString> {
+    using LibreSCRS::AgentClient::CertificateInfo;
+    return [](const QList<CertificateInfo>& cands) -> std::optional<QString> {
         QStringList labels;
         labels.reserve(cands.size());
-        for (const LibreKDE::CertificateInfo& c : cands) {
-            QString label = c.subjectCn.isEmpty() ? c.certId : c.subjectCn;
-            if (!c.notAfter.isEmpty()) {
-                label += QStringLiteral(" — %1").arg(c.notAfter);
+        for (const CertificateInfo& c : cands) {
+            QString label = c.subject.isEmpty() ? c.id : c.subject;
+            if (c.notAfter.isValid()) {
+                // The expiry arrives as a QDateTime, so this chooser picks how to
+                // render it. It is a dialog label and nothing parses it back, so
+                // the user's own locale short form is the right choice.
+                //
+                // toLocalTime() is NOT optional: the agent's validity dates are
+                // parsed from zoned ISO-8601, which yields a UTC-spec QDateTime,
+                // and the short format prints that wall clock with no zone
+                // marker. Rendering it unconverted shows a cert expiring at
+                // 23:00Z as 23:00 on the previous day to anyone east of UTC. On
+                // an unzoned value — a LocalTime spec — the conversion is a
+                // no-op, so it cannot shift a date that was never zoned.
+                label +=
+                    QStringLiteral(" — %1").arg(QLocale().toString(c.notAfter.toLocalTime(), QLocale::ShortFormat));
             }
             labels << label;
         }
@@ -37,7 +52,7 @@ LibreKDE::CertChooser widgetCertChooser()
         if (idx < 0 || idx >= cands.size()) {
             return std::nullopt;
         }
-        return cands.at(idx).certId;
+        return cands.at(idx).id;
     };
 }
 

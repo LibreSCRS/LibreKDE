@@ -3,17 +3,20 @@
 
 #include "SmartCardHandler.h"
 
-#include "AgentCapabilities.h"
-#include "AgentCard.h"
-#include "AgentClient.h"
-#include "AgentOperation.h"
-#include "AgentReader.h"
 #include "ErrorText.h"
-#include "IdentityRows.h"
-#include "SealedFd.h"
-#include "SharedAgentClient.h"
+#include "IdentityRows.h" // LibreKDE::localizedFieldLabel
 #include "SignJob.h"
 #include "plasmoid_log_categories.h"
+
+#include <LibreSCRS/AgentClient/AgentCapabilities.h>
+#include <LibreSCRS/AgentClient/AgentCard.h>
+#include <LibreSCRS/AgentClient/AgentClient.h>
+#include <LibreSCRS/AgentClient/AgentOperation.h>
+#include <LibreSCRS/AgentClient/AgentReader.h>
+#include <LibreSCRS/AgentClient/IdentityRows.h>
+#include <LibreSCRS/AgentClient/SealedPayload.h>
+#include <LibreSCRS/AgentClient/SharedAgentClient.h>
+#include <LibreSCRS/AgentClient/SignOptions.h> // PhotoItem, the photo result's element type
 
 #include <KIO/CommandLauncherJob>
 #include <KLocalizedString>
@@ -22,12 +25,12 @@
 
 #include <QBuffer>
 #include <QClipboard>
-#include <QDBusPendingCallWatcher>
 #include <QDesktopServices>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QImage>
 #include <QImageReader>
+#include <QLatin1StringView>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSaveFile>
@@ -40,8 +43,60 @@
 #include <memory>
 #include <optional>
 #include <utility>
+#include <vector>
 
 namespace LibreKDE::Plasmoid {
+
+// Short local spelling for the agent client library, whose value types this
+// handler consumes directly — the flattened identity row among them. The host
+// adds only what that library will not: the label table keyed on the frozen
+// label key (IdentityRows) and the localized failure copy (ErrorText).
+namespace Client = LibreSCRS::AgentClient;
+
+namespace {
+
+// The reader/card finders the plasmoid needs, over the client's own
+// deterministic `readers()` view. They are pure functions of that list, so the
+// library does not carry them; every consumer re-adds the ones it uses.
+
+/// The first reader (in the client's id-sorted order) holding a resolvable card.
+Client::AgentReader* firstReaderWithCard(Client::AgentClient& client)
+{
+    for (Client::AgentReader* reader : client.readers()) {
+        if (reader != nullptr && reader->card() != nullptr) {
+            return reader;
+        }
+    }
+    return nullptr;
+}
+
+/// The first reader of the given friendly @p name that holds a resolvable card.
+/// Two identically-named readers collide on the first match.
+Client::AgentReader* readerWithCardByName(Client::AgentClient& client, const QString& name)
+{
+    for (Client::AgentReader* reader : client.readers()) {
+        if (reader != nullptr && reader->name() == name && reader->card() != nullptr) {
+            return reader;
+        }
+    }
+    return nullptr;
+}
+
+/// Whether the card announces a pre-read unlock, decided on the VERBATIM wire
+/// token rather than its decoded method.
+///
+/// The library's decoder maps every token it does not recognise — including a
+/// non-empty one naming a method this build has no name for — onto "no unlock
+/// required", which would let the widget read such a card without unlocking it.
+/// Deciding on the token keeps an unnamed method on the "an unlock is required"
+/// side; the empty token (a card whose property was never populated) and the
+/// literal "None" are the only two spellings that mean no unlock.
+[[nodiscard]] bool preReadUnlockRequired(const QString& token)
+{
+    return !token.isEmpty() && token != QLatin1StringView("None");
+}
+
+} // namespace
 
 quint64 SmartCardHandler::nextPhotoSlot()
 {
@@ -50,9 +105,9 @@ quint64 SmartCardHandler::nextPhotoSlot()
     return ++counter;
 }
 
-SmartCardHandler::SmartCardHandler(QObject* parent) : SmartCardHandler(LibreKDE::sharedAgentClient(), parent) {}
+SmartCardHandler::SmartCardHandler(QObject* parent) : SmartCardHandler(Client::sharedAgentClient(), parent) {}
 
-SmartCardHandler::SmartCardHandler(std::shared_ptr<LibreKDE::AgentClient> client, QObject* parent)
+SmartCardHandler::SmartCardHandler(std::shared_ptr<Client::AgentClient> client, QObject* parent)
     : QObject(parent), m_client(std::move(client))
 {
     qCInfo(LibreKDE::Plasmoid::Logging)
@@ -75,9 +130,9 @@ int SmartCardHandler::state() const noexcept
 
 void SmartCardHandler::wireClient()
 {
-    connect(m_client.get(), &LibreKDE::AgentClient::readersChanged, this, &SmartCardHandler::refresh);
-    connect(m_client.get(), &LibreKDE::AgentClient::cardChanged, this, [this](const QString&) { refresh(); });
-    connect(m_client.get(), &LibreKDE::AgentClient::availabilityChanged, this, [this](bool) { refresh(); });
+    connect(m_client.get(), &Client::AgentClient::readersChanged, this, &SmartCardHandler::refresh);
+    connect(m_client.get(), &Client::AgentClient::cardChanged, this, [this](const QString&) { refresh(); });
+    connect(m_client.get(), &Client::AgentClient::availabilityChanged, this, [this](bool) { refresh(); });
 }
 
 void SmartCardHandler::refresh()
@@ -105,7 +160,7 @@ void SmartCardHandler::refresh()
     // centralized + deterministic (sorted-path order) in AgentClient.
     updateReaderRosters();
 
-    LibreKDE::AgentReader* reader = pickActiveReader();
+    Client::AgentReader* reader = pickActiveReader();
     if (reader == nullptr) {
         bindCard(nullptr);
         updatePinManagementAvailable();
@@ -127,8 +182,7 @@ void SmartCardHandler::refresh()
 
     setCardDetected(false);
     setReaderName(reader->name());
-    LibreKDE::AgentCard* card = m_client->card(reader->cardPath());
-    bindCard(card);
+    bindCard(reader->card());
     classifyActiveCard();
 }
 
@@ -136,10 +190,10 @@ void SmartCardHandler::updateReaderRosters()
 {
     QStringList all;
     QStringList withCards;
-    const QList<LibreKDE::AgentReader*> readers = m_client->readersSortedByPath();
-    for (LibreKDE::AgentReader* reader : readers) {
+    const QList<Client::AgentReader*> readers = m_client->readers();
+    for (Client::AgentReader* reader : readers) {
         all.append(reader->name());
-        if (m_client->card(reader->cardPath()) != nullptr) {
+        if (reader->card() != nullptr) {
             withCards.append(reader->name());
         }
     }
@@ -195,15 +249,15 @@ void SmartCardHandler::updateBoundReaderPresent()
     Q_EMIT boundReaderPresentChanged();
 }
 
-LibreKDE::AgentReader* SmartCardHandler::pickActiveReader()
+Client::AgentReader* SmartCardHandler::pickActiveReader()
 {
     if (!m_boundReaderName.isEmpty()) {
         // Bound mode: ONLY the bound reader, and only when it holds a resolvable
         // card. Exact name first — stable rosters never change behaviour.
-        if (LibreKDE::AgentReader* exact = m_client->readerWithCardByName(m_boundReaderName)) {
+        if (Client::AgentReader* exact = readerWithCardByName(*m_client, m_boundReaderName)) {
             return exact;
         }
-        const QList<LibreKDE::AgentReader*> readers = m_client->readersSortedByPath();
+        const QList<Client::AgentReader*> readers = m_client->readers();
         // The same-unit fallback exists for RE-ENUMERATION (shifted trailing
         // index re-mints the entry under a new name), so it engages ONLY when
         // the bound name has vanished from the roster. While the bound reader
@@ -212,13 +266,13 @@ LibreKDE::AgentReader* SmartCardHandler::pickActiveReader()
         // serial as two simultaneous entries) a card laid on the sibling
         // interface must not capture this widget. Reader-scoped waiting is the
         // honest state.
-        for (LibreKDE::AgentReader* reader : readers) {
+        for (Client::AgentReader* reader : readers) {
             if (reader->name() == m_boundReaderName) {
                 return nullptr;
             }
         }
-        for (LibreKDE::AgentReader* reader : readers) {
-            if (sameReaderUnit(m_boundReaderName, reader->name()) && m_client->card(reader->cardPath()) != nullptr) {
+        for (Client::AgentReader* reader : readers) {
+            if (sameReaderUnit(m_boundReaderName, reader->name()) && reader->card() != nullptr) {
                 return reader;
             }
         }
@@ -227,11 +281,11 @@ LibreKDE::AgentReader* SmartCardHandler::pickActiveReader()
     // Auto mode: honour a transient master-detail pick while it still holds a
     // card; otherwise the deterministic first (mirrors firstReaderWithCard).
     if (!m_selectedReaderName.isEmpty()) {
-        if (LibreKDE::AgentReader* selected = m_client->readerWithCardByName(m_selectedReaderName)) {
+        if (Client::AgentReader* selected = readerWithCardByName(*m_client, m_selectedReaderName)) {
             return selected;
         }
     }
-    return m_client->firstReaderWithCard();
+    return firstReaderWithCard(*m_client);
 }
 
 bool SmartCardHandler::computeCardDetected() const
@@ -246,8 +300,8 @@ bool SmartCardHandler::computeCardDetected() const
         // choose. While the bound name is listed, only THAT reader's slot
         // counts — a dual-interface sibling's card must not flip the bound
         // widget's "insert a card" into "detecting".
-        const QList<LibreKDE::AgentReader*> readers = m_client->readersSortedByPath();
-        for (LibreKDE::AgentReader* reader : readers) {
+        const QList<Client::AgentReader*> readers = m_client->readers();
+        for (Client::AgentReader* reader : readers) {
             if (reader->name() == m_boundReaderName) {
                 return reader->hasCard();
             }
@@ -256,7 +310,7 @@ bool SmartCardHandler::computeCardDetected() const
         // physically reports a card is the entry pickActiveReader() will pick
         // once its Card1 resolves — scan them ALL (a transient double
         // enumeration can leave an empty stale twin sorting first).
-        for (LibreKDE::AgentReader* reader : readers) {
+        for (Client::AgentReader* reader : readers) {
             if (sameReaderUnit(m_boundReaderName, reader->name()) && reader->hasCard()) {
                 return true;
             }
@@ -264,7 +318,7 @@ bool SmartCardHandler::computeCardDetected() const
         return false;
     }
     // Auto mode: any reader physically holding a card.
-    for (LibreKDE::AgentReader* reader : m_client->readersSortedByPath()) {
+    for (Client::AgentReader* reader : m_client->readers()) {
         if (reader->hasCard()) {
             return true;
         }
@@ -306,7 +360,7 @@ void SmartCardHandler::selectReader(const QString& friendlyName)
     refresh();
 }
 
-void SmartCardHandler::bindCard(LibreKDE::AgentCard* card)
+void SmartCardHandler::bindCard(Client::AgentCard* card)
 {
     // Short-circuit only when re-binding the SAME, still-live card (a genuine
     // no-op). When `card == nullptr` we must NOT short-circuit on `m_card == card`:
@@ -334,12 +388,6 @@ void SmartCardHandler::bindCard(LibreKDE::AgentCard* card)
         m_photoOp->disconnect(this);
         m_photoOp = nullptr;
     }
-    // A card switch abandons the previous card's warm guard: the entry call has
-    // already left (its effect is agent-side only) and a held guard would block
-    // the NEW card's pre-warm. The abandoned watcher still self-deletes when
-    // its reply lands; a same-card rebind never reaches this line (the
-    // short-circuit above), so an in-flight warm for a stable card survives.
-    m_certWarmCall = nullptr;
     m_card = card;
     m_identityRead = false;
     // A new (or no) card invalidates any photo AND identity read for the previous one.
@@ -348,7 +396,7 @@ void SmartCardHandler::bindCard(LibreKDE::AgentCard* card)
     if (m_card != nullptr) {
         // A live capability change (e.g. post-PACE the agent surfaces more
         // caps) re-classifies the active card.
-        connect(m_card, &LibreKDE::AgentCard::changed, this, &SmartCardHandler::classifyActiveCard);
+        connect(m_card, &Client::AgentCard::changed, this, &SmartCardHandler::classifyActiveCard);
     }
 }
 
@@ -376,14 +424,27 @@ void SmartCardHandler::classifyActiveCard()
         return;
     }
 
-    // Single source of truth: LibreKDE::resolveCardState owns the PreAuth latch
-    // (PreReadAuthMethod != None && identity not yet read -> PreAuthRequired) and
-    // the empty-capability None -> Error / caps==0 -> UnknownCard split.
+    // The capability set arrives as stable TOKENS; the resolvers take the
+    // bitfield. capabilityBits() is the exact inverse of the tokenizer — a bit
+    // this build has no name for round-trips as "bit<i>" rather than being
+    // dropped — so the round-trip is lossless.
+    //
+    // resolveCardState owns the rest: the empty-capability None -> Error /
+    // caps==0 -> UnknownCard split, and the pre-auth latch. The latch's input is
+    // the DECODED unlock method, a vocabulary with no way to say "an unlock is
+    // required, method unknown", so the requirement is decided here off the
+    // verbatim token (preReadUnlockRequired) and only the same latch rule —
+    // it holds until an identity read has succeeded — is applied to it. With
+    // nothing left to unlock, the resolver is handed None, which is then the
+    // truthful input rather than a synthesized method.
     // fromUiState maps the result onto the plasmoid's State. (When
     // PreAuthRequired we also clear the label, matching the previous behaviour.)
-    const LibreKDE::UiState ui = LibreKDE::resolveCardState(m_card->capabilities(), m_card->preReadAuthMethod(),
-                                                            /*present=*/true, m_identityRead);
-    if (ui == LibreKDE::UiState::PreAuthRequired) {
+    const bool unlockPending = preReadUnlockRequired(m_card->preReadAuth()) && !m_identityRead;
+    const Client::UiState ui =
+        unlockPending ? Client::UiState::PreAuthRequired
+                      : Client::resolveCardState(Client::capabilityBits(m_card->capabilities()),
+                                                 Client::PreReadAuth::None, /*present=*/true, m_identityRead);
+    if (ui == Client::UiState::PreAuthRequired) {
         setCardLabel({});
     }
     transitionTo(CardStateModel::fromUiState(ui));
@@ -408,14 +469,15 @@ void SmartCardHandler::ensureFreeRead()
     if (m_card == nullptr) {
         return;
     }
-    // Only a card that needs NO pre-read unlock (PreReadAuth::None) and carries
-    // identity data has a secret-free read — the "free read" allowed
-    // on first view. Can/Mrz cards are deliberately EXCLUDED: they keep
-    // the lazy invariant (the agent would raise a CAN/MRZ prompt, which must be
-    // user-initiated; CanCardIssuesNoImplicitCardIo asserts this). The
-    // !m_identityRead guard makes repeat popup-opens no-ops; readIdentity()
-    // itself guards the in-flight case.
-    if (m_card->preReadAuthMethod() != LibreKDE::PreReadAuth::None || m_identityRead || m_identityOp != nullptr) {
+    // Only a card that announces NO pre-read unlock and carries identity data
+    // has a secret-free read — the "free read" allowed on first view. A card
+    // that announces one is deliberately EXCLUDED, whether or not this build
+    // can name the method: that keeps the lazy invariant (the agent would raise
+    // an unlock prompt, which must be user-initiated;
+    // CanCardIssuesNoImplicitCardIo asserts this). The !m_identityRead guard
+    // makes repeat popup-opens no-ops; readIdentity() itself guards the
+    // in-flight case.
+    if (preReadUnlockRequired(m_card->preReadAuth()) || m_identityRead || m_identityOp != nullptr) {
         return;
     }
     if (m_state != CardStateModel::State::IdentityOnly && m_state != CardStateModel::State::Hybrid) {
@@ -433,35 +495,33 @@ void SmartCardHandler::readIdentity()
         return; // a read is already in flight
     }
     setError({});
-    LibreKDE::AgentOperation* op = m_card->readIdentity();
-    if (op == nullptr) {
-        setError(i18nc("@info plasmoid identity read failed to start",
-                       "Could not start reading this card. Please try again."));
-        transitionTo(CardStateModel::State::Error);
-        return;
-    }
+    // Non-null on every path, including a refusal: a call the agent rejects at
+    // entry comes back as an operation that is ALREADY finished, carrying the
+    // mapped failure, so there is no null to test for and the refusal reaches
+    // the user through the same terminal handling every other outcome does.
+    Client::AgentOperation* op = m_card->readIdentity();
     m_identityOp = op;
     setBusy(true);
-    setOperationPhase(LibreKDE::OperationPhase::Created); // reset for the new read
-    connect(op, &LibreKDE::AgentOperation::finished, this, &SmartCardHandler::onOperationFinished);
-    connect(op, &LibreKDE::AgentOperation::phaseChanged, this,
-            [this](LibreKDE::OperationPhase ph, double /*progress*/) { setOperationPhase(ph); });
+    setOperationPhase(Client::OperationPhase::Created); // reset for the new read
+    connect(op, &Client::AgentOperation::finished, this, &SmartCardHandler::onOperationFinished);
+    connect(op, &Client::AgentOperation::phaseChanged, this,
+            [this](Client::OperationPhase ph, double /*progress*/) { setOperationPhase(ph); });
 }
 
 void SmartCardHandler::warmCertificateCache()
 {
-    if (m_card == nullptr || m_certWarmCall != nullptr) {
-        return; // no card, or a warm entry call is already on the wire
+    if (m_card == nullptr) {
+        return;
     }
     // Best-effort background warm: deliberately NO setBusy / NO state transition /
     // NO error surfacing — the identity view is unaffected and a failed warm just
     // leaves the file-manager PKI folder to pay its own cold read. The entry call
     // is asynchronous (AgentCard::warmCertificates), so even a wedged agent can
-    // never stall the GUI thread here. The guard only debounces stacked entry
-    // calls: once the entry reply lands the watcher self-deletes (the QPointer
-    // auto-nulls) and a later open may warm again — the agent dedups overlapping
-    // cert reads onto one shared card read, so a re-warm is harmless.
-    m_certWarmCall = m_card->warmCertificates();
+    // never stall the GUI thread here, and it mints nothing to hold: a warm
+    // issued while one is still in flight for this card is a no-op inside the
+    // client, so a later open may warm again freely — the agent dedups
+    // overlapping cert reads onto one shared card read.
+    m_card->warmCertificates();
 }
 
 void SmartCardHandler::signFile(const QString& fileUrl)
@@ -497,15 +557,16 @@ void SmartCardHandler::signFile(const QString& fileUrl)
     // itself (it fails cleanly with its own diagnostic). The agent raises its own
     // PIN prompter.
     m_lastSignCertLabel.clear();
-    LibreKDE::CertChooser pickFirstCert = [this](const LibreKDE::CertificateList& cands) -> std::optional<QString> {
+    LibreKDE::CertChooser pickFirstCert =
+        [this](const QList<Client::CertificateInfo>& cands) -> std::optional<QString> {
         if (cands.isEmpty()) {
             return std::nullopt;
         }
         // Only reached for a MULTI-cert card (SignJob auto-picks a lone cert):
         // remember the picked cert's display name for the success message.
-        const LibreKDE::CertificateInfo& picked = cands.first();
-        m_lastSignCertLabel = picked.subjectCn.isEmpty() ? picked.certId : picked.subjectCn;
-        return std::optional<QString>(picked.certId);
+        const Client::CertificateInfo& picked = cands.first();
+        m_lastSignCertLabel = picked.subject.isEmpty() ? picked.id : picked.subject;
+        return std::optional<QString>(picked.id);
     };
     LibreKDE::OverwriteConfirmer allowOverwrite = [](const QString&) { return true; };
 
@@ -513,9 +574,9 @@ void SmartCardHandler::signFile(const QString& fileUrl)
     m_signJob = job;
     m_signingBusy = true;
     Q_EMIT signingBusyChanged();
-    setOperationPhase(LibreKDE::OperationPhase::Created); // reset for the new sign
+    setOperationPhase(Client::OperationPhase::Created); // reset for the new sign
     connect(job, &LibreKDE::SignJob::phaseChanged, this,
-            [this](LibreKDE::OperationPhase ph, double /*progress*/) { setOperationPhase(ph); });
+            [this](Client::OperationPhase ph, double /*progress*/) { setOperationPhase(ph); });
 
     connect(job, &LibreKDE::SignJob::succeeded, this, [this, job](const QString& outputPath) {
         m_signJob = nullptr;
@@ -540,21 +601,37 @@ void SmartCardHandler::signFile(const QString& fileUrl)
     job->start();
 }
 
-void SmartCardHandler::onOperationFinished(LibreKDE::OperationStatus status, LibreKDE::ErrorCode errorCode,
-                                           const QString& /*msgKey*/, const QString& msgFallback)
+void SmartCardHandler::onOperationFinished()
 {
-    LibreKDE::AgentOperation* op = m_identityOp;
+    Client::AgentOperation* op = m_identityOp;
     m_identityOp = nullptr;
     setBusy(false);
-    if (status != LibreKDE::OperationStatus::Ok) {
-        setError(LibreKDE::ErrorText::forCode(errorCode, msgFallback));
+    if (op == nullptr) {
+        return; // the op was reaped between the terminal and this slot
+    }
+    if (op->status() != Client::OperationStatus::Ok) {
+        // ONE rule for every non-Ok outcome, cancels included — the shape the
+        // already-migrated signing core and card:/ worker both use, neither of
+        // which special-cases a cancel in its copy path.
+        //
+        // A cancel needs no gate of its own, on any route that produces one
+        // here. The two client-side sweeps carry a MAPPED error code (the agent
+        // going away -> communication error, the card being pulled -> card
+        // removed), so the rule's first arm renders this client's own localized
+        // copy for it — which is exactly what this component rendered before the
+        // move, since the host sweeps it replaced used those same two codes. A
+        // cancel that came off the wire carries no code and no classification,
+        // only the agent's own message, which the rule's third arm hands back
+        // verbatim — the same string a code-only lookup produced. And where the
+        // agent sent no message either, the rule's localized floor is the only
+        // copy left, which beats the blank banner a code-only lookup would
+        // leave behind.
+        setError(LibreKDE::ErrorText::forOutcome(op->errorCode(), op->callError(), op->messageFallback()));
         transitionTo(CardStateModel::State::Error);
         return;
     }
     m_identityRead = true;
-    if (op != nullptr) {
-        rebuildIdentityModel(op->identityResult());
-    }
+    rebuildIdentityModel(op->identityResult());
     classifyActiveCard();
     // The identity is in hand; opportunistically fetch the face photo. Best
     // effort — a card with no photo (or a photo read that fails) must not turn a
@@ -570,50 +647,60 @@ void SmartCardHandler::startPhotoRead()
     if (m_photoOp != nullptr) {
         return; // a photo read is already in flight
     }
-    LibreKDE::AgentOperation* op = m_card->getPhoto();
-    if (op == nullptr) {
-        // No photo capability / could not start — hasCardPhoto stays false, but
-        // the refusal must be diagnosable (AgentCard logs the D-Bus error too).
-        qCWarning(LibreKDE::Plasmoid::Logging) << "photo read could not start on" << m_readerName << "— no photo shown";
-        return;
-    }
+    // Non-null on every path, refusal included (see readIdentity): a card
+    // without a photo surface comes back already finished, and the terminal
+    // handler below logs why and leaves hasCardPhoto false.
+    Client::AgentOperation* op = m_card->getPhoto();
     m_photoOp = op;
-    connect(op, &LibreKDE::AgentOperation::phaseChanged, this,
-            [this](LibreKDE::OperationPhase ph, double /*progress*/) { setOperationPhase(ph); });
-    // Drive on the op's terminal signal (queued per the agentclient terminal
+    connect(op, &Client::AgentOperation::phaseChanged, this,
+            [this](Client::OperationPhase ph, double /*progress*/) { setOperationPhase(ph); });
+    // Drive on the op's terminal signal (queued per the client's terminal
     // discipline). Async/signal-driven: NO nested QEventLoop — the plasmoid runs
     // on the GUI event loop. If the card is pulled mid-read the op is destroyed
     // and this connection auto-disconnects (QPointer also guards reentry).
-    connect(op, &LibreKDE::AgentOperation::finished, this,
-            [this](LibreKDE::OperationStatus status, LibreKDE::ErrorCode code, const QString&, const QString& message) {
-                if (status != LibreKDE::OperationStatus::Ok) {
-                    qCWarning(LibreKDE::Plasmoid::Logging).noquote()
-                        << "photo read failed:" << static_cast<int>(code) << message;
-                }
-                onPhotoFinished(status);
-            });
+    connect(op, &Client::AgentOperation::finished, this, &SmartCardHandler::onPhotoFinished);
 }
 
-void SmartCardHandler::onPhotoFinished(LibreKDE::OperationStatus status)
+void SmartCardHandler::onPhotoFinished()
 {
-    LibreKDE::AgentOperation* op = m_photoOp;
+    Client::AgentOperation* op = m_photoOp;
     m_photoOp = nullptr;
-    if (op == nullptr || status != LibreKDE::OperationStatus::Ok) {
-        return; // best effort: no photo shown; the finished hook logged why
+    if (op == nullptr) {
+        return;
     }
-    const LibreKDE::PhotoMap& photos = op->photoResult();
-    if (photos.isEmpty()) {
+    if (op->status() != Client::OperationStatus::Ok) {
+        // Best effort: no photo shown. Say why — a refused entry lands here too.
+        qCWarning(LibreKDE::Plasmoid::Logging).noquote()
+            << "photo read failed:" << static_cast<int>(op->errorCode()) << op->messageFallback();
+        return;
+    }
+    const std::vector<Client::PhotoItem> photos = op->takePhotos();
+    if (photos.empty()) {
         // Graceful absence, not an error — but distinguishable from a failure.
         qCInfo(LibreKDE::Plasmoid::Logging) << "card carries no photo";
         return;
     }
-    // v1: surface the FIRST photo entry. (A future layout could expose every
-    // "group:field" photo; the key is split on the first ':' only if parsed.)
-    const QByteArray bytes = readSealedFd(photos.constBegin().value());
-    if (bytes.isEmpty()) {
-        qCWarning(LibreKDE::Plasmoid::Logging) << "photo payload unreadable (sealed fd empty)";
+    // v1: surface the FIRST photo item. (A future layout could expose every
+    // keyed photo.) Which item that is depends on the transport, so this picks
+    // "a photo", not "the portrait": the D-Bus transport builds the vector by
+    // walking a key-sorted map, so first means lowest key, while the socket
+    // transport preserves the order the agent sent. Every card supported today
+    // carries at most one, so the two agree in practice.
+    const std::optional<QByteArray> payload = Client::readBoundedPayload(photos.front().fd);
+    if (!payload.has_value()) {
+        // A genuine read failure, kept distinct from the empty-but-valid case
+        // below — the reader separates them deliberately (a disengaged optional
+        // means the descriptor was unusable, refused or short-read).
+        qCWarning(LibreKDE::Plasmoid::Logging) << "photo payload could not be read";
         return;
     }
+    if (payload->isEmpty()) {
+        // A legitimately zero-length payload: the card announced a photo field
+        // and delivered no bytes. Absence, not failure.
+        qCInfo(LibreKDE::Plasmoid::Logging) << "photo payload is empty — no photo shown";
+        return;
+    }
+    const QByteArray bytes = *payload;
     // Let Qt sniff the format. eMRTD photos may be JPEG2000; Qt decodes it iff the
     // jp2 image plugin is present, otherwise QImage::fromData yields a null image,
     // which the QML treats exactly like "no photo".
@@ -696,7 +783,8 @@ void SmartCardHandler::updatePinManagementAvailable()
     // signal is what keeps the QML launcher affordance live: transitionTo()
     // dedupes stateChanged, so a capability flip that keeps the coarse state
     // (Hybrid stays Hybrid) fires only this.
-    const bool available = m_card && LibreKDE::has(m_card->capabilities(), LibreKDE::Cap::PinManagement);
+    const bool available =
+        m_card && Client::has(Client::capabilityBits(m_card->capabilities()), Client::Cap::PinManagement);
     if (m_pinManagementAvailable == available) {
         return;
     }
@@ -704,9 +792,9 @@ void SmartCardHandler::updatePinManagementAvailable()
     Q_EMIT pinManagementAvailableChanged();
 }
 
-QStringList SmartCardHandler::credentialsLaunchArgs(const QString& readerPath)
+QStringList SmartCardHandler::credentialsLaunchArgs(const QString& readerId)
 {
-    return {QStringLiteral("--reader"), readerPath};
+    return {QStringLiteral("--reader"), readerId};
 }
 
 namespace {
@@ -851,14 +939,14 @@ void SmartCardHandler::manageCredentials()
     if (!m_card) {
         return;
     }
-    const QString readerPath = m_card->readerPath(); // Reader1 object path
+    const QString readerId = m_card->readerId(); // the reader the window binds to
     // CommandLauncherJob (vs ApplicationLauncherJob's URL-only surface) takes an
-    // explicit executable + argument list, so `--reader <path>` passes cleanly,
+    // explicit executable + argument list, so `--reader <id>` passes cleanly,
     // AND it supplies the startup-notification / Wayland activation token. The
     // window is KDBusService::Unique: a second launch raises + re-targets
     // the running instance, its argv reaching the window via activateRequested.
     auto* job =
-        new KIO::CommandLauncherJob(QString::fromLatin1(kCredentialsExe), credentialsLaunchArgs(readerPath), this);
+        new KIO::CommandLauncherJob(QString::fromLatin1(kCredentialsExe), credentialsLaunchArgs(readerId), this);
     job->setDesktopName(QStringLiteral("org.librescrs.credentials")); // startup-notify id
     job->start();
 }
@@ -926,22 +1014,23 @@ void SmartCardHandler::setAgentInstalled(bool installed)
     Q_EMIT agentInstalledChanged();
 }
 
-void SmartCardHandler::rebuildIdentityModel(const LibreKDE::IdentityFields& fields)
+void SmartCardHandler::rebuildIdentityModel(const QList<Client::FieldGroup>& groups)
 {
-    // Reuse the shared flatten (skip-binary + stringify) — the SAME rule the
-    // card:/ KIO worker uses (AgentCardDataSource -> flattenIdentityFields). The
-    // plasmoid additionally drops empty-value rows (a blank summary/expander row
-    // looks broken in a popup) and adapts to QVariantMap for the QML Repeater.
+    // Reuse the client library's flatten (skip-binary + stringify) — the SAME
+    // rule the card:/ KIO worker uses. The plasmoid additionally drops
+    // empty-value rows (a blank summary/expander row looks broken in a popup)
+    // and adapts to QVariantMap for the QML Repeater.
     QVariantList flat;
-    for (const LibreKDE::IdentityRow& row : LibreKDE::flattenIdentityFields(fields)) {
+    for (const Client::IdentityRow& row : Client::flattenIdentityFields(groups)) {
         if (row.value.isEmpty()) {
             continue;
         }
         QVariantMap out;
         out.insert(QStringLiteral("groupKey"), row.groupKey);
         out.insert(QStringLiteral("fieldKey"), row.fieldKey);
-        // Localize via the frozen labelKey the agent ships (shared resolver — the
-        // SAME rule the card:/ worker uses), falling back to the English label.
+        // Localize via the frozen label key the agent ships (the host's own
+        // table — the SAME rule the card:/ worker uses), falling back to the
+        // agent's English label.
         out.insert(QStringLiteral("label"), LibreKDE::localizedFieldLabel(row));
         out.insert(QStringLiteral("value"), row.value);
         flat.append(out);
@@ -1195,26 +1284,26 @@ void SmartCardHandler::setBusy(bool busy)
 
 QString SmartCardHandler::operationPhaseLabel(int phase) const
 {
-    switch (static_cast<LibreKDE::OperationPhase>(phase)) {
-    case LibreKDE::OperationPhase::Reading:
+    switch (static_cast<Client::OperationPhase>(phase)) {
+    case Client::OperationPhase::Reading:
         return ki18nc("@info:status reading data from the card", "Reading card…").toString();
-    case LibreKDE::OperationPhase::AwaitingConsent:
+    case Client::OperationPhase::AwaitingConsent:
         return ki18nc("@info:status waiting for PIN/CAN in the secure prompt", "Waiting for input…").toString();
-    case LibreKDE::OperationPhase::Authenticating:
+    case Client::OperationPhase::Authenticating:
         return ki18nc("@info:status verifying the entered secret on the card", "Verifying…").toString();
-    case LibreKDE::OperationPhase::Signing:
+    case Client::OperationPhase::Signing:
         return ki18nc("@info:status producing the signature on the card", "Signing…").toString();
-    case LibreKDE::OperationPhase::Timestamping:
+    case Client::OperationPhase::Timestamping:
         return ki18nc("@info:status attaching a trusted timestamp", "Adding timestamp…").toString();
-    case LibreKDE::OperationPhase::Created:
-    case LibreKDE::OperationPhase::Connecting:
-    case LibreKDE::OperationPhase::Done:
+    case Client::OperationPhase::Created:
+    case Client::OperationPhase::Connecting:
+    case Client::OperationPhase::Done:
         break;
     }
     return ki18nc("@info:status generic in-progress card operation", "Working…").toString();
 }
 
-void SmartCardHandler::setOperationPhase(LibreKDE::OperationPhase phase)
+void SmartCardHandler::setOperationPhase(Client::OperationPhase phase)
 {
     const int p = static_cast<int>(phase);
     if (m_operationPhase == p) {

@@ -3,20 +3,23 @@
 
 #include "CredentialController.h"
 
-#include "AgentCapabilities.h"
-#include "AgentCard.h"
-#include "AgentClient.h"
-#include "AgentOperation.h"
-#include "AgentReader.h"
 #include "CredentialText.h"
-#include "SharedAgentClient.h"
+#include "ErrorText.h"
+
+#include <LibreSCRS/AgentClient/AgentCapabilities.h>
+#include <LibreSCRS/AgentClient/AgentCard.h>
+#include <LibreSCRS/AgentClient/AgentClient.h>
+#include <LibreSCRS/AgentClient/AgentOperation.h>
+#include <LibreSCRS/AgentClient/AgentReader.h>
+#include <LibreSCRS/AgentClient/SharedAgentClient.h>
+#include <LibreSCRS/AgentClient/SignOptions.h> // PinVerb, ManagePinOptions
 
 #include <KLocalizedString>
 
-#include <QLatin1StringView>
 #include <QLoggingCategory>
 #include <QTextDocument> // Qt::mightBeRichText
 
+#include <optional>
 #include <utility>
 
 namespace {
@@ -25,11 +28,36 @@ Q_LOGGING_CATEGORY(lcCredentials, "librekde.credentials.controller")
 
 namespace LibreKDE::Credentials {
 
-CredentialController::CredentialController(QObject* parent)
-    : CredentialController(LibreKDE::sharedAgentClient(), parent)
+// Short local spelling for the agent client library, whose credential
+// vocabulary and error taxonomy this window consumes directly. The localized
+// copy for that vocabulary (CredentialText, ErrorText) is keyed on these very
+// types — translation stays with the host, the types stay with the library, and
+// there is no second spelling of either to cross.
+namespace Client = LibreSCRS::AgentClient;
+
+namespace {
+
+// The reader finder this window needs, over the client's own deterministic
+// `readers()` view. It is a pure function of that list, so the library does not
+// carry it; every consumer re-adds the ones it uses.
+
+/// The first reader (in the client's id-sorted order) holding a resolvable card.
+Client::AgentReader* firstReaderWithCard(Client::AgentClient& client)
+{
+    for (Client::AgentReader* reader : client.readers()) {
+        if (reader != nullptr && reader->card() != nullptr) {
+            return reader;
+        }
+    }
+    return nullptr;
+}
+
+} // namespace
+
+CredentialController::CredentialController(QObject* parent) : CredentialController(Client::sharedAgentClient(), parent)
 {}
 
-CredentialController::CredentialController(std::shared_ptr<LibreKDE::AgentClient> client, QObject* parent)
+CredentialController::CredentialController(std::shared_ptr<Client::AgentClient> client, QObject* parent)
     : QObject(parent), m_client(std::move(client))
 {
     // The model must exist before the first refresh() (classify may populate /
@@ -55,27 +83,27 @@ void CredentialController::wireClient()
         return;
     }
     // Any registry change re-resolves the bound reader/card and re-classifies.
-    connect(m_client.get(), &LibreKDE::AgentClient::readersChanged, this, &CredentialController::refresh);
-    connect(m_client.get(), &LibreKDE::AgentClient::cardChanged, this, [this](const QString&) { refresh(); });
-    connect(m_client.get(), &LibreKDE::AgentClient::availabilityChanged, this, [this](bool) { refresh(); });
+    connect(m_client.get(), &Client::AgentClient::readersChanged, this, &CredentialController::refresh);
+    connect(m_client.get(), &Client::AgentClient::cardChanged, this, [this](const QString&) { refresh(); });
+    connect(m_client.get(), &Client::AgentClient::availabilityChanged, this, [this](bool) { refresh(); });
 }
 
-void CredentialController::bindReader(const QString& readerPath)
+void CredentialController::bindReader(const QString& readerId)
 {
-    // Always refresh — a re-bind of the SAME path is a legitimate re-target (a
+    // Always refresh — a re-bind of the SAME id is a legitimate re-target (a
     // second window launch raises the existing one and re-classifies, since the
     // card may have been swapped while the window was hidden).
     //
     // An explicit re-bind that targets a DIFFERENT reader than the one the
     // binding currently resolves to is user intent to abandon the in-flight
     // verb: detach it here so refresh()'s mutation guard no longer defers the
-    // re-target. A re-bind of the reader ALREADY being managed (same path, or
+    // re-target. A re-bind of the reader ALREADY being managed (same id, or
     // the explicit form of the current fallback) keeps the running verb — a
     // second launch must never cancel the user's own PIN change on that card.
-    if (m_mutationOp != nullptr && readerPath != m_resolvedReaderPath) {
+    if (m_mutationOp != nullptr && readerId != m_resolvedReaderId) {
         detachMutation();
         // The detach abandons the verb's mandatory post-mutation re-list — and
-        // when the new path is stale/unresolvable, refresh()'s fallback can
+        // when the new id is stale/unresolvable, refresh()'s fallback can
         // re-resolve to the SAME card: bindCard() then short-circuits (no
         // resetListState) and startListCredentials() early-returns on the
         // settled latch, so NO transition would ever fire — the window would
@@ -87,7 +115,7 @@ void CredentialController::bindReader(const QString& readerPath)
         // registry events stay deferred by refresh()'s mutation guard.
         resetListState();
     }
-    m_readerPath = readerPath;
+    m_readerId = readerId;
     refresh();
 }
 
@@ -96,7 +124,7 @@ void CredentialController::refresh()
     // Availability first: an unreachable agent is a client-level state, not a
     // NoCard. isAvailable() is a cached, non-blocking flag.
     if (!m_client || !m_client->isAvailable()) {
-        m_resolvedReaderPath.clear();
+        m_resolvedReaderId.clear();
         bindCard(nullptr);
         setReaderName({});
         transitionTo(State::AgentUnavailable);
@@ -117,28 +145,27 @@ void CredentialController::refresh()
         return;
     }
 
-    LibreKDE::AgentReader* reader = m_readerPath.isEmpty() ? nullptr : m_client->reader(m_readerPath);
+    Client::AgentReader* reader = m_readerId.isEmpty() ? nullptr : m_client->reader(m_readerId);
     if (reader == nullptr) {
         // A missing or stale --reader falls back to the first reader
         // holding a card, so the window manages the obvious card instead of
-        // dead-ending on NoCard. The explicit binding stays sticky (m_readerPath
+        // dead-ending on NoCard. The explicit binding stays sticky (m_readerId
         // is untouched): should the bound reader (re)appear, it wins again on
         // the next registry event.
-        reader = m_client->firstReaderWithCard();
+        reader = firstReaderWithCard(*m_client);
     }
     if (reader == nullptr) {
         // Unbound with no fallback target: no card to manage anywhere.
-        m_resolvedReaderPath.clear();
+        m_resolvedReaderId.clear();
         bindCard(nullptr);
         setReaderName({});
         transitionTo(State::NoCard);
         return;
     }
 
-    m_resolvedReaderPath = reader->path();
+    m_resolvedReaderId = reader->id();
     setReaderName(reader->name());
-    LibreKDE::AgentCard* card = m_client->card(reader->cardPath());
-    bindCard(card);
+    bindCard(reader->card());
     classify();
 }
 
@@ -152,7 +179,9 @@ void CredentialController::classify()
     }
     // A card that does not advertise PIN management has no surface here (identity
     // reading / signing live in the plasmoid + Purpose plugin, not this window).
-    if (!LibreKDE::has(m_card->capabilities(), LibreKDE::Cap::PinManagement)) {
+    // The capability set arrives as wire tokens; the bitfield bridge is how the
+    // library's own pure helpers consume them.
+    if (!Client::has(Client::capabilityBits(m_card->capabilities()), Client::Cap::PinManagement)) {
         resetListState();
         m_model->setRecords({});
         transitionTo(State::NotManageable);
@@ -190,18 +219,20 @@ void CredentialController::startListCredentials()
     if (m_listOp != nullptr || m_listSettled) {
         return;
     }
-    LibreKDE::AgentOperation* op = m_card->listCredentials();
-    if (op == nullptr) {
-        // Method-entry throw (see AgentCard::lastCredentialError()): treat as a
-        // transient read failure (NOT "unsupported") — left re-fetchable, since an
-        // entry throw never reached a prompt, so re-attempting can't re-prompt. If a
-        // post-mutation re-list is what threw, release the result-hold so ReadFailed
-        // is rendered plainly (not held behind a stale banner).
-        m_showingResult = false;
-        m_model->setRecords({});
-        transitionTo(State::ReadFailed);
-        return;
-    }
+    // Non-null by contract, including for a refusal the agent makes at method
+    // entry: that comes back as an operation which terminalizes immediately, so
+    // the refusal reaches onListFinished as a non-Ok terminal and lands on
+    // ReadFailed there — a transient read failure (NOT "unsupported"), left
+    // re-fetchable, since an entry refusal never reached a prompt and
+    // re-attempting cannot re-prompt.
+    //
+    // Which means a refused read now shows the Loading spinner for the one
+    // event-loop turn before its queued terminal arrives, where it used to reach
+    // ReadFailed with no spinner at all. The list-path counterpart of the mutation
+    // path's extra Working state, and benign for the same reason — but stated here
+    // because it IS a visible difference, and pinned as a sequence by
+    // ListRefusedAtEntryLandsReadFailed rather than left to drift.
+    Client::AgentOperation* op = m_card->listCredentials();
     m_listOp = op;
     // Suppress the Loading spinner while a just-finished verb's Result banner is
     // still up (the mandatory post-mutation re-list): the outcome must stay visible
@@ -210,18 +241,15 @@ void CredentialController::startListCredentials()
         transitionTo(State::Loading);
     }
     // Drive the whole outcome off the terminal `finished` alone. The Credentials
-    // Result races with Finished (the fake and the agent emit it for EVERY
-    // completed attempt, Ok AND error), so keying off credentialsResultReady would
-    // be order-dependent; by `finished(Ok)` the credentials result is guaranteed
-    // populated (AgentOperation's GetResult recovery runs before it, else the op
-    // finishes Error), so reading it here is race-free.
-    connect(op, &LibreKDE::AgentOperation::finished, this,
-            [this, op](LibreKDE::OperationStatus status, LibreKDE::ErrorCode, const QString&, const QString&) {
-                onListFinished(static_cast<int>(status), op);
-            });
+    // Result races Finished (the agent delivers it for EVERY completed attempt, Ok
+    // AND error), so keying off a result signal would be order-dependent; the
+    // library settles every polled value and the typed result BEFORE `finished`
+    // fires, so reading them in the slot is race-free. The terminal carries no
+    // arguments — the slot polls the operation instead.
+    connect(op, &Client::AgentOperation::finished, this, [this, op]() { onListFinished(op); });
 }
 
-void CredentialController::onListFinished(int status, LibreKDE::AgentOperation* op)
+void CredentialController::onListFinished(Client::AgentOperation* op)
 {
     // Release the op-latch on EVERY terminal path so a later re-classify/refresh
     // is never blocked by a stale pointer (the op is parented to the card; we just
@@ -235,12 +263,17 @@ void CredentialController::onListFinished(int status, LibreKDE::AgentOperation* 
     // Ready/Empty/ReadFailed transition below actually clears the Result banner.
     m_showingResult = false;
 
-    if (status == static_cast<int>(LibreKDE::OperationStatus::Ok)) {
+    const Client::OperationStatus status = op->status();
+    if (status == Client::OperationStatus::Ok) {
         m_listSettled = true; // loaded — don't re-fetch on an incidental re-classify
-        m_model->setRecords(op->credentialsResult());
+        // Read the list ONCE. It is returned by value, so a second call would be
+        // correct today — but hoisting means a later change turning it into a
+        // take-once accessor cannot silently leave the second read empty.
+        const Client::CredentialList records = op->credentialsResult();
+        m_model->setRecords(records);
         // An empty list is a manageable card with nothing to act on (distinct from
         // NotManageable — a card outside this window's scope).
-        transitionTo(op->credentialsResult().isEmpty() ? State::Empty : State::Ready);
+        transitionTo(records.isEmpty() ? State::Empty : State::Ready);
         return;
     }
 
@@ -256,7 +289,7 @@ void CredentialController::onListFinished(int status, LibreKDE::AgentOperation* 
     //                     explicit refresh() retries) — no tight auto-retry loop,
     //                     since only discrete external events call classify().
     m_model->setRecords({});
-    m_listSettled = cancelRequested || status == static_cast<int>(LibreKDE::OperationStatus::Cancelled);
+    m_listSettled = cancelRequested || status == Client::OperationStatus::Cancelled;
     transitionTo(State::ReadFailed);
 }
 
@@ -277,7 +310,7 @@ void CredentialController::resetListState()
     m_showingResult = false;
 }
 
-void CredentialController::bindCard(LibreKDE::AgentCard* card)
+void CredentialController::bindCard(Client::AgentCard* card)
 {
     // Short-circuit only when re-binding the SAME, still-live card. With
     // `card == nullptr` we must NOT short-circuit on `m_card == card`: a removed
@@ -306,7 +339,7 @@ void CredentialController::bindCard(LibreKDE::AgentCard* card)
         setRemovalNotice({});
         // A live capability change (e.g. the agent surfaces PinManagement after a
         // pre-read unlock) re-classifies the active card.
-        connect(m_card, &LibreKDE::AgentCard::changed, this, &CredentialController::classify);
+        connect(m_card, &Client::AgentCard::changed, this, &CredentialController::classify);
     }
 }
 
@@ -321,7 +354,7 @@ void CredentialController::detachMutation()
         m_mutationOp = nullptr;
     }
     m_mutationCancelRequested = false;
-    m_pendingPresentedKind = LibreKDE::CredentialKind::Unknown;
+    m_pendingPresentedKind = Client::CredentialKind::Unknown;
 }
 
 void CredentialController::cancel()
@@ -359,10 +392,10 @@ void CredentialController::cancel()
 // mandatory post-mutation re-list. Attribution: the presented kind is
 // stashed at invoke time, while the record it names is still in the model.
 
-LibreKDE::CredentialKind CredentialController::kindOf(const QString& id) const
+Client::CredentialKind CredentialController::kindOf(const QString& id) const
 {
-    const std::optional<LibreKDE::CredentialRecord> rec = m_model->recordById(id);
-    return rec ? rec->kind : LibreKDE::CredentialKind::Unknown;
+    const std::optional<Client::CredentialRecord> rec = m_model->recordById(id);
+    return rec ? rec->kind : Client::CredentialKind::Unknown;
 }
 
 bool CredentialController::canStartMutation() const
@@ -379,7 +412,9 @@ void CredentialController::changePin(const QString& id)
         return;
     }
     m_pendingPresentedKind = kindOf(id);
-    beginMutation(m_card->managePin(id, QStringLiteral("change"), {}), m_pendingPresentedKind);
+    // Change: the holder replaces a known-good secret with a new one — the verb
+    // whose documented meaning is exactly that, not merely the one spelled alike.
+    beginMutation(m_card->managePin(id, Client::PinVerb::Change), m_pendingPresentedKind);
 }
 
 void CredentialController::activate(const QString& id)
@@ -389,10 +424,14 @@ void CredentialController::activate(const QString& id)
     }
     m_pendingPresentedKind = kindOf(id);
     // Bring the on-card signing key up in the SAME flow when it is pending, so the
-    // user is not asked for the (spent) transport value a second time.
-    const std::optional<LibreKDE::CredentialRecord> rec = m_model->recordById(id);
-    const QVariantMap options{{QStringLiteral("activateKey"), rec && rec->keyActivationPending}};
-    beginMutation(m_card->managePin(id, QStringLiteral("activate_pin"), options), m_pendingPresentedKind);
+    // user is not asked for the (spent) transport value a second time. The option
+    // bag is a typed struct with a CLOSED field set and no pass-through, so this is
+    // the only structural option this verb can carry.
+    const std::optional<Client::CredentialRecord> rec = m_model->recordById(id);
+    const Client::ManagePinOptions options{.activateKey = rec && rec->keyActivationPending};
+    // ActivatePin: this record is a TRANSPORT secret being moved to operational
+    // (first use), which is the enumerator's documented meaning.
+    beginMutation(m_card->managePin(id, Client::PinVerb::ActivatePin, options), m_pendingPresentedKind);
 }
 
 void CredentialController::activateSigningKey(const QString& id)
@@ -402,7 +441,7 @@ void CredentialController::activateSigningKey(const QString& id)
         return;
     }
     // Attribution: a standalone key activation presents the Signing PIN.
-    m_pendingPresentedKind = LibreKDE::CredentialKind::Sign;
+    m_pendingPresentedKind = Client::CredentialKind::Sign;
     beginMutation(m_card->activateSigningKey(), m_pendingPresentedKind);
 }
 
@@ -418,7 +457,7 @@ void CredentialController::requestUnblock(const QString& id)
     // launch the sheet. No card I/O here — the PUK is entered in the agent's
     // prompter after the user confirms (confirmUnblock).
     QString budget;
-    const int pukRow = m_model->rowOfKind(LibreKDE::CredentialKind::Puk);
+    const int pukRow = m_model->rowOfKind(Client::CredentialKind::Puk);
     if (pukRow >= 0) {
         const QString pukId = m_model->data(m_model->index(pukRow), CredentialModel::IdRole).toString();
         if (const auto puk = m_model->recordById(pukId)) {
@@ -427,7 +466,7 @@ void CredentialController::requestUnblock(const QString& id)
             // spends one of here. Attributed to the PUK (the sheet carries no
             // header). NOT the DOCP reset counter (unblocksLeft), which counts
             // retry-counter resets, not PIN unblocks.
-            const QString who = LibreKDE::CredentialText::kindName(LibreKDE::CredentialKind::Puk);
+            const QString who = LibreKDE::CredentialText::kindName(Client::CredentialKind::Puk);
             if (puk->usesLeft.has_value()) {
                 budget = puk->usesMax.has_value()
                              ? ki18ndc("librekde", "unblock sheet: %1 PUK name, %2/%3 remaining/total unblocks",
@@ -454,77 +493,108 @@ void CredentialController::confirmUnblock(const QString& id)
     }
     // Attribution: unblock presents the PUK, so the result's counters
     // describe the PUK — regardless of which PIN is being unblocked.
-    m_pendingPresentedKind = LibreKDE::CredentialKind::Puk;
-    beginMutation(m_card->managePin(id, QStringLiteral("unblock"), {}), m_pendingPresentedKind);
+    m_pendingPresentedKind = Client::CredentialKind::Puk;
+    // Unblock: a blocked credential recovered through its PUK path — the
+    // enumerator that names that recovery, which is what this flow does.
+    beginMutation(m_card->managePin(id, Client::PinVerb::Unblock), m_pendingPresentedKind);
 }
 
-void CredentialController::beginMutation(LibreKDE::AgentOperation* op, LibreKDE::CredentialKind presented)
+void CredentialController::beginMutation(Client::AgentOperation* op, Client::CredentialKind presented)
 {
     m_pendingPresentedKind = presented;
     // A fresh verb obsoletes any earlier removal notice — INCLUDING one whose
-    // recovery verb refuses at entry below: cleared BEFORE the entry-error
-    // return, or a stale card-removed notice would survive under the new verb's
-    // own Result surface.
+    // verb the agent refuses at method entry: a refusal now travels through the
+    // ordinary terminal, which lands after this, so a stale card-removed notice
+    // can no longer survive under the new verb's own Result surface.
     setRemovalNotice({});
-    if (op == nullptr) {
-        // Method-entry throw (UnknownCredential / RateLimited / …): no Operation was
-        // minted — branch on the captured error name, never a red banner.
-        handleEntryError();
-        return;
-    }
     // The verb was launched from the Result state while the previous mutation's
     // mandatory re-list was still in flight (its rows not yet landed). Detach that
     // re-list so its terminal doesn't clobber the Working state we're entering — the
     // new mutation runs its own re-list afterwards. (canStartMutation already barred
     // re-entry while a mutation op is live, so only a re-list can be in flight here.)
+    // This now also covers a verb the agent refuses: the refusal's own terminal
+    // arrives on the event loop, so a re-list left attached could still land first.
+    // The already-loaded rows stay in the model, so the dashboard under a refusal
+    // notice remains actionable; dropping the settled latch only means the next
+    // card/availability event (or an explicit refresh()) re-fetches.
     if (m_listOp != nullptr) {
         resetListState();
     }
     m_mutationOp = op;
     m_mutationCancelRequested = false; // a fresh verb — no cancel requested yet
     setProgress(0.0);
+    // Entered even for a verb the agent refuses at method entry, whose terminal is
+    // already known at minting time: the library QUEUES that terminal rather than
+    // emitting it from the minting call, so Working is real (briefly) and the
+    // window bounces to Result on the next event-loop turn. Nothing may return
+    // before this point — a refusal that skipped Working would leave the scrim's
+    // state sequence different from every other outcome's.
     transitionTo(State::Working);
-    // Drive the outcome off the terminal `finished` alone — NOT credentialsResultReady
+    // Drive the outcome off the terminal `finished` alone — NOT a result signal
     // (which races Finished). By `finished`, pinResult() is guaranteed populated (the
     // Credentials Result is delivered for every completed attempt, Ok AND soft-fail),
-    // so reading it in onMutationDone is race-free. Connecting AFTER the mint is safe:
-    // a synchronously-finished op queued its Finished during ctor recovery, delivered
-    // once we return to the event loop.
-    connect(op, &LibreKDE::AgentOperation::finished, this,
-            [this, op](LibreKDE::OperationStatus, LibreKDE::ErrorCode, const QString&, const QString&) {
-                onMutationDone(op);
-            });
-    connect(op, &LibreKDE::AgentOperation::phaseChanged, this,
-            [this](LibreKDE::OperationPhase, double progress) { setProgress(progress); });
+    // so reading it in onMutationDone is race-free. The terminal carries no
+    // arguments — the slot polls the operation. Connecting AFTER the mint is safe:
+    // an operation already terminal when minted queued its terminal, delivered once
+    // we return to the event loop.
+    connect(op, &Client::AgentOperation::finished, this, [this, op]() { onMutationDone(op); });
+    connect(op, &Client::AgentOperation::phaseChanged, this,
+            [this](Client::OperationPhase, double progress) { setProgress(progress); });
 }
 
-void CredentialController::onMutationDone(LibreKDE::AgentOperation* op)
+void CredentialController::onMutationDone(Client::AgentOperation* op)
 {
     m_mutationOp = nullptr;
-    const LibreKDE::CredentialOutcome outcome = op->pinResult().outcome;
-    const LibreKDE::ErrorCode errorCode = op->errorCode();
+    // Read the mutation result ONCE. It is returned by value, so a second call
+    // would be correct today — but hoisting means a later change turning it into a
+    // take-once accessor cannot silently leave the second read empty.
+    const Client::PinResult result = op->pinResult();
+    const Client::CredentialOutcome outcome = result.outcome;
+    const Client::ErrorCode errorCode = op->errorCode();
 
     // A cancel is the user's OWN action — it must never render as a red error banner.
     // Detect it from either the request flag (authoritative: an aborted op the agent
     // didn't answer with a userCancelled Result finishes Error/CommunicationError
     // with `pinResult` at default Unspecified, so only the flag knows) OR a terminal
     // Cancelled status — EXCEPT when that status was manufactured by the client-side
-    // death sweeps: AgentClient terminate()s live ops with Cancelled + CardRemoved
+    // death sweeps: the client terminates live ops with Cancelled + CardRemoved
     // (card pulled) / CommunicationError (agent vanished). Those are external
     // terminations, not the user's choice, and deserve truthful feedback.
     const bool sweepTerminated =
-        errorCode == LibreKDE::ErrorCode::CardRemoved || errorCode == LibreKDE::ErrorCode::CommunicationError;
+        errorCode == Client::ErrorCode::CardRemoved || errorCode == Client::ErrorCode::CommunicationError;
     const bool cancelled =
-        m_mutationCancelRequested || (op->status() == LibreKDE::OperationStatus::Cancelled && !sweepTerminated);
+        m_mutationCancelRequested || (op->status() == Client::OperationStatus::Cancelled && !sweepTerminated);
+    // Consumed on EVERY terminal path, INCLUDING the refusal branch below, or the
+    // flag would leak into the next verb and render it a silent cancel.
     m_mutationCancelRequested = false;
+
+    // A refusal the AGENT NAMED: the verb was rejected at method entry, so it never
+    // reached the card and there is no outcome to render — which of the several
+    // names sharing one coarse classification it was decides the recovery, and only
+    // this axis carries that. Deliberately BEFORE the outcome path, whose
+    // Unspecified arm would otherwise paint every refusal with one red "the
+    // operation did not complete".
+    //
+    // A DISENGAGED optional is NOT this case and must not be swept in here: it is
+    // what every operation that genuinely ran reports (success, invalidPin, a card
+    // pull, a cancel), and also what a failure the peer never named reports (no
+    // agent, timeout, broken connection, a reply outside the wire contract). Those
+    // fall through to the outcome path, where the shared rule composes the
+    // transport failure's own localized copy from both failure axes. Attributing
+    // them to a refusal the agent never made would name the card as the author of
+    // a local fault and offer the wrong recovery.
+    if (const std::optional<Client::SyncError> named = op->syncError(); named.has_value()) {
+        handleRefusal(*named, op);
+        return;
+    }
 
     // A card pulled mid-verb usually terminalizes client-side (the sweep) before the
     // agent's own Result(cardRemoved) can arrive, leaving the outcome Unspecified —
-    // surface the spec's cardRemoved copy instead of the generic "did not complete".
-    LibreKDE::CredentialOutcome effective = outcome;
-    if (!cancelled && outcome == LibreKDE::CredentialOutcome::Unspecified &&
-        errorCode == LibreKDE::ErrorCode::CardRemoved) {
-        effective = LibreKDE::CredentialOutcome::CardRemoved;
+    // surface the truthful cardRemoved copy instead of a generic failure sentence.
+    Client::CredentialOutcome effective = outcome;
+    if (!cancelled && outcome == Client::CredentialOutcome::Unspecified &&
+        errorCode == Client::ErrorCode::CardRemoved) {
+        effective = Client::CredentialOutcome::CardRemoved;
     }
 
     // resultIsError: neutral (Ok / userCancelled) → not an
@@ -535,13 +605,29 @@ void CredentialController::onMutationDone(LibreKDE::AgentOperation* op)
     // advertise keyActivatable, surfacing the standalone Activate button — we never
     // re-request the spent transport value.
     const bool isError =
-        !cancelled && !LibreKDE::CredentialText::isNeutral(effective) && effective != LibreKDE::CredentialOutcome::Ok;
-    // A cancel with no real outcome shows no banner; when a genuine outcome IS present
-    // its text still renders (informationally — never red, since isError is false).
-    const QString message =
-        (cancelled && effective == LibreKDE::CredentialOutcome::Unspecified)
-            ? QString()
-            : LibreKDE::CredentialText::outcomeMessage(effective, m_pendingPresentedKind, op->pinResult().retriesLeft);
+        !cancelled && !LibreKDE::CredentialText::isNeutral(effective) && effective != Client::CredentialOutcome::Ok;
+    const QString message = [&]() -> QString {
+        if (cancelled) {
+            // A cancel with no real outcome shows no banner; when a genuine outcome
+            // IS present its text still renders (informationally — never red, since
+            // isError is false). Gated OUT of the composed rule below, which can
+            // never return empty and would hand someone who pressed Cancel a "did
+            // not finish" sentence they did not need.
+            return effective == Client::CredentialOutcome::Unspecified
+                       ? QString()
+                       : LibreKDE::CredentialText::outcomeMessage(effective, m_pendingPresentedKind,
+                                                                  result.retriesLeft);
+        }
+        if (effective == Client::CredentialOutcome::Unspecified) {
+            // The attempt reported no outcome at all and was not a card pull: the
+            // failure lives on the operation's two failure axes, not in the
+            // credential vocabulary. Compose it with the shared rule, which
+            // consults both and can never return empty — rather than the credential
+            // vocabulary's one generic sentence, which names neither axis.
+            return LibreKDE::ErrorText::forOutcome(errorCode, op->callError(), op->messageFallback());
+        }
+        return LibreKDE::CredentialText::outcomeMessage(effective, m_pendingPresentedKind, result.retriesLeft);
+    }();
     setResult(isError, message);
 
     // A mutation terminated by a card pull has no dashboard to return to and no
@@ -551,7 +637,7 @@ void CredentialController::onMutationDone(LibreKDE::AgentOperation* op)
     // explanation) and skip the mandatory re-list. Result is still entered so
     // the outcome renders even if the card object outlives the pull (e.g. the
     // agent reported cardRemoved while the registry still lists the card).
-    if (effective == LibreKDE::CredentialOutcome::CardRemoved) {
+    if (effective == Client::CredentialOutcome::CardRemoved) {
         setRemovalNotice(message);
         transitionTo(State::Result);
         return;
@@ -567,11 +653,17 @@ void CredentialController::onMutationDone(LibreKDE::AgentOperation* op)
     relistAfterMutation();
 }
 
-void CredentialController::handleEntryError()
+void CredentialController::handleRefusal(Client::SyncError named, Client::AgentOperation* op)
 {
-    const QString err = m_card != nullptr ? m_card->lastCredentialError() : QString();
-
-    if (err.endsWith(QLatin1StringView("UnknownCredential"))) {
+    // Four arms, and what separates them is not only the copy: it is whether the
+    // listing the dashboard is showing is still TRUE. Re-listing where the ids went
+    // stale and NOT re-listing where the request never reached the card are opposite
+    // decisions for opposite reasons, and swapping them would be invisible to a
+    // build. The coarse classifications cannot tell these four apart —
+    // UnknownCredential and InvalidRequest share one, and the rate-limit refusal
+    // reports no call-level failure at all — which is why the branch is on the name.
+    switch (named) {
+    case Client::SyncError::UnknownCredential:
         // The agent dropped its listing cache (the id we sent is stale). Recover the
         // fresh ids with a re-list; show a neutral "refreshed" notice, never a red
         // error — the user did nothing wrong.
@@ -579,32 +671,44 @@ void CredentialController::handleEntryError()
         transitionTo(State::Result);
         relistAfterMutation();
         return;
-    }
-    if (err.endsWith(QLatin1StringView("RateLimited"))) {
+    case Client::SyncError::RateLimited:
         // The request never reached the card, so the listing is still valid — no
         // re-list. A neutral "please wait" over the (still usable) dashboard; the user
         // retries when ready.
         setResult(false, ki18nd("librekde", "Please wait a moment before trying again.").toString());
         transitionTo(State::Result);
         return;
-    }
-    if (err.endsWith(QLatin1StringView("InvalidRequest"))) {
-        // No longer a client-bug invariant: the agent maps a REAL, user-reachable
-        // card condition — two records with identical labels (AmbiguousCredential) —
-        // onto this wire error, so a user clicking Change on such a card lands here.
-        // Log for diagnostics and surface a neutral notice; NO re-list — the
-        // condition is persistent for the card, so a re-fetch cannot clear it. A
-        // dedicated wire error for ambiguous credentials is the planned follow-up
-        // once all four mirrors can be extended together; the client keeps handling
-        // InvalidRequest gracefully regardless.
-        qCWarning(lcCredentials).noquote() << "credential verb refused as InvalidRequest:" << err;
+    case Client::SyncError::InvalidRequest:
+        // Not a client-bug invariant: the agent maps a REAL, user-reachable card
+        // condition — two records with identical labels — onto this wire error, so a
+        // user clicking Change on such a card lands here. Log for diagnostics and
+        // surface a neutral notice; NO re-list — the condition is persistent for the
+        // card, so a re-fetch cannot clear it. A dedicated wire error for ambiguous
+        // credentials is the planned follow-up once every mirror can be extended
+        // together; the client keeps handling this one gracefully regardless.
+        qCWarning(lcCredentials).noquote() << "credential verb refused as InvalidRequest:" << op->messageFallback();
         setResult(false, ki18nd("librekde", "The card refused the request.").toString());
         transitionTo(State::Result);
         return;
+    default:
+        break;
     }
-    // Any other entry refusal: a neutral generic notice plus a defensive re-list, so
-    // the window recovers to a fresh, actionable dashboard rather than a red banner.
-    qCWarning(lcCredentials).noquote() << "credential verb refused at method entry:" << err;
+    // Any OTHER name the agent refused with: a neutral generic notice plus a
+    // defensive re-list, so the window recovers to a fresh, actionable dashboard
+    // rather than a red banner. Reached only for a name that IS in the wire
+    // vocabulary but is not one of the three above — the arm deliberately keeps a
+    // `default`, because that vocabulary is append-only and a name added to it must
+    // land somewhere sensible without this file changing.
+    //
+    // The two coarse axes are logged rather than the name, whose own integers are
+    // explicitly not wire-significant and would mislead a reader comparing logs
+    // across builds. Only `errorCode` is wire-frozen and append-only, so only it is
+    // stable in that sense; `callError` is a client-local classification with no
+    // such promise and is logged for the extra separation it gives between refusals
+    // sharing an error code, not because its number is durable.
+    qCWarning(lcCredentials).noquote() << "credential verb refused at method entry (error code"
+                                       << static_cast<int>(op->errorCode()) << ", call error"
+                                       << static_cast<int>(op->callError()) << "):" << op->messageFallback();
     setResult(false, ki18nd("librekde", "The action could not be started.").toString());
     transitionTo(State::Result);
     relistAfterMutation();

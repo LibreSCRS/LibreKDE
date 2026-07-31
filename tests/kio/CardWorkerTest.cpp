@@ -6,7 +6,7 @@
 // card-read ops; only get() does (lazy PACE). Plus the
 // error-mapping table and capability-matrix edges.
 
-#include "AgentCapabilities.h"
+#include <LibreSCRS/AgentClient/AgentCapabilities.h>
 #include "CardTree.h"
 #include "CardWorkerLogic.h"
 #include "FakeCardDataSource.h"
@@ -18,6 +18,8 @@
 #include <QList>
 #include <QString>
 #include <gtest/gtest.h>
+
+namespace Client = LibreSCRS::AgentClient;
 
 using namespace LibreKDE;
 using namespace LibreKDETest;
@@ -85,12 +87,12 @@ CardPresence presence(const QString& reader, const QString& path, std::uint32_t 
     return CardPresence{reader, path, caps, preAuth};
 }
 
-CertInfoView signingCert(const QString& id, const QString& subject, quint32 ku)
+LibreSCRS::AgentClient::CertificateInfo signingCert(const QString& id, const QString& subject, quint32 ku)
 {
-    CertInfoView c;
-    c.certId = id;
+    LibreSCRS::AgentClient::CertificateInfo c;
+    c.id = id;
     c.signingCapable = true;
-    c.subjectCn = subject;
+    c.subject = subject;
     c.keyUsageBits = ku;
     return c;
 }
@@ -103,7 +105,7 @@ CertInfoView signingCert(const QString& id, const QString& subject, quint32 ku)
 TEST(CardWorker, LazyPaceListStatMimeDoZeroCardIo)
 {
     FakeCardDataSource src{{presence(QStringLiteral("NFC"), QStringLiteral("/card/0"),
-                                     Cap::IdentityData | Cap::EmrtdCrypto, QStringLiteral("Can"))}};
+                                     Client::Cap::IdentityData | Client::Cap::EmrtdCrypto, QStringLiteral("Can"))}};
     IdentityResult id;
     id.status = ReadStatus::Ok;
     id.fields << IdentityFieldView{QStringLiteral("personal"), QStringLiteral("given_name"),
@@ -133,8 +135,8 @@ TEST(CardWorker, LazyPaceListStatMimeDoZeroCardIo)
 // info.txt is derived from capabilities — it must NOT trigger a card read either.
 TEST(CardWorker, GetInfoTxtDoesNoCardIo)
 {
-    FakeCardDataSource src{{presence(QStringLiteral("R"), QStringLiteral("/card/0"), Cap::Pki | Cap::IdentityData,
-                                     QStringLiteral("None"))}};
+    FakeCardDataSource src{{presence(QStringLiteral("R"), QStringLiteral("/card/0"),
+                                     Client::Cap::Pki | Client::Cap::IdentityData, QStringLiteral("None"))}};
     TestableCardWorker w(src);
     ASSERT_TRUE(w.get(QUrl(QStringLiteral("card:/R/info.txt"))).success());
     EXPECT_EQ(src.ioCallCount(), 0);
@@ -147,7 +149,7 @@ TEST(CardWorker, GetInfoTxtDoesNoCardIo)
 TEST(CardWorker, ListPkiResolvesCertFoldersByPurpose)
 {
     FakeCardDataSource src{
-        {presence(QStringLiteral("Gemalto"), QStringLiteral("/card/0"), Cap::Pki, QStringLiteral("None"))}};
+        {presence(QStringLiteral("Gemalto"), QStringLiteral("/card/0"), Client::Cap::Pki, QStringLiteral("None"))}};
     CertListResult certs;
     certs.status = ReadStatus::Ok;
     certs.certs << signingCert(QStringLiteral("aabbccdd1122"), QStringLiteral("Pera"),
@@ -166,7 +168,7 @@ TEST(CardWorker, ListPkiResolvesCertFoldersByPurpose)
 TEST(CardWorker, GetCertInfoTxtRenders)
 {
     FakeCardDataSource src{
-        {presence(QStringLiteral("G"), QStringLiteral("/card/0"), Cap::Pki, QStringLiteral("None"))}};
+        {presence(QStringLiteral("G"), QStringLiteral("/card/0"), Client::Cap::Pki, QStringLiteral("None"))}};
     CertListResult certs;
     certs.status = ReadStatus::Ok;
     certs.certs << signingCert(QStringLiteral("deadbeefcafe"), QStringLiteral("Mika"), 0x01u);
@@ -196,7 +198,7 @@ TEST(CardWorker, GetCertInfoTxtRenders)
 TEST(CardWorker, CertFolderNameIsStableUrlSegmentAndResolvesByCertId)
 {
     FakeCardDataSource src{
-        {presence(QStringLiteral("G"), QStringLiteral("/card/0"), Cap::Pki, QStringLiteral("None"))}};
+        {presence(QStringLiteral("G"), QStringLiteral("/card/0"), Client::Cap::Pki, QStringLiteral("None"))}};
     CertListResult certs;
     certs.status = ReadStatus::Ok;
     certs.certs << signingCert(QStringLiteral("aabbccdd11223344"), QStringLiteral("Pera"), 0x01u);
@@ -227,7 +229,7 @@ TEST(CardWorker, CertFolderNameIsStableUrlSegmentAndResolvesByCertId)
 TEST(CardWorker, CertFoldersSharingPurposeAndPrefixGetDistinctResolvableFolders)
 {
     FakeCardDataSource src{
-        {presence(QStringLiteral("G"), QStringLiteral("/card/0"), Cap::Pki, QStringLiteral("None"))}};
+        {presence(QStringLiteral("G"), QStringLiteral("/card/0"), Client::Cap::Pki, QStringLiteral("None"))}};
     CertListResult certs;
     certs.status = ReadStatus::Ok;
     // Same purpose (digitalSignature) AND same first 8 hex "aabbccdd".
@@ -261,7 +263,7 @@ TEST(CardWorker, CertFoldersSharingPurposeAndPrefixGetDistinctResolvableFolders)
 TEST(CardWorker, CertInfoTxtGetReadsCertListExactlyOnce)
 {
     FakeCardDataSource src{
-        {presence(QStringLiteral("G"), QStringLiteral("/card/0"), Cap::Pki, QStringLiteral("None"))}};
+        {presence(QStringLiteral("G"), QStringLiteral("/card/0"), Client::Cap::Pki, QStringLiteral("None"))}};
     CertListResult certs;
     certs.status = ReadStatus::Ok;
     certs.certs << signingCert(QStringLiteral("deadbeefcafe"), QStringLiteral("Mika"), 0x01u);
@@ -284,7 +286,7 @@ TEST(CardWorker, CertInfoTxtGetReadsCertListExactlyOnce)
 TEST(CardWorker, CertDerPemListedStatMimedAndServed)
 {
     FakeCardDataSource src{
-        {presence(QStringLiteral("G"), QStringLiteral("/card/0"), Cap::Pki, QStringLiteral("None"))}};
+        {presence(QStringLiteral("G"), QStringLiteral("/card/0"), Client::Cap::Pki, QStringLiteral("None"))}};
     CertListResult certs;
     certs.status = ReadStatus::Ok;
     certs.certs << signingCert(QStringLiteral("0011223344"), QStringLiteral("X"), 0x01u);
@@ -338,7 +340,7 @@ TEST(CardWorker, CertDerPemListedStatMimedAndServed)
 
     // A source-side absence (e.g. agent KeyNotFound/UnknownCard) → does-not-exist.
     FakeCardDataSource absent{
-        {presence(QStringLiteral("G"), QStringLiteral("/card/0"), Cap::Pki, QStringLiteral("None"))}};
+        {presence(QStringLiteral("G"), QStringLiteral("/card/0"), Client::Cap::Pki, QStringLiteral("None"))}};
     absent.setCertificates(certs);
     CertDerResult missing;
     missing.status = ReadStatus::NotAvailable;
@@ -371,8 +373,8 @@ TEST(CardWorker, ErrorMappingTable)
     };
 
     for (const Case& c : cases) {
-        FakeCardDataSource src{
-            {presence(QStringLiteral("NFC"), QStringLiteral("/card/0"), Cap::IdentityData, QStringLiteral("Can"))}};
+        FakeCardDataSource src{{presence(QStringLiteral("NFC"), QStringLiteral("/card/0"), Client::Cap::IdentityData,
+                                         QStringLiteral("Can"))}};
         IdentityResult id;
         id.status = c.status;
         src.setIdentity(id);
@@ -391,7 +393,7 @@ TEST(CardWorker, ErrorMappingTable)
 TEST(CardWorker, UnavailableMapsByOperation)
 {
     FakeCardDataSource src{
-        {presence(QStringLiteral("G"), QStringLiteral("/card/0"), Cap::Pki, QStringLiteral("None"))}};
+        {presence(QStringLiteral("G"), QStringLiteral("/card/0"), Client::Cap::Pki, QStringLiteral("None"))}};
     CertListResult certs;
     certs.status = ReadStatus::Unavailable;
     src.setCertificates(certs);
@@ -410,7 +412,7 @@ TEST(CardWorker, UnavailableMapsByOperation)
 TEST(CardWorker, PhotoAbsentMapsToDoesNotExist)
 {
     FakeCardDataSource src{
-        {presence(QStringLiteral("NFC"), QStringLiteral("/card/0"), Cap::IdentityData, QStringLiteral("Can"))}};
+        {presence(QStringLiteral("NFC"), QStringLiteral("/card/0"), Client::Cap::IdentityData, QStringLiteral("Can"))}};
     PhotoResult ph;
     ph.status = ReadStatus::NotAvailable;
     src.setPhoto(ph);
@@ -424,7 +426,7 @@ TEST(CardWorker, PhotoAbsentMapsToDoesNotExist)
 TEST(CardWorker, PhotoGetSniffsTrueMime)
 {
     FakeCardDataSource src{{presence(QStringLiteral("NFC"), QStringLiteral("/card/0"),
-                                     Cap::IdentityData | Cap::EmrtdCrypto, QStringLiteral("Can"))}};
+                                     Client::Cap::IdentityData | Client::Cap::EmrtdCrypto, QStringLiteral("Can"))}};
     PhotoResult ph;
     ph.status = ReadStatus::Ok;
     ph.bytes = QByteArray::fromHex("0000000C6A5020200D0A") + QByteArray(20, '\x00'); // JP2 signature
@@ -442,7 +444,7 @@ TEST(CardWorker, PhotoGetSniffsTrueMime)
 TEST(CardWorker, PinManagementOnlyListsNeitherIdentityNorPki)
 {
     FakeCardDataSource src{
-        {presence(QStringLiteral("R"), QStringLiteral("/card/0"), Cap::PinManagement, QStringLiteral("None"))}};
+        {presence(QStringLiteral("R"), QStringLiteral("/card/0"), Client::Cap::PinManagement, QStringLiteral("None"))}};
     TestableCardWorker w(src);
     ASSERT_TRUE(w.listDir(QUrl(QStringLiteral("card:/R"))).success());
     EXPECT_TRUE(w.listedNames.contains(QStringLiteral("info.txt")));
@@ -454,7 +456,7 @@ TEST(CardWorker, PinManagementOnlyListsNeitherIdentityNorPki)
 TEST(CardWorker, PassportListsIdentityNotPki)
 {
     FakeCardDataSource src{{presence(QStringLiteral("NFC"), QStringLiteral("/card/0"),
-                                     Cap::IdentityData | Cap::EmrtdCrypto, QStringLiteral("Can"))}};
+                                     Client::Cap::IdentityData | Client::Cap::EmrtdCrypto, QStringLiteral("Can"))}};
     TestableCardWorker w(src);
     ASSERT_TRUE(w.listDir(QUrl(QStringLiteral("card:/NFC"))).success());
     EXPECT_TRUE(w.listedNames.contains(QStringLiteral("Identity")));
@@ -464,7 +466,7 @@ TEST(CardWorker, PassportListsIdentityNotPki)
 TEST(CardWorker, UnknownPathErrors)
 {
     FakeCardDataSource src{
-        {presence(QStringLiteral("R"), QStringLiteral("/card/0"), Cap::Pki, QStringLiteral("None"))}};
+        {presence(QStringLiteral("R"), QStringLiteral("/card/0"), Client::Cap::Pki, QStringLiteral("None"))}};
     TestableCardWorker w(src);
     EXPECT_EQ(w.listDir(QUrl(QStringLiteral("card:/Nope"))).error(), KIO::ERR_CANNOT_ENTER_DIRECTORY);
     EXPECT_EQ(w.stat(QUrl(QStringLiteral("card:/Nope"))).error(), KIO::ERR_DOES_NOT_EXIST);

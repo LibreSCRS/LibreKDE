@@ -2,6 +2,8 @@
 // SPDX-FileCopyrightText: 2026 hirashix0
 #pragma once
 
+#include <LibreSCRS/AgentClient/Types.h> // LibreSCRS::AgentClient::CertificateInfo
+
 #include <QByteArray>
 #include <QList>
 #include <QMap>
@@ -10,28 +12,34 @@
 
 /// @file
 /// @brief The pure data seam between the `card:/` KIO worker's layout/render
-///        core and the agent. KIO-free and D-Bus-free on purpose: the pure
+///        core and the agent. KIO-free and transport-free on purpose: the pure
 ///        `CardTree` + renderers depend ONLY on this interface and the simple
 ///        result structs below, so the whole tree/render layer is unit-testable
-///        against an in-memory fake with zero D-Bus.
+///        against an in-memory fake with no agent connection at all.
 ///
-/// The single I/O-bearing implementation (`AgentCardDataSource`) lives over
-/// `AgentClient`; everything here is plain value types — no `QDBus*`.
+/// The single I/O-bearing implementation (`AgentCardDataSource`) lives over the
+/// shared agent client library. Certificate metadata is that library's own
+/// `CertificateInfo` value type rather than a re-copied view: it is a header-only
+/// Qt aggregate with no transport in it, and re-declaring it here would be a
+/// second hand-kept mirror of the same fields — with the certificate id, which
+/// the worker turns into a URL path segment, riding on the copy.
 
 namespace LibreKDE {
 
 /// @brief A reader currently holding a resolvable card, with its capability
 ///        bitfield and pre-read auth method — derived from the agent's
-///        ObjectManager registry WITHOUT any card I/O (no PACE, no read).
+///        registry WITHOUT any card I/O (no PACE, no read).
 ///
-/// `capabilities` mirrors `Card1.Capabilities` (`LibreKDE::Cap::*`).
-/// `cardPath` is the agent object path the I/O methods take.
+/// `capabilities` mirrors the card's capability bitfield
+/// (`LibreSCRS::AgentClient::Cap::*`).
+/// `cardId` is the opaque card handle the I/O methods take — compare and pass
+/// back as-is, never parse.
 struct CardPresence
 {
     QString readerName;             ///< Reader friendly name — the `card:/<readerName>` segment.
-    QString cardPath;               ///< Agent Card1 object path (opaque handle for the I/O methods).
-    std::uint32_t capabilities = 0; ///< `Card1.Capabilities` bitfield (LibreKDE::Cap::*).
-    QString preReadAuth;            ///< `Card1.PreReadAuthMethod` wire string ("None"/"Can"/"Mrz").
+    QString cardId;                 ///< Opaque agent card id (handle for the I/O methods).
+    std::uint32_t capabilities = 0; ///< Card capability bitfield (LibreSCRS::AgentClient::Cap::*).
+    QString preReadAuth;            ///< Pre-read auth wire token ("None"/"Can"/"Mrz").
 };
 
 /// @brief How a read finished, mapped from the agent op's terminal status. The
@@ -48,7 +56,7 @@ enum class ReadStatus {
 };
 
 /// @brief One identity field, rendered flat for `identity.txt` (the worker's
-///        renderers consume this — no `QDBusVariant`, just display strings).
+///        renderers consume this — display strings only, already stringified).
 struct IdentityFieldView
 {
     QString group;         ///< Group key (e.g. "personal").
@@ -57,33 +65,29 @@ struct IdentityFieldView
     QString value;         ///< Stringified value ("text"/"date"; binary fields are skipped).
 };
 
+// Each result below carries a `message`: the localized reason the read failed,
+// when one is available. It is populated ONLY for the statuses whose worker-side
+// text is generic (`Error` and `Unavailable`), and only from the shared outcome
+// rule — never composed at the call site. It is empty everywhere else, a user
+// cancel included: that one must stay silent rather than acquire a "did not
+// finish" sentence. The worker falls back to its own copy when it is empty, so a
+// data source that produces no reason (the in-memory fake; a stall that never
+// reached a terminal outcome) renders exactly what it rendered before.
+
 /// @brief Result of `readIdentity`: a flat, render-ready field list.
 struct IdentityResult
 {
     ReadStatus status = ReadStatus::Error;
     QList<IdentityFieldView> fields;
-};
-
-/// @brief One certificate's render-ready metadata (the widened CertificateInfo
-///        flattened into a KIO/render-layer view — no D-Bus types).
-struct CertInfoView
-{
-    QString certId;                   ///< Opaque SHA-256(DER) handle (folder disambiguation).
-    bool signingCapable = false;      ///< Paired on-card key + signing-suitable keyUsage.
-    QString subjectCn;                ///< Subject CN (display only).
-    QString issuerCn;                 ///< Issuer CN (display only).
-    QString notAfter;                 ///< Validity notAfter (display only, ISO-8601 UTC).
-    quint32 keyUsageBits = 0;         ///< X.509 KeyUsage bitmask; the renderer localizes bit names.
-    QStringList extendedKeyUsageOids; ///< EKU OIDs (dotted, display only).
-    QStringList chainSubjectCns;      ///< Ordered leaf..root subject CNs (display only).
-    quint32 trustStatus = 255;        ///< 255 = Unknown (until the trust verdict).
+    QString message; ///< See the localized-reason note above.
 };
 
 /// @brief Result of `readCertificates`.
 struct CertListResult
 {
     ReadStatus status = ReadStatus::Error;
-    QList<CertInfoView> certs;
+    QList<LibreSCRS::AgentClient::CertificateInfo> certs;
+    QString message; ///< See the localized-reason note above.
 };
 
 /// @brief Result of `getPhoto`: the raw photo bytes for the (group:field) node.
@@ -92,6 +96,7 @@ struct PhotoResult
 {
     ReadStatus status = ReadStatus::Error;
     QByteArray bytes; ///< Raw photo bytes (often JPEG2000 from eMRTD DG2).
+    QString message;  ///< See the localized-reason note above.
 };
 
 /// @brief Result of `getCertificateDer`: the raw certificate DER bytes.
@@ -99,6 +104,7 @@ struct CertDerResult
 {
     ReadStatus status = ReadStatus::Error;
     QByteArray der;
+    QString message; ///< See the localized-reason note above.
 };
 
 /// @brief The pure seam the `card:/` layout + render core depends on.
@@ -118,17 +124,17 @@ public:
     [[nodiscard]] virtual QList<CardPresence> listReadersWithCards() = 0;
 
     /// @brief Read the demographic identity (I/O; lazy PACE on a PACE card).
-    [[nodiscard]] virtual IdentityResult readIdentity(const QString& cardPath) = 0;
+    [[nodiscard]] virtual IdentityResult readIdentity(const QString& cardId) = 0;
 
     /// @brief Read the certificate metadata list (I/O; lazy PACE).
-    [[nodiscard]] virtual CertListResult readCertificates(const QString& cardPath) = 0;
+    [[nodiscard]] virtual CertListResult readCertificates(const QString& cardId) = 0;
 
     /// @brief Read the ID photo bytes (I/O; lazy PACE).
-    [[nodiscard]] virtual PhotoResult getPhoto(const QString& cardPath) = 0;
+    [[nodiscard]] virtual PhotoResult getPhoto(const QString& cardId) = 0;
 
-    /// @brief Export a certificate's raw DER (the agent's public Pkcs11_1.CertDer
-    ///        surface — no consent, no lease). @p certId is the Certificates1 id.
-    [[nodiscard]] virtual CertDerResult getCertificateDer(const QString& cardPath, const QString& certId) = 0;
+    /// @brief Export a certificate's raw DER (the agent's public-data surface —
+    ///        no consent, no lease). @p certId is a `CertificateInfo::id`.
+    [[nodiscard]] virtual CertDerResult getCertificateDer(const QString& cardId, const QString& certId) = 0;
 };
 
 } // namespace LibreKDE

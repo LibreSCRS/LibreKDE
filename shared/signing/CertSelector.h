@@ -2,8 +2,9 @@
 // SPDX-FileCopyrightText: 2026 hirashix0
 #pragma once
 
-#include "AgentOperation.h" // LibreKDE::CertificateList / CertificateInfo
+#include <LibreSCRS/AgentClient/Types.h> // LibreSCRS::AgentClient::CertificateInfo
 
+#include <QList>
 #include <QString>
 #include <functional>
 #include <optional>
@@ -18,10 +19,11 @@ namespace LibreKDE {
 
 /// @brief Choose one signing certificate from @p candidates (length ≥ 2).
 ///
-/// Return the chosen `certId`, or `std::nullopt` to cancel the operation. The
-/// Job only calls this when more than one signing-capable cert is present; a
-/// single candidate is auto-selected without a prompt.
-using CertChooser = std::function<std::optional<QString>(const CertificateList& candidates)>;
+/// Return the chosen certificate's `id`, or `std::nullopt` to cancel the
+/// operation. The Job only calls this when more than one signing-capable cert
+/// is present; a single candidate is auto-selected without a prompt.
+using CertChooser =
+    std::function<std::optional<QString>(const QList<LibreSCRS::AgentClient::CertificateInfo>& candidates)>;
 
 /// @brief Confirm overwriting @p outputPath (an absolute path that already
 ///        exists). Return true to overwrite, false to abort. Never called when

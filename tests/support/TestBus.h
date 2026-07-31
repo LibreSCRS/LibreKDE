@@ -341,11 +341,21 @@ public:
         return out;
     }
 
-    /// @brief Drop the agent's bus name (simulates the daemon vanishing).
+    /// @brief Drop the agent's bus name(s) — the daemon vanishing off the bus.
+    ///
+    /// Releases EVERY name this Harness claimed, which for a well-known-name
+    /// Harness means that name too. Releasing only the per-test unique name would
+    /// be invisible to a client that binds itself to the well-known one — the
+    /// client watches that name and nothing else, so its availability never flips
+    /// and the vanish this models would never happen. A test built on that would
+    /// then measure a still-live agent while asserting an absent one.
     void unregisterService()
     {
         runOnThread(m_context, [this]() {
             if (m_server) {
+                if (m_claimsWellKnown) {
+                    m_server->unregisterService(wellKnownAgentService());
+                }
                 m_server->unregisterService(m_service);
             }
         });

@@ -2,21 +2,31 @@
 // SPDX-FileCopyrightText: 2026 hirashix0
 //
 // AgentCardDataSource over a live FakeAgent: the P0 regression. Each
-// I/O method drives an AgentCard op to `finished` via driveToFinished()'s nested
-// QEventLoop. If the card is pulled WHILE that loop spins,
-// AgentClient::onInterfacesRemoved terminalizes the op (quitting the loop) and
-// then deletes the QObject-parented op. The post-loop op->status()/result()
-// deref would then be a use-after-free. These tests pull the card mid-read (via
-// a queued setCardPresent(false) the nested loop dispatches) and assert each
-// method returns the CardRemoved failure cleanly, with no crash / no UAF.
+// I/O method drives an agent operation to `finished` via driveToFinished()'s
+// nested QEventLoop. If the card is pulled WHILE that loop spins, the client's
+// card-removal sweep terminalizes the op (quitting the loop) and then deletes
+// the QObject-parented op. The post-loop op->status()/result() deref would then
+// be a use-after-free. These tests pull the card mid-read (via a queued
+// setCardPresent(false) the nested loop dispatches) and assert each method
+// returns the CardRemoved failure cleanly, with no crash / no UAF.
+//
+// Runs under dbus-run-session, QT_QPA_PLATFORM=offscreen (the shared D-Bus
+// harness + its QCoreApplication TestMain).
+//
+// Every Harness here claims the agent's well-known bus name as well as its own
+// per-test one: the worker's client binds itself to that name with no hook to
+// point it elsewhere, so without it the data source would see no agent at all.
 
-#include "AgentCapabilities.h"
 #include "AgentCardDataSource.h"
-#include "AgentClient.h"
 #include "CardDataSource.h"
 #include "TestBus.h"
 
+#include <LibreSCRS/AgentClient/AgentCapabilities.h>
+#include <LibreSCRS/AgentClient/AgentClient.h>
+#include <LibreSCRS/AgentClient/Types.h>
+
 #include <QBuffer>
+#include <QDateTime>
 #include <QElapsedTimer>
 #include <QImage>
 #include <QTimer>
@@ -24,6 +34,18 @@
 
 using namespace LibreKDE;
 using namespace LibreKDETest;
+
+// The agent client library, spelled through an alias rather than pulled in
+// wholesale with a using-directive. NOT a collision fix, and the measurement
+// behind that has to be the discriminating one: a using-directive added while
+// every name here stays `Client::`-qualified proves nothing, because ambiguity
+// between using-directives is diagnosed only at UNQUALIFIED lookup. What was
+// actually run is the alias deleted, the directive put in its place, and every
+// `Client::` prefix stripped — this file then compiles clean, so no name here
+// collides with the host's. The alias stays for readability: it keeps each name
+// below visibly the LIBRARY's rather than the host's, in a file that draws value
+// types from both.
+namespace Client = LibreSCRS::AgentClient;
 
 namespace {
 
@@ -40,8 +62,8 @@ FakeAgent::Config configWithSlowOps(std::uint32_t caps)
 }
 
 // Schedule a card pull onto the next main-loop turn. driveToFinished()'s nested
-// loop.exec() will dispatch this singleShot, which triggers InterfacesRemoved →
-// onInterfacesRemoved (terminate + delete op) from INSIDE the loop. The read
+// loop.exec() will dispatch this singleShot, which triggers the client's
+// card-removal sweep (terminate + delete op) from INSIDE the loop. The read
 // method then returns from driveToFinished() with a dangling op (pre-fix) — the
 // QPointer guard is what makes the post-loop path safe.
 void pullCardMidRead(Harness& h)
@@ -53,8 +75,8 @@ void pullCardMidRead(Harness& h)
 
 TEST(AgentCardDataSource, ReadIdentityCardRemovedMidReadReturnsCleanlyNoUaf)
 {
-    Harness h(configWithSlowOps(Cap::IdentityData));
-    AgentClient client(h.client(), h.service());
+    Harness h(configWithSlowOps(Client::Cap::IdentityData), BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
     ASSERT_NE(client.card(h.cardPath()), nullptr);
 
     AgentCardDataSource source(client);
@@ -69,8 +91,8 @@ TEST(AgentCardDataSource, ReadIdentityCardRemovedMidReadReturnsCleanlyNoUaf)
 
 TEST(AgentCardDataSource, ReadCertificatesCardRemovedMidReadReturnsCleanlyNoUaf)
 {
-    Harness h(configWithSlowOps(Cap::Pki));
-    AgentClient client(h.client(), h.service());
+    Harness h(configWithSlowOps(Client::Cap::Pki), BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
     ASSERT_NE(client.card(h.cardPath()), nullptr);
 
     AgentCardDataSource source(client);
@@ -83,8 +105,8 @@ TEST(AgentCardDataSource, ReadCertificatesCardRemovedMidReadReturnsCleanlyNoUaf)
 
 TEST(AgentCardDataSource, GetPhotoCardRemovedMidReadReturnsCleanlyNoUaf)
 {
-    Harness h(configWithSlowOps(Cap::IdentityData));
-    AgentClient client(h.client(), h.service());
+    Harness h(configWithSlowOps(Client::Cap::IdentityData), BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
     ASSERT_NE(client.card(h.cardPath()), nullptr);
 
     AgentCardDataSource source(client);
@@ -97,13 +119,12 @@ TEST(AgentCardDataSource, GetPhotoCardRemovedMidReadReturnsCleanlyNoUaf)
 
 // ============================================================================
 // Happy-path field fidelity over the live FakeAgent — the post-demarshal
-// translation layer (toCertView / identity-field unwrap + binary skip) and the
-// sealed-memfd mmap (readSealedFd) are the ONLY production code on the real wire
-// and were previously exercised by nothing but the UAF path. (Raw operator>>
-// demarshalling is already covered by AgentCardTest::DemarshalRealShapedCertPayload.)
+// translation layer (the identity label resolve + the client's own certificate
+// value type) and the sealed-payload read are the ONLY production code on the
+// real wire and were previously exercised by nothing but the UAF path.
 // ============================================================================
 
-// A tiny PNG so the GetPhoto sealed memfd carries real bytes the mmap reads back.
+// A tiny PNG so the GetPhoto sealed memfd carries real bytes the read maps back.
 QByteArray tinyPngBytes()
 {
     QImage img(2, 2, QImage::Format_RGB32);
@@ -118,78 +139,105 @@ QByteArray tinyPngBytes()
 TEST(AgentCardDataSource, ReadIdentityHappyPathTranslatesFieldsAndSkipsBinary)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
-    Harness h(cfg);
-    AgentClient client(h.client(), h.service());
+    cfg.capabilities = Client::Cap::IdentityData;
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
     ASSERT_NE(client.card(h.cardPath()), nullptr);
 
     AgentCardDataSource source(client);
     const IdentityResult result = source.readIdentity(h.cardPath());
     ASSERT_EQ(result.status, ReadStatus::Ok);
-    // FakeAgent emits group "personal" / field "given_name" labelFallback "Given
-    // name" type "text" value "Ana" — the adapter unwraps the QDBusVariant.
+    // The fake emits group "personal" / field "given_name" labelKey
+    // "label_given_name" labelFallback "Given name" type "text" value "Ana".
+    //
+    // These four expectations say nothing about ORDER, and cannot: the fixture
+    // emits exactly one field, so "the first row" is the only row whichever way
+    // the rows are sequenced. Nor do they need to. The row list is a sequence
+    // now rather than a map, but every producer feeding it is still keyed and
+    // ordered — both wires carry the identity payload as a sorted map of sorted
+    // maps, and the conversion walks them in that order into the list — so rows
+    // still reach the renderer sorted by group key and then by field key,
+    // exactly as before. The container changed shape; the rendered order did
+    // not.
     ASSERT_EQ(result.fields.size(), 1);
     EXPECT_EQ(result.fields.first().group, QStringLiteral("personal"));
     EXPECT_EQ(result.fields.first().fieldKey, QStringLiteral("given_name"));
+    // The label the worker renders comes from the shared key→label resolver.
+    // "label_given_name" is deliberately NOT one of the frozen keys that table
+    // carries, so this pins the resolver's SECOND arm — the agent-authored
+    // label — rather than its first (a translated label) or its last (the bare
+    // field key, which is what would surface if labelFallback were dropped on
+    // the way through the wire).
     EXPECT_EQ(result.fields.first().labelFallback, QStringLiteral("Given name"));
     EXPECT_EQ(result.fields.first().value, QStringLiteral("Ana"));
 }
 
-TEST(AgentCardDataSource, ReadCertificatesHappyPathRoundTripsEveryToCertViewField)
+TEST(AgentCardDataSource, ReadCertificatesHappyPathRoundTripsEveryCertificateField)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::Pki;
+    cfg.capabilities = Client::Cap::Pki;
     cfg.certScript = FakeCertList{FakeCert{QStringLiteral("aabbccdd11223344"), true, QStringLiteral("Pera Peric"),
                                            QStringLiteral("MUP CA"), QStringLiteral("2030-01-01T00:00:00Z"), 0x80u,
                                            QStringList{QStringLiteral("1.3.6.1.5.5.7.3.2")},
                                            QStringList{QStringLiteral("Pera Peric"), QStringLiteral("MUP CA")}, 2u}};
-    Harness h(cfg);
-    AgentClient client(h.client(), h.service());
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
     ASSERT_NE(client.card(h.cardPath()), nullptr);
 
     AgentCardDataSource source(client);
     const CertListResult result = source.readCertificates(h.cardPath());
     ASSERT_EQ(result.status, ReadStatus::Ok);
     ASSERT_EQ(result.certs.size(), 1);
-    const CertInfoView& v = result.certs.first();
-    EXPECT_EQ(v.certId, QStringLiteral("aabbccdd11223344"));
+    const Client::CertificateInfo& v = result.certs.first();
+    EXPECT_EQ(v.id, QStringLiteral("aabbccdd11223344"));
     EXPECT_TRUE(v.signingCapable);
-    EXPECT_EQ(v.subjectCn, QStringLiteral("Pera Peric"));
-    EXPECT_EQ(v.issuerCn, QStringLiteral("MUP CA"));
-    EXPECT_EQ(v.notAfter, QStringLiteral("2030-01-01T00:00:00Z"));
+    EXPECT_EQ(v.subject, QStringLiteral("Pera Peric"));
+    EXPECT_EQ(v.issuer, QStringLiteral("MUP CA"));
+    // The scripted validity string is a WIRE string; the client parses it into
+    // an instant. isValid() is asserted separately so a parse that produced
+    // nothing cannot pass by matching an equally-unparsed expectation.
+    EXPECT_TRUE(v.notAfter.isValid());
+    EXPECT_EQ(v.notAfter, QDateTime::fromString(QStringLiteral("2030-01-01T00:00:00Z"), Qt::ISODate));
     EXPECT_EQ(v.keyUsageBits, 0x80u);
     EXPECT_EQ(v.extendedKeyUsageOids, QStringList{QStringLiteral("1.3.6.1.5.5.7.3.2")});
     EXPECT_EQ(v.chainSubjectCns, (QStringList{QStringLiteral("Pera Peric"), QStringLiteral("MUP CA")}));
-    EXPECT_EQ(v.trustStatus, 2u);
+    // The scripted verdict 2 is a wire number; the client collapses the three
+    // untrusted causes onto one display value and keeps the raw number beside
+    // it. Both are asserted — the collapse, and the cause it collapsed.
+    EXPECT_EQ(v.trust, Client::TrustStatus::Untrusted);
+    EXPECT_EQ(v.extra.value(QStringLiteral("trustStatusWire")).toUInt(), 2u);
 }
 
 TEST(AgentCardDataSource, GetPhotoHappyPathReadsSealedMemfdBytes)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
+    cfg.capabilities = Client::Cap::IdentityData;
     cfg.photoBytes = tinyPngBytes();
-    Harness h(cfg);
-    AgentClient client(h.client(), h.service());
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
     ASSERT_NE(client.card(h.cardPath()), nullptr);
 
     AgentCardDataSource source(client);
     const PhotoResult result = source.getPhoto(h.cardPath());
     ASSERT_EQ(result.status, ReadStatus::Ok);
-    // The bytes must match the sealed-memfd contents exactly (exercises readSealedFd's mmap).
+    // The bytes must match the sealed-memfd contents exactly (exercises the
+    // sealed-payload read).
     EXPECT_EQ(result.bytes, cfg.photoBytes);
 }
 
 // ============================================================================
-// Capability-missing: the agent returns NO Operation (failMethodEntry → method-
-// entry error → op==nullptr), driving the data source's CapabilityMissing branch.
+// Capability-missing: the agent refuses at METHOD ENTRY. The client answers
+// that with an operation that is already finished and carries the mapped
+// CapabilityMissing failure (it never hands back a null operation), so the read
+// classifies through the same outcome mapping every other failure goes through.
 // ============================================================================
 TEST(AgentCardDataSource, MethodEntryErrorYieldsCapabilityMissingNoCrash)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
+    cfg.capabilities = Client::Cap::IdentityData;
     cfg.failMethodEntry = true; // ReadIdentity/GetPhoto error at entry, mint no op
-    Harness h(cfg);
-    AgentClient client(h.client(), h.service());
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
     ASSERT_NE(client.card(h.cardPath()), nullptr);
 
     AgentCardDataSource source(client);
@@ -199,17 +247,17 @@ TEST(AgentCardDataSource, MethodEntryErrorYieldsCapabilityMissingNoCrash)
 
 // ============================================================================
 // Lost/late typed Result: a non-Sign op finishes Ok WITHOUT its typed Result →
-// finalizeTerminal → CommunicationError → ReadStatus::Error. Modeled for Photo in
+// CommunicationError → ReadStatus::Error. Modeled for Photo in
 // SmartCardHandler; here on the read paths through the KIO data source.
 // ============================================================================
 TEST(AgentCardDataSource, ReadIdentityLostResultMapsToError)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
+    cfg.capabilities = Client::Cap::IdentityData;
     cfg.finalStatus = 0;       // Ok terminal...
     cfg.suppressResult = true; // ...but no typed Result ever arrives
-    Harness h(cfg);
-    AgentClient client(h.client(), h.service());
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
     ASSERT_NE(client.card(h.cardPath()), nullptr);
 
     AgentCardDataSource source(client);
@@ -219,11 +267,11 @@ TEST(AgentCardDataSource, ReadIdentityLostResultMapsToError)
 TEST(AgentCardDataSource, ReadCertificatesLostResultMapsToError)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::Pki;
+    cfg.capabilities = Client::Cap::Pki;
     cfg.finalStatus = 0;
     cfg.suppressResult = true;
-    Harness h(cfg);
-    AgentClient client(h.client(), h.service());
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
     ASSERT_NE(client.card(h.cardPath()), nullptr);
 
     AgentCardDataSource source(client);
@@ -239,10 +287,10 @@ TEST(AgentCardDataSource, ReadCertificatesLostResultMapsToError)
 TEST(AgentCardDataSource, GetPhotoEmptyMapMapsToNotAvailable)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
+    cfg.capabilities = Client::Cap::IdentityData;
     cfg.photoEmptyMap = true; // genuinely empty a{sh}
-    Harness h(cfg);
-    AgentClient client(h.client(), h.service());
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
     ASSERT_NE(client.card(h.cardPath()), nullptr);
 
     AgentCardDataSource source(client);
@@ -252,10 +300,10 @@ TEST(AgentCardDataSource, GetPhotoEmptyMapMapsToNotAvailable)
 TEST(AgentCardDataSource, GetPhotoEmptyFdMapsToNotAvailable)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
+    cfg.capabilities = Client::Cap::IdentityData;
     cfg.photoBytes = QByteArray(); // entry present, but its memfd reads back empty
-    Harness h(cfg);
-    AgentClient client(h.client(), h.service());
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
     ASSERT_NE(client.card(h.cardPath()), nullptr);
 
     AgentCardDataSource source(client);
@@ -271,11 +319,11 @@ TEST(AgentCardDataSource, GetPhotoEmptyFdMapsToNotAvailable)
 TEST(AgentCardDataSource, GetCertificateDerHappyPathReturnsBytesAddressedByReaderAndCertId)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::Pki;
+    cfg.capabilities = Client::Cap::Pki;
     cfg.certDerBytes = QByteArrayLiteral("\x30\x82\x01\x0a"
                                          "RAW-DER-BYTES");
-    Harness h(cfg);
-    AgentClient client(h.client(), h.service());
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
     ASSERT_NE(client.card(h.cardPath()), nullptr);
 
     AgentCardDataSource source(client);
@@ -290,10 +338,10 @@ TEST(AgentCardDataSource, GetCertificateDerHappyPathReturnsBytesAddressedByReade
 TEST(AgentCardDataSource, GetCertificateDerKeyNotFoundMapsToNotAvailable)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::Pki;
+    cfg.capabilities = Client::Cap::Pki;
     cfg.certDerKeyNotFound = true; // agent answers …Error.KeyNotFound
-    Harness h(cfg);
-    AgentClient client(h.client(), h.service());
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
     ASSERT_NE(client.card(h.cardPath()), nullptr);
 
     AgentCardDataSource source(client);
@@ -304,26 +352,40 @@ TEST(AgentCardDataSource, GetCertificateDerKeyNotFoundMapsToNotAvailable)
 
 // ============================================================================
 // NEVER-HANG. Two blocking sites are covered here:
-//   (1) DISCOVERY: the AgentClient ctor's GetManagedObjects. `ls card:/` reads
+//   (1) DISCOVERY: the AgentClient ctor's registry snapshot. `ls card:/` reads
 //       the in-memory registry (listReadersWithCards) that discovery populates,
-//       so a wedged GetManagedObjects must be hard-bounded, not left to hang.
+//       so a wedged snapshot must be hard-bounded, not left to hang.
 //   (2) The doGet operation path — see the machine-phase-stall tests below.
 // ============================================================================
 
-// Against a wedged GetManagedObjects, constructing the client and
-// listing readers must return within a tight wall-clock bound. RED before the
-// discovery-timeout fix (the ctor's QDBus::Block GetManagedObjects sits ~kPropTimeoutMs,
-// ~3 s, exceeding the 2 s bound); GREEN after (capped at kDiscoveryTimeoutMs).
+// Against a wedged discovery snapshot, constructing the client and listing
+// readers must return within a tight wall-clock bound.
+//
+// The bound below is deliberately close to what the client actually spends: the
+// registry snapshot is capped at the library's own handshake budget, so a wedged
+// agent costs about that much and no more. Raising that constant past this
+// ceiling turns this case red without anything having regressed — read the two
+// together.
+//
+// The well-known mode is load-bearing here for a reason no assertion in this
+// body can restate: under UniqueOnly the client would find no agent at all, the
+// registry would be empty for that reason instead of the wedge, and the case
+// would pass having exercised nothing. Nothing needs to re-assert the mode,
+// though — a claim that genuinely FAILS (the name already owned by something
+// else) is caught by the harness's own registration check, and this case's
+// readers.isEmpty() below fails as well. Both were measured by taking the name
+// with a second harness first; an assertion here on the mode flag fired in
+// neither run, because that flag is a copy of the argument on the line above.
 TEST(AgentCardDataSource, DiscoveryStallReturnsBoundedNotHang)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
+    cfg.capabilities = Client::Cap::IdentityData;
     cfg.wedgeGetManagedObjects = true; // agent never answers discovery
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     QElapsedTimer t;
     t.start();
-    AgentClient client(h.client(), h.service()); // ctor discovery must not hang
+    Client::AgentClient client; // ctor discovery must not hang
     AgentCardDataSource source(client);
     const QList<CardPresence> readers = source.listReadersWithCards();
     const qint64 elapsed = t.elapsed();
@@ -337,10 +399,10 @@ TEST(AgentCardDataSource, DiscoveryStallReturnsBoundedNotHang)
 TEST(AgentCardDataSource, ReadIdentityMachinePhaseStallMapsToUnavailable)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
+    cfg.capabilities = Client::Cap::IdentityData;
     cfg.operationDelayMs = 60000; // the op never fires on its own; no phase is announced
-    Harness h(cfg);
-    AgentClient client(h.client(), h.service());
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
     ASSERT_NE(client.card(h.cardPath()), nullptr);
 
     AgentCardDataSource source(client, /*opStallTimeoutMs=*/250);
@@ -355,10 +417,10 @@ TEST(AgentCardDataSource, ReadIdentityMachinePhaseStallMapsToUnavailable)
 TEST(AgentCardDataSource, GetPhotoMachinePhaseStallMapsToUnavailable)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
+    cfg.capabilities = Client::Cap::IdentityData;
     cfg.operationDelayMs = 60000;
-    Harness h(cfg);
-    AgentClient client(h.client(), h.service());
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
     ASSERT_NE(client.card(h.cardPath()), nullptr);
 
     AgentCardDataSource source(client, /*opStallTimeoutMs=*/250);
@@ -377,11 +439,11 @@ TEST(AgentCardDataSource, GetPhotoMachinePhaseStallMapsToUnavailable)
 TEST(AgentCardDataSource, ReadIdentityConsentPhaseNotAbortedByStallBackstop)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::IdentityData;
+    cfg.capabilities = Client::Cap::IdentityData;
     cfg.announceConsentPhase = true; // op announces AwaitingConsent ~50 ms in
     cfg.operationDelayMs = 900;      // "human types the CAN" — finishes Ok well past the 250 ms backstop
-    Harness h(cfg);
-    AgentClient client(h.client(), h.service());
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
     ASSERT_NE(client.card(h.cardPath()), nullptr);
 
     AgentCardDataSource source(client, /*opStallTimeoutMs=*/250);

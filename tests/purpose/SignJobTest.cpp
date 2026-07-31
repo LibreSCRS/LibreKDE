@@ -5,89 +5,62 @@
 // dbus-run-session bus (headless, offscreen). Covers: happy path writes the
 // right output name; non-Ok surfaces ErrorText; the one/multi/zero signing-cert
 // selection paths with an injected chooser; overwrite-prompt seam.
+//
+// Uses the shared D-Bus harness (its FakeAgent peer + its QCoreApplication
+// TestMain), not a harness of its own.
+//
+// Every Harness here claims the agent's well-known bus name as well as its own
+// per-test one: the client binds itself to that name with no hook to point it
+// elsewhere, so without it the job would find no card to sign with.
 
-#include "AgentCapabilities.h"
-#include "AgentCard.h"
-#include "AgentClient.h"
-#include "FakeAgent.h"
 #include "MimeFormatMap.h"
 #include "SignJob.h"
+#include "TestBus.h"
+
+#include <LibreSCRS/AgentClient/AgentCapabilities.h>
+#include <LibreSCRS/AgentClient/AgentCard.h>
+#include <LibreSCRS/AgentClient/AgentClient.h>
+#include <LibreSCRS/AgentClient/AgentReader.h>
+#include <LibreSCRS/AgentClient/OperationPhase.h>
+#include <LibreSCRS/AgentClient/Types.h>
 
 #include <gtest/gtest.h>
 
-#include <QCoreApplication>
 #include <QDir>
-#include <QElapsedTimer>
-#include <QEventLoop>
 #include <QFile>
+#include <QList>
 #include <QSignalSpy>
 #include <QTemporaryDir>
-#include <QTimer>
+
+#include <optional>
 
 using namespace LibreKDE;
-using LibreKDETest::FakeAgent;
+using namespace LibreKDETest;
+
+// The agent client library, spelled through an alias rather than pulled in
+// wholesale with a using-directive. NOT a collision fix, and the measurement
+// behind that has to be the discriminating one: a using-directive added while
+// every name here stays `Client::`-qualified proves nothing, because ambiguity
+// between using-directives is diagnosed only at UNQUALIFIED lookup. What was
+// actually run is the alias deleted, the directive put in its place, and every
+// `Client::` prefix stripped — this file then compiles clean, so no name here
+// collides with the host's. The alias stays for readability: it keeps each name
+// below visibly the LIBRARY's rather than the host's, in a file that draws value
+// types from both.
+namespace Client = LibreSCRS::AgentClient;
 
 namespace {
 
-constexpr int kSpinMs = 4000;
-
-QString uniqueService()
-{
-    static int n = 0;
-    return QStringLiteral("org.librescrs.AgentSignJobFake%1").arg(n++);
-}
-
-// Spin the event loop until `pred()` or timeout.
-template <typename Pred>
-bool spinUntil(Pred pred, int timeoutMs = kSpinMs)
-{
-    QElapsedTimer t;
-    t.start();
-    while (!pred() && t.elapsed() < timeoutMs) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 25);
-    }
-    return pred();
-}
-
-// Bring up a FakeAgent + AgentClient + the active AgentCard on a private bus.
-struct Harness
-{
-    QDBusConnection bus;
-    std::unique_ptr<FakeAgent> agent;
-    std::unique_ptr<AgentClient> client;
-    AgentCard* card = nullptr;
-
-    explicit Harness(FakeAgent::Config cfg) : bus(QDBusConnection::sessionBus())
-    {
-        cfg.service = uniqueService();
-        agent = std::make_unique<FakeAgent>(bus, cfg);
-        EXPECT_TRUE(bus.registerService(cfg.service));
-        client = std::make_unique<AgentClient>(bus, cfg.service);
-        spinUntil([this] { return !client->readers().isEmpty(); });
-        for (auto* r : client->readers()) {
-            if (r->hasCard() && !r->cardPath().isEmpty()) {
-                card = client->card(r->cardPath());
-            }
-        }
-    }
-    ~Harness()
-    {
-        client.reset();
-        agent.reset();
-        bus.unregisterService(bus.baseService());
-    }
-};
-
 CertChooser pickFirst()
 {
-    return [](const CertificateList& cands) -> std::optional<QString> {
-        return cands.isEmpty() ? std::nullopt : std::optional<QString>(cands.first().certId);
+    return [](const QList<Client::CertificateInfo>& cands) -> std::optional<QString> {
+        return cands.isEmpty() ? std::nullopt : std::optional<QString>(cands.first().id);
     };
 }
 
 CertChooser cancelChooser()
 {
-    return [](const CertificateList&) -> std::optional<QString> { return std::nullopt; };
+    return [](const QList<Client::CertificateInfo>&) -> std::optional<QString> { return std::nullopt; };
 }
 
 OverwriteConfirmer alwaysOverwrite()
@@ -107,10 +80,12 @@ OverwriteConfirmer neverOverwrite()
 TEST(SignJob, HappyPathWritesEnvelopedOutput)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::Pki;
+    cfg.capabilities = Client::Cap::Pki;
     cfg.certScript = {{QStringLiteral("cert-A"), true, QStringLiteral("Ana Anić")}};
-    Harness h(cfg);
-    ASSERT_NE(h.card, nullptr);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
+    Client::AgentCard* card = client.card(h.cardPath());
+    ASSERT_NE(card, nullptr);
 
     QTemporaryDir dir;
     const QString input = dir.filePath(QStringLiteral("report.pdf"));
@@ -119,12 +94,12 @@ TEST(SignJob, HappyPathWritesEnvelopedOutput)
     f.write("%PDF-1.4\n");
     f.close();
 
-    SignJob job(h.card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), alwaysOverwrite());
+    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), alwaysOverwrite());
     QSignalSpy ok(&job, &SignJob::succeeded);
     QSignalSpy bad(&job, &SignJob::failed);
     job.start();
 
-    ASSERT_TRUE(spinUntil([&] { return ok.count() + bad.count() > 0; }));
+    ASSERT_TRUE(waitFor([&] { return ok.count() + bad.count() > 0; }));
     EXPECT_EQ(bad.count(), 0);
     ASSERT_EQ(ok.count(), 1);
 
@@ -142,12 +117,14 @@ TEST(SignJob, HappyPathWritesEnvelopedOutput)
 TEST(SignJob, RelaysPhaseChangedFromActiveOperation)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::Pki;
+    cfg.capabilities = Client::Cap::Pki;
     cfg.certScript = {{QStringLiteral("cert-A"), true, QStringLiteral("Ana")}};
     cfg.announceConsentPhase = true; // every FakeOperation emits AwaitingConsent(2) at 50 ms
     cfg.operationDelayMs = 120;      // complete AFTER the 50 ms phase so it is observable
-    Harness h(cfg);
-    ASSERT_NE(h.card, nullptr);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
+    Client::AgentCard* card = client.card(h.cardPath());
+    ASSERT_NE(card, nullptr);
 
     QTemporaryDir dir;
     const QString input = dir.filePath(QStringLiteral("doc.pdf"));
@@ -156,7 +133,7 @@ TEST(SignJob, RelaysPhaseChangedFromActiveOperation)
     f.write("%PDF-1.4\n");
     f.close();
 
-    SignJob job(h.card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), alwaysOverwrite());
+    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), alwaysOverwrite());
     QSignalSpy phaseSpy(&job, &SignJob::phaseChanged);
     job.start();
 
@@ -164,13 +141,13 @@ TEST(SignJob, RelaysPhaseChangedFromActiveOperation)
     // SignJob::phaseChanged (proves the certOp/signOp relay wiring).
     auto sawConsent = [&] {
         for (const auto& args : phaseSpy) {
-            if (args.at(0).value<OperationPhase>() == OperationPhase::AwaitingConsent) {
+            if (args.at(0).value<Client::OperationPhase>() == Client::OperationPhase::AwaitingConsent) {
                 return true;
             }
         }
         return false;
     };
-    EXPECT_TRUE(spinUntil(sawConsent));
+    EXPECT_TRUE(waitFor(sawConsent));
 }
 
 // --- detached CAdES → name.bin.p7s ------------------------------------------
@@ -178,10 +155,12 @@ TEST(SignJob, RelaysPhaseChangedFromActiveOperation)
 TEST(SignJob, CadesDetachedWritesP7sSidecar)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::Pki;
+    cfg.capabilities = Client::Cap::Pki;
     cfg.certScript = {{QStringLiteral("cert-A"), true, QStringLiteral("Ana")}};
-    Harness h(cfg);
-    ASSERT_NE(h.card, nullptr);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
+    Client::AgentCard* card = client.card(h.cardPath());
+    ASSERT_NE(card, nullptr);
 
     QTemporaryDir dir;
     const QString input = dir.filePath(QStringLiteral("data.bin"));
@@ -190,10 +169,10 @@ TEST(SignJob, CadesDetachedWritesP7sSidecar)
     f.write("\x01\x02\x03", 3);
     f.close();
 
-    SignJob job(h.card, input, QStringLiteral("application/octet-stream"), QString(), pickFirst(), alwaysOverwrite());
+    SignJob job(card, input, QStringLiteral("application/octet-stream"), QString(), pickFirst(), alwaysOverwrite());
     QSignalSpy ok(&job, &SignJob::succeeded);
     job.start();
-    ASSERT_TRUE(spinUntil([&] { return ok.count() > 0; }));
+    ASSERT_TRUE(waitFor([&] { return ok.count() > 0; }));
     EXPECT_EQ(job.outputPath(), dir.filePath(QStringLiteral("data.bin.p7s")));
     EXPECT_TRUE(QFile::exists(dir.filePath(QStringLiteral("data.bin.p7s"))));
 }
@@ -203,12 +182,14 @@ TEST(SignJob, CadesDetachedWritesP7sSidecar)
 TEST(SignJob, SignFailureSurfacesErrorText)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::Pki;
+    cfg.capabilities = Client::Cap::Pki;
     cfg.certScript = {{QStringLiteral("cert-A"), true, QStringLiteral("Ana")}};
     cfg.finalStatus = 2;    // Error
     cfg.finalErrorCode = 2; // CredentialWrong
-    Harness h(cfg);
-    ASSERT_NE(h.card, nullptr);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
+    Client::AgentCard* card = client.card(h.cardPath());
+    ASSERT_NE(card, nullptr);
 
     QTemporaryDir dir;
     const QString input = dir.filePath(QStringLiteral("report.pdf"));
@@ -217,12 +198,12 @@ TEST(SignJob, SignFailureSurfacesErrorText)
     f.write("%PDF-1.4\n");
     f.close();
 
-    SignJob job(h.card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), alwaysOverwrite());
+    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), alwaysOverwrite());
     QSignalSpy ok(&job, &SignJob::succeeded);
     QSignalSpy bad(&job, &SignJob::failed);
     job.start();
 
-    ASSERT_TRUE(spinUntil([&] { return ok.count() + bad.count() > 0; }));
+    ASSERT_TRUE(waitFor([&] { return ok.count() + bad.count() > 0; }));
     EXPECT_EQ(ok.count(), 0);
     ASSERT_EQ(bad.count(), 1);
     EXPECT_FALSE(bad.at(0).at(0).toString().isEmpty());
@@ -234,12 +215,14 @@ TEST(SignJob, SignFailureSurfacesErrorText)
 TEST(SignJob, SurfacesAgentMessageForGenericEngineError)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::Pki;
+    cfg.capabilities = Client::Cap::Pki;
     cfg.certScript = {{QStringLiteral("cert-A"), true, QStringLiteral("Ana")}};
     cfg.finalStatus = 2;     // Error
     cfg.finalErrorCode = 16; // SigningEngineError (the generic catch-all)
-    Harness h(cfg);
-    ASSERT_NE(h.card, nullptr);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
+    Client::AgentCard* card = client.card(h.cardPath());
+    ASSERT_NE(card, nullptr);
 
     QTemporaryDir dir;
     const QString input = dir.filePath(QStringLiteral("doc.pdf"));
@@ -248,10 +231,10 @@ TEST(SignJob, SurfacesAgentMessageForGenericEngineError)
     f.write("%PDF-1.4\n");
     f.close();
 
-    SignJob job(h.card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), alwaysOverwrite());
+    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), alwaysOverwrite());
     QSignalSpy bad(&job, &SignJob::failed);
     job.start();
-    ASSERT_TRUE(spinUntil([&] { return bad.count() > 0; }));
+    ASSERT_TRUE(waitFor([&] { return bad.count() > 0; }));
     // The agent's specific message ("agent fallback") is surfaced, NOT the
     // hardcoded generic — the ErrorText generic engine code defers to it.
     EXPECT_EQ(bad.at(0).at(0).toString(), QStringLiteral("agent fallback"));
@@ -260,12 +243,14 @@ TEST(SignJob, SurfacesAgentMessageForGenericEngineError)
 TEST(SignJob, SurfacesConfigStringForEngineUnavailable)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::Pki;
+    cfg.capabilities = Client::Cap::Pki;
     cfg.certScript = {{QStringLiteral("cert-A"), true, QStringLiteral("Ana")}};
     cfg.finalStatus = 2;     // Error
     cfg.finalErrorCode = 18; // EngineUnavailable (module/engine could not load)
-    Harness h(cfg);
-    ASSERT_NE(h.card, nullptr);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
+    Client::AgentCard* card = client.card(h.cardPath());
+    ASSERT_NE(card, nullptr);
 
     QTemporaryDir dir;
     const QString input = dir.filePath(QStringLiteral("doc.pdf"));
@@ -274,10 +259,10 @@ TEST(SignJob, SurfacesConfigStringForEngineUnavailable)
     f.write("%PDF-1.4\n");
     f.close();
 
-    SignJob job(h.card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), alwaysOverwrite());
+    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), alwaysOverwrite());
     QSignalSpy bad(&job, &SignJob::failed);
     job.start();
-    ASSERT_TRUE(spinUntil([&] { return bad.count() > 0; }));
+    ASSERT_TRUE(waitFor([&] { return bad.count() > 0; }));
     // EngineUnavailable is a localized client code — it yields its own
     // config-specific message and IGNORES the agent's English fallback.
     const QString msg = bad.at(0).at(0).toString();
@@ -288,15 +273,17 @@ TEST(SignJob, SurfacesConfigStringForEngineUnavailable)
 TEST(SignJob, SurfacesLocalizedStringForInvalidDocument)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::Pki;
+    cfg.capabilities = Client::Cap::Pki;
     // Without a cert the job aborts at the chooser BEFORE the sign op, so
     // finalErrorCode would never be reached and the test would pass for the
     // wrong reason. Give it one cert exactly as the EngineUnavailable test does.
     cfg.certScript = {{QStringLiteral("cert-A"), true, QStringLiteral("Ana")}};
     cfg.finalStatus = 2;     // Error
     cfg.finalErrorCode = 19; // InvalidDocument (client input is invalid/unreadable)
-    Harness h(cfg);
-    ASSERT_NE(h.card, nullptr);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
+    Client::AgentCard* card = client.card(h.cardPath());
+    ASSERT_NE(card, nullptr);
 
     QTemporaryDir dir;
     const QString input = dir.filePath(QStringLiteral("doc.pdf"));
@@ -305,10 +292,10 @@ TEST(SignJob, SurfacesLocalizedStringForInvalidDocument)
     f.write("%PDF-1.4\n");
     f.close();
 
-    SignJob job(h.card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), alwaysOverwrite());
+    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), alwaysOverwrite());
     QSignalSpy bad(&job, &SignJob::failed);
     job.start();
-    ASSERT_TRUE(spinUntil([&] { return bad.count() > 0; }));
+    ASSERT_TRUE(waitFor([&] { return bad.count() > 0; }));
     // InvalidDocument is a localized client code — it yields its own copy and
     // IGNORES the agent's English fallback; assert that precisely (stronger than
     // !isEmpty(), which would pass even if the fallback leaked through).
@@ -322,11 +309,13 @@ TEST(SignJob, SurfacesLocalizedStringForInvalidDocument)
 TEST(SignJob, MultipleCertsUsesChooser)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::Pki;
+    cfg.capabilities = Client::Cap::Pki;
     cfg.certScript = {{QStringLiteral("cert-A"), true, QStringLiteral("Ana — sign")},
                       {QStringLiteral("cert-B"), true, QStringLiteral("Ana — auth")}};
-    Harness h(cfg);
-    ASSERT_NE(h.card, nullptr);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
+    Client::AgentCard* card = client.card(h.cardPath());
+    ASSERT_NE(card, nullptr);
 
     QTemporaryDir dir;
     const QString input = dir.filePath(QStringLiteral("doc.pdf"));
@@ -336,17 +325,20 @@ TEST(SignJob, MultipleCertsUsesChooser)
     f.close();
 
     QString sawCount;
-    CertChooser chooser = [&](const CertificateList& cands) -> std::optional<QString> {
+    CertChooser chooser = [&](const QList<Client::CertificateInfo>& cands) -> std::optional<QString> {
         sawCount = QString::number(cands.size());
         return QStringLiteral("cert-B");
     };
 
-    SignJob job(h.card, input, QStringLiteral("application/pdf"), QString(), chooser, alwaysOverwrite());
+    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), chooser, alwaysOverwrite());
     QSignalSpy ok(&job, &SignJob::succeeded);
     job.start();
-    ASSERT_TRUE(spinUntil([&] { return ok.count() > 0; }));
+    ASSERT_TRUE(waitFor([&] { return ok.count() > 0; }));
     EXPECT_EQ(sawCount, QStringLiteral("2"));
     EXPECT_TRUE(QFile::exists(dir.filePath(QStringLiteral("doc-signed.pdf"))));
+    // The chooser's pick is the id that actually went on the wire — without
+    // this the test would pass even if the job silently signed with cert-A.
+    EXPECT_EQ(h.lastSignCertId(), QStringLiteral("cert-B"));
 }
 
 // --- chooser cancellation aborts cleanly ------------------------------------
@@ -354,11 +346,13 @@ TEST(SignJob, MultipleCertsUsesChooser)
 TEST(SignJob, ChooserCancelAborts)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::Pki;
+    cfg.capabilities = Client::Cap::Pki;
     cfg.certScript = {{QStringLiteral("cert-A"), true, QStringLiteral("Ana — sign")},
                       {QStringLiteral("cert-B"), true, QStringLiteral("Ana — auth")}};
-    Harness h(cfg);
-    ASSERT_NE(h.card, nullptr);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
+    Client::AgentCard* card = client.card(h.cardPath());
+    ASSERT_NE(card, nullptr);
 
     QTemporaryDir dir;
     const QString input = dir.filePath(QStringLiteral("doc.pdf"));
@@ -367,11 +361,11 @@ TEST(SignJob, ChooserCancelAborts)
     f.write("%PDF-1.4\n");
     f.close();
 
-    SignJob job(h.card, input, QStringLiteral("application/pdf"), QString(), cancelChooser(), alwaysOverwrite());
+    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), cancelChooser(), alwaysOverwrite());
     QSignalSpy ok(&job, &SignJob::succeeded);
     QSignalSpy bad(&job, &SignJob::failed);
     job.start();
-    ASSERT_TRUE(spinUntil([&] { return ok.count() + bad.count() > 0; }));
+    ASSERT_TRUE(waitFor([&] { return ok.count() + bad.count() > 0; }));
     EXPECT_EQ(ok.count(), 0);
     EXPECT_EQ(bad.count(), 1); // user-cancelled is surfaced as a failure message
     EXPECT_FALSE(QFile::exists(dir.filePath(QStringLiteral("doc-signed.pdf"))));
@@ -382,11 +376,13 @@ TEST(SignJob, ChooserCancelAborts)
 TEST(SignJob, NoSigningCertSurfacesCapabilityMissing)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::Pki;
+    cfg.capabilities = Client::Cap::Pki;
     // A cert exists but it is NOT signing-capable (e.g. an auth-only key).
     cfg.certScript = {{QStringLiteral("cert-auth"), false, QStringLiteral("Ana — auth")}};
-    Harness h(cfg);
-    ASSERT_NE(h.card, nullptr);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
+    Client::AgentCard* card = client.card(h.cardPath());
+    ASSERT_NE(card, nullptr);
 
     QTemporaryDir dir;
     const QString input = dir.filePath(QStringLiteral("doc.pdf"));
@@ -395,11 +391,11 @@ TEST(SignJob, NoSigningCertSurfacesCapabilityMissing)
     f.write("%PDF-1.4\n");
     f.close();
 
-    SignJob job(h.card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), alwaysOverwrite());
+    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), alwaysOverwrite());
     QSignalSpy ok(&job, &SignJob::succeeded);
     QSignalSpy bad(&job, &SignJob::failed);
     job.start();
-    ASSERT_TRUE(spinUntil([&] { return ok.count() + bad.count() > 0; }));
+    ASSERT_TRUE(waitFor([&] { return ok.count() + bad.count() > 0; }));
     EXPECT_EQ(ok.count(), 0);
     ASSERT_EQ(bad.count(), 1);
     // The CapabilityMissing copy ("does not support signing") is what surfaces.
@@ -409,18 +405,20 @@ TEST(SignJob, NoSigningCertSurfacesCapabilityMissing)
 // --- card pulled while the chooser is pending: fail cleanly, write nothing ---
 //
 // makeCertChooser() spins a modal nested event loop in production. We model that
-// with an injected chooser that, while "open", pulls the card (the agent emits
-// InterfacesRemoved) and spins the loop so AgentClient deletes the AgentCard —
-// then returns a chosen cert. The queued beginSign() must observe the now-null
+// with an injected chooser that, while "open", pulls the card (the agent
+// announces the removal) and spins the loop so the client deletes the AgentCard
+// — then returns a chosen cert. The queued beginSign() must observe the now-null
 // QPointer and fail cleanly instead of dereferencing the freed card.
 TEST(SignJob, CardRemovedDuringChooserFailsCleanly)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::Pki;
+    cfg.capabilities = Client::Cap::Pki;
     cfg.certScript = {{QStringLiteral("cert-A"), true, QStringLiteral("Ana — sign")},
                       {QStringLiteral("cert-B"), true, QStringLiteral("Ana — auth")}};
-    Harness h(cfg);
-    ASSERT_NE(h.card, nullptr);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
+    Client::AgentCard* card = client.card(h.cardPath());
+    ASSERT_NE(card, nullptr);
 
     QTemporaryDir dir;
     const QString input = dir.filePath(QStringLiteral("doc.pdf"));
@@ -430,50 +428,65 @@ TEST(SignJob, CardRemovedDuringChooserFailsCleanly)
     f.close();
 
     // The chooser stands in for a modal dialog: pull the card and pump the loop
-    // until AgentClient has dropped the AgentCard, then "choose" a cert.
-    CertChooser pullThenChoose = [&](const CertificateList& cands) -> std::optional<QString> {
-        h.agent->setCardPresent(false);
-        spinUntil([&] {
-            for (auto* r : h.client->readers()) {
+    // until the client has dropped the AgentCard, then "choose" a cert.
+    //
+    // "Dropped" is the reader still being there with no card in it, NOT the
+    // absence of anything to look at: a predicate that only asked "does any
+    // reader hold a card" would answer yes-it-is-gone for an empty roster too,
+    // which is the state an agent that never appeared also produces.
+    bool cardWasDropped = false;
+    CertChooser pullThenChoose = [&](const QList<Client::CertificateInfo>& cands) -> std::optional<QString> {
+        h.setCardPresent(false);
+        cardWasDropped = waitFor([&] {
+            const QList<Client::AgentReader*> readers = client.readers();
+            if (readers.isEmpty()) {
+                return false; // no roster at all is not a removal
+            }
+            for (Client::AgentReader* r : readers) {
                 if (r->hasCard()) {
                     return false;
                 }
             }
             return true;
         });
-        return cands.isEmpty() ? std::nullopt : std::optional<QString>(cands.first().certId);
+        return cands.isEmpty() ? std::nullopt : std::optional<QString>(cands.first().id);
     };
 
-    SignJob job(h.card, input, QStringLiteral("application/pdf"), QString(), pullThenChoose, alwaysOverwrite());
+    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pullThenChoose, alwaysOverwrite());
     QSignalSpy ok(&job, &SignJob::succeeded);
     QSignalSpy bad(&job, &SignJob::failed);
     job.start();
 
-    ASSERT_TRUE(spinUntil([&] { return ok.count() + bad.count() > 0; }));
+    ASSERT_TRUE(waitFor([&] { return ok.count() + bad.count() > 0; }));
+    // Without this the job could fail for a reason that has nothing to do with
+    // the removal, and the case would stop covering the window it names.
+    EXPECT_TRUE(cardWasDropped) << "the chooser returned without a seated reader having lost its card — the removal "
+                                   "window was never entered";
     EXPECT_EQ(ok.count(), 0);
     ASSERT_EQ(bad.count(), 1); // clean failure, no crash
     EXPECT_FALSE(bad.at(0).at(0).toString().isEmpty());
     EXPECT_FALSE(QFile::exists(dir.filePath(QStringLiteral("doc-signed.pdf")))); // nothing written
 }
 
-// the cert-enumeration op finishes BEFORE SignJob's readCertificates()
-// returns the path (raceResultBeforeReturn — recovered in the AgentOperation
-// ctor, before SignJob connects to `finished`). The terminal emit is queued, so
-// SignJob's onCertificatesFinished still runs and the job TERMINATES (emits
-// exactly one finished signal) instead of hanging forever on a Finished that
-// fired before it subscribed. Certificates1 now exposes GetResult, so the raced
-// cert Result is RECOVERED via the late-subscriber pull; the sign op likewise
-// recovers its raced artifact via Sign1.GetResult, so the whole flow SUCCEEDS
-// and writes the signed document. The load-bearing assertion is that SignJob is
-// reached AT ALL, exactly once — now with a recovered success.
+// the cert-enumeration op finishes BEFORE SignJob's cert read returns the
+// operation (raceResultBeforeReturn — recovered while the operation is being
+// constructed, before SignJob connects to `finished`). The terminal emit is
+// queued, so SignJob's onCertificatesFinished still runs and the job TERMINATES
+// (emits exactly one finished signal) instead of hanging forever on a Finished
+// that fired before it subscribed. The raced cert Result is RECOVERED via the
+// late-subscriber pull; the sign op likewise recovers its raced artifact, so the
+// whole flow SUCCEEDS and writes the signed document. The load-bearing assertion
+// is that SignJob is reached AT ALL, exactly once — now with a recovered success.
 TEST(SignJob, FinishedBeforeSubscribeRaceStillReachesJobNoHang)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::Pki;
+    cfg.capabilities = Client::Cap::Pki;
     cfg.certScript = {{QStringLiteral("cert-A"), true, QStringLiteral("Ana")}};
     cfg.raceResultBeforeReturn = true; // ops fire Result+Finished before the path returns
-    Harness h(cfg);
-    ASSERT_NE(h.card, nullptr);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
+    Client::AgentCard* card = client.card(h.cardPath());
+    ASSERT_NE(card, nullptr);
 
     QTemporaryDir dir;
     const QString input = dir.filePath(QStringLiteral("report.pdf"));
@@ -482,32 +495,35 @@ TEST(SignJob, FinishedBeforeSubscribeRaceStillReachesJobNoHang)
     f.write("%PDF-1.4\n");
     f.close();
 
-    SignJob job(h.card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), alwaysOverwrite());
+    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), alwaysOverwrite());
     QSignalSpy ok(&job, &SignJob::succeeded);
     QSignalSpy bad(&job, &SignJob::failed);
     job.start();
 
-    ASSERT_TRUE(spinUntil([&] { return ok.count() + bad.count() > 0; }))
+    ASSERT_TRUE(waitFor([&] { return ok.count() + bad.count() > 0; }))
         << "a Finished that fired before SignJob subscribed must still reach it (queued emit), not hang";
     EXPECT_EQ(ok.count() + bad.count(), 1) << "exactly one terminal signal";
-    EXPECT_EQ(ok.count(), 1) << "the raced cert + sign Results are recovered via GetResult, so the job succeeds";
+    EXPECT_EQ(ok.count(), 1) << "the raced cert + sign Results are recovered by the late-subscriber pull, so the job "
+                                "succeeds";
     EXPECT_TRUE(QFile::exists(dir.filePath(QStringLiteral("report-signed.pdf")))); // recovered -> signed doc written
 }
 
 // the card is pulled while a SignJob has an agent operation in flight (the
-// agent stays on the bus, so it emits NO Operation1.Finished — a card-only pull).
-// AgentClient::onInterfacesRemoved must sweep + terminalize the in-flight op
-// before deleting the card, so SignJob's `finished` slot fires (Cancelled /
+// agent stays on the bus, so it emits no operation terminal of its own — a
+// card-only pull). The client must sweep + terminalize the in-flight op before
+// deleting the card, so SignJob's `finished` slot fires (Cancelled /
 // CardRemoved) and the job fails cleanly — instead of hanging forever with the
 // op silently destroyed. Nothing is written.
 TEST(SignJob, CardRemovedMidOperationFailsCleanlyNoHang)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::Pki;
+    cfg.capabilities = Client::Cap::Pki;
     cfg.certScript = {{QStringLiteral("cert-A"), true, QStringLiteral("Ana")}};
     cfg.operationDelayMs = 60000; // the cert op stays in flight; we pull the card under it
-    Harness h(cfg);
-    ASSERT_NE(h.card, nullptr);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
+    Client::AgentCard* card = client.card(h.cardPath());
+    ASSERT_NE(card, nullptr);
 
     QTemporaryDir dir;
     const QString input = dir.filePath(QStringLiteral("report.pdf"));
@@ -516,16 +532,19 @@ TEST(SignJob, CardRemovedMidOperationFailsCleanlyNoHang)
     f.write("%PDF-1.4\n");
     f.close();
 
-    SignJob job(h.card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), alwaysOverwrite());
+    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), alwaysOverwrite());
     QSignalSpy ok(&job, &SignJob::succeeded);
     QSignalSpy bad(&job, &SignJob::failed);
     job.start();
 
-    // The cert op is now in flight (60 s delay). Pull the card out from under it.
-    ASSERT_TRUE(spinUntil([&] { return h.client->card(h.agent->cardPath()) != nullptr; }));
-    h.agent->setCardPresent(false);
+    // The cert op must actually exist agent-side before the pull, or the
+    // removal would land on nothing and the case would prove nothing. The
+    // agent's own op count is what says so — the card being seated does not.
+    ASSERT_TRUE(waitFor([&] { return h.operationCount() > 0; }))
+        << "no agent operation was ever minted — there is nothing for the removal to terminalize";
+    h.setCardPresent(false);
 
-    ASSERT_TRUE(spinUntil([&] { return ok.count() + bad.count() > 0; }))
+    ASSERT_TRUE(waitFor([&] { return ok.count() + bad.count() > 0; }))
         << "card removal must terminalize the in-flight op, not hang the SignJob forever";
     EXPECT_EQ(ok.count(), 0);
     EXPECT_EQ(bad.count(), 1);                                                      // exactly once, clean failure
@@ -537,10 +556,12 @@ TEST(SignJob, CardRemovedMidOperationFailsCleanlyNoHang)
 TEST(SignJob, OverwriteDeclinedAborts)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::Pki;
+    cfg.capabilities = Client::Cap::Pki;
     cfg.certScript = {{QStringLiteral("cert-A"), true, QStringLiteral("Ana")}};
-    Harness h(cfg);
-    ASSERT_NE(h.card, nullptr);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
+    Client::AgentCard* card = client.card(h.cardPath());
+    ASSERT_NE(card, nullptr);
 
     QTemporaryDir dir;
     const QString input = dir.filePath(QStringLiteral("report.pdf"));
@@ -556,11 +577,11 @@ TEST(SignJob, OverwriteDeclinedAborts)
     pre.write("OLD");
     pre.close();
 
-    SignJob job(h.card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), neverOverwrite());
+    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), neverOverwrite());
     QSignalSpy ok(&job, &SignJob::succeeded);
     QSignalSpy bad(&job, &SignJob::failed);
     job.start();
-    ASSERT_TRUE(spinUntil([&] { return ok.count() + bad.count() > 0; }));
+    ASSERT_TRUE(waitFor([&] { return ok.count() + bad.count() > 0; }));
     EXPECT_EQ(ok.count(), 0);
     EXPECT_EQ(bad.count(), 1);
 

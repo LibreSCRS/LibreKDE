@@ -2,21 +2,26 @@
 // SPDX-FileCopyrightText: 2026 hirashix0
 //
 // Capstone end-to-end test for the credential-lifecycle window: the FULL stack —
-// a real `CredentialController` driving `librekde-agentclient` against a real
+// a real `CredentialController` driving the agent client library against a real
 // `org.librescrs.Agent` peer (the FakeAgent) on a private session bus, with real
 // adaptors and real signal marshaling. Where the controller/model unit tests each
 // pin one seam, this one walks the whole credential-management flow the user sees
 // (list → manage → result → mandatory re-list) and asserts the AGENT-side op
 // SEQUENCING, not just the controller's final state.
 //
-// Runs under dbus-run-session, QT_QPA_PLATFORM=offscreen (reuses the agent-client
-// D-Bus harness + its QCoreApplication TestMain, so ki18n has an app for locale).
+// Runs under dbus-run-session, QT_QPA_PLATFORM=offscreen (the shared D-Bus
+// harness + its QCoreApplication TestMain, so ki18n has an app for locale).
+//
+// Every Harness here claims the agent's well-known bus name as well as its own
+// per-test one: the controller's client binds itself to that name with no hook to
+// point it elsewhere, so without it the window would see no agent at all.
 
-#include "AgentCapabilities.h"
-#include "AgentClient.h"
 #include "CredentialController.h"
 #include "CredentialModel.h"
-#include "TestBus.h" // Harness + FakeAgent + waitFor (reused agentclient test double)
+#include "TestBus.h" // Harness + FakeAgent + waitFor (the shared bus peer)
+
+#include <LibreSCRS/AgentClient/AgentCapabilities.h>
+#include <LibreSCRS/AgentClient/AgentClient.h>
 
 #include <QVariantMap>
 #include <gtest/gtest.h>
@@ -24,6 +29,18 @@
 
 using namespace LibreKDE;
 using namespace LibreKDETest;
+
+// The agent client library, spelled through an alias rather than pulled in
+// wholesale with a using-directive. NOT a collision fix, and the measurement
+// behind that has to be the discriminating one: a using-directive added while
+// every name here stays `Client::`-qualified proves nothing, because ambiguity
+// between using-directives is diagnosed only at UNQUALIFIED lookup. What was
+// actually run is the alias deleted, the directive put in its place, and all 9
+// `Client::` qualifications stripped — this file then compiles clean, so no name
+// collides with the host's. The alias stays for readability: it keeps each name
+// below visibly the LIBRARY's rather than the host's, in a file that draws value
+// types from both.
+namespace Client = LibreSCRS::AgentClient;
 
 namespace {
 
@@ -60,13 +77,13 @@ QVariantMap pukRecord()
 TEST(CredentialsE2E, ListChangePinOkResultThenMandatoryRelist)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.operationDelayMs = 40; // keep Working/Result observable across the full stack
     cfg.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
     cfg.credRecords = {userPinRecord(), pukRecord()};
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
     Credentials::CredentialController ctl(client);
     ctl.bindReader(h.readerPath());
@@ -104,13 +121,13 @@ TEST(CredentialsE2E, ListChangePinOkResultThenMandatoryRelist)
 TEST(CredentialsE2E, ChangePinInvalidPinSurfacesAttributedError)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.operationDelayMs = 40;
     cfg.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
     cfg.credRecords = {userPinRecord()};
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
     Credentials::CredentialController ctl(client);
     ctl.bindReader(h.readerPath());
@@ -141,23 +158,26 @@ TEST(CredentialsE2E, ChangePinInvalidPinSurfacesAttributedError)
 }
 
 // Scenario 3 — a stale credential id: the agent has dropped its listing cache, so
-// ManagePin throws UnknownCredential at METHOD ENTRY (no Operation minted). The
-// controller must NOT show a red error — it auto-re-lists to recover the fresh ids
-// (id-less ListCredentials stays exempt from the entry error) and surfaces a
-// neutral notice. Assert exactly one recovery op mints (the re-list, not a manage).
-TEST(CredentialsE2E, ManageEntryUnknownCredentialAutoRelistsNeutrally)
+// it refuses ManagePin at METHOD ENTRY by name (UnknownCredential), and the AGENT
+// therefore mints no operation of its own. The controller must NOT show a red
+// error — it auto-re-lists to recover the fresh ids (the id-less ListCredentials
+// stays exempt from the refusal) and surfaces a neutral notice. Assert exactly one
+// AGENT-side op mints (the re-list, not a manage): the refused call still hands the
+// window back an operation, but that one is the client's own and never reached the
+// wire, which is exactly what this count proves.
+TEST(CredentialsE2E, ManageRefusedUnknownCredentialAutoRelistsNeutrally)
 {
     FakeAgent::Config cfg;
-    cfg.capabilities = Cap::PinManagement | Cap::Pki;
+    cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
     cfg.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
     cfg.credRecords = {userPinRecord()};
-    // ManagePin/ActivateSigningKey throw UnknownCredential at entry; ListCredentials
-    // is id-less and stays exempt, so the recovery re-list still succeeds.
+    // ManagePin/ActivateSigningKey are refused UnknownCredential at entry;
+    // ListCredentials is id-less and stays exempt, so the recovery re-list succeeds.
     cfg.credEntryError = true;
     cfg.credEntryErrorName = QStringLiteral("org.librescrs.Agent.Error.UnknownCredential");
-    Harness h(cfg);
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    auto client = std::make_shared<AgentClient>(h.client(), h.service());
+    auto client = std::make_shared<Client::AgentClient>();
     ASSERT_TRUE(client->isAvailable());
     Credentials::CredentialController ctl(client);
     ctl.bindReader(h.readerPath());
@@ -165,13 +185,15 @@ TEST(CredentialsE2E, ManageEntryUnknownCredentialAutoRelistsNeutrally)
 
     const int opsBefore = h.operationCount(); // the initial ListCredentials == 1
     ctl.changePin(QStringLiteral("user:stale"));
+    EXPECT_EQ(ctl.state(), int(State::Working)) << "the verb enters Working before its refusal lands";
 
-    // No manage op mints (the entry throw beat it); the auto-re-list mints exactly one.
+    // No AGENT-side manage op mints (the refusal beat it); the auto-re-list mints
+    // exactly one.
     ASSERT_TRUE(waitFor([&]() { return h.operationCount() == opsBefore + 1; }))
-        << "an UnknownCredential entry error must trigger a recovery re-list, and only that";
+        << "an UnknownCredential refusal must trigger a recovery re-list, and only that";
     EXPECT_FALSE(ctl.resultIsError()) << "a stale id is a neutral refresh, not a red error";
     ASSERT_TRUE(waitFor([&]() { return ctl.state() == int(State::Ready); }));
-    EXPECT_EQ(h.operationCount(), opsBefore + 1) << "no manage op was minted — only the recovery re-list";
+    EXPECT_EQ(h.operationCount(), opsBefore + 1) << "no manage op reached the agent — only the recovery re-list";
 }
 
 } // namespace

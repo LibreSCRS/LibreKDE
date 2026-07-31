@@ -14,6 +14,11 @@ set_tests_properties(MimeFormatMapTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=o
 
 # SignJob end-to-end against the FakeAgent. Reuses the shared FakeAgent +
 # its custom QCoreApplication-owning TestMain, run under dbus-run-session.
+#
+# LibreAgent::ClientQt is named EXPLICITLY even though librekde-signing carries
+# it PUBLIC: this suite includes that library's own headers, and a test's
+# dependency on headers it includes itself must not rest on another target's
+# public interface, which a later change there could withdraw.
 add_executable(SignJobTest
     SignJobTest.cpp
 )
@@ -21,6 +26,7 @@ set_target_properties(SignJobTest PROPERTIES AUTOMOC ON)
 target_link_libraries(SignJobTest PRIVATE
     GTest::gtest
     librekde-agentclient
+    LibreAgent::ClientQt
     librekde-test-support
     librekde-test-main
     librekde-signing

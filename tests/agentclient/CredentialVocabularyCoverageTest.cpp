@@ -28,7 +28,8 @@
 //   recovery      "unknown" | "holderViaPuk" | "issuerProcess" | "none"
 
 #include "CredentialText.h"
-#include "CredentialTypes.h"
+
+#include <LibreSCRS/AgentClient/CredentialTypes.h>
 
 #include <gtest/gtest.h>
 
@@ -39,11 +40,11 @@
 
 namespace {
 
-using LibreKDE::CredentialKind;
-using LibreKDE::CredentialRecord;
-using LibreKDE::CredentialState;
-using LibreKDE::RecoveryPath;
-using LibreKDE::UnblockStyle;
+using LibreSCRS::AgentClient::CredentialKind;
+using LibreSCRS::AgentClient::CredentialRecord;
+using LibreSCRS::AgentClient::CredentialState;
+using LibreSCRS::AgentClient::RecoveryPath;
+using LibreSCRS::AgentClient::UnblockStyle;
 
 // NO default case in any classifier: with -Werror=switch a new enumerator is a
 // compile error until its wire token is decided here. Values past the tail
