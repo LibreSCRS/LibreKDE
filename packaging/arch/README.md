@@ -6,7 +6,10 @@ the credential-management window, the Purpose "Sign" share plugin, and the
 
 LibreKDE is a **thin D-Bus client** of the LibreSCRS agent — it links no
 LibreMiddleware target, so it depends on **`librelinux`** (`librescrs-agent`),
-**not** on `librescrs-middleware`.
+**not** on `librescrs-middleware`. It also links the agent project's Qt client
+library, so it depends on **`librescrs-agent-client-qt`** as well; that package
+is built from the agent library's own repository and its own dependencies are
+Qt6 and libc only, so it pulls in no part of the middleware stack.
 
 The `PKGBUILD` is **release-shaped** (fetches the `v$pkgver` GitHub tag) and
 uses **independent SemVer** (`pkgver=0.1.0`) — 0.x until the D-Bus wire
@@ -64,5 +67,8 @@ sed -i \
 makepkg -si
 ```
 
-> `librelinux` (`librescrs-agent`) must be installed first. The whole chain:
-> `librescrs-middleware` -> `librescrs-agent` -> `librekde`.
+> `librelinux` (`librescrs-agent`) and `librescrs-agent-client-qt` must both be
+> installed first. The whole chain has **two roots, not one**:
+>
+>     librescrs-middleware  <=  librelinux  <=  librekde
+>     librescrs-agent-client-qt  <=  librekde

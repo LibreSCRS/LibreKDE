@@ -40,3 +40,25 @@ every entry below describes a change to what you get by building from source.
   transport diagnostic rather than something written for a reader. A failure
   that none of these names, and that arrived with no message of its own, now
   ends in a plain sentence saying exactly that, rather than in nothing.
+
+### Known issues
+
+- Signing from LibreKDE now always asks for the baseline signature level
+  (B-B), and no longer lets the agent choose. Before this change LibreKDE sent
+  no level at all, and the agent applied the level it is configured with.
+
+  Two configurations are affected, and in both the signature is produced
+  successfully with no error and no warning — only at a lower conformance
+  level than the agent is set up to produce. If the agent's `DefaultLevel` is
+  `b-t`, `b-lt` or `b-lta`, a signature made from LibreKDE is B-B instead. If
+  `DefaultLevel` is `b-b` and `TsaUrls` is configured, the agent would
+  normally upgrade the signature to B-T so it carries a trusted timestamp;
+  a signature made from LibreKDE is not timestamped.
+
+  This affects signatures requested through LibreKDE only — the plasmoid's
+  "Sign file", the Purpose "Sign" share plugin — and not signatures made by
+  other clients of the same agent. Fixing it needs a way to say "let the agent
+  decide" in the request, which is a change to the agent's client library
+  rather than to LibreKDE; until then, set the level you need in the
+  application you sign from, or verify the level of signatures produced this
+  way if your deployment requires B-T or higher.
