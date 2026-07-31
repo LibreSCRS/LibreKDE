@@ -125,19 +125,10 @@ add_test(NAME AgentResultSignatureTest COMMAND AgentResultSignatureTest)
 set_tests_properties(AgentResultSignatureTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
 
 # D-Bus FakeAgent tests — each runs under dbus-run-session, with a custom main
-# that owns a QCoreApplication (TestMain.cpp) instead of gtest_main.
-set(_fake_agent_src FakeAgent.cpp FakeAgent.h TestMain.cpp)
-
-function(librekde_add_dbus_test name)
-    add_executable(${name} ${name}.cpp ${_fake_agent_src})
-    set_target_properties(${name} PROPERTIES AUTOMOC ON)
-    target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(${name} PRIVATE GTest::gtest librekde-agentclient Qt6::Core Qt6::DBus Qt6::Test)
-    target_compile_features(${name} PRIVATE cxx_std_23)
-    add_test(NAME ${name} COMMAND dbus-run-session -- $<TARGET_FILE:${name}>)
-    set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
-endfunction()
-
+# that owns a QCoreApplication (TestMain.cpp) instead of gtest_main. The
+# librekde_add_dbus_test helper, and the harness it links, live in
+# tests/support; this file is its only caller.
+librekde_add_dbus_test(FakeAgentWireShapeTest)
 librekde_add_dbus_test(AgentOperationTest)
 librekde_add_dbus_test(AgentCardTest)
 librekde_add_dbus_test(AgentDiscoveryTest)

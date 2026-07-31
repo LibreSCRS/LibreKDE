@@ -6,6 +6,7 @@
 
 find_package(GTest REQUIRED)
 
+add_subdirectory(support)
 add_subdirectory(agentclient)
 if(LIBREKDE_BUILD_PLASMOID)
     add_subdirectory(plasmoid)

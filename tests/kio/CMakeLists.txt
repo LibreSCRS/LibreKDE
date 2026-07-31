@@ -24,20 +24,16 @@ set_tests_properties(CardRenderersTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=o
 
 # P0 regression: AgentCardDataSource over a live FakeAgent. Drives a read
 # and pulls the card mid-loop to exercise the card-removed-mid-read UAF window.
-# Reuses the agentclient FakeAgent peer + TestMain (a QCoreApplication-owning
+# Reuses the shared FakeAgent peer + TestMain (a QCoreApplication-owning
 # main), and runs under dbus-run-session on a private bus.
-set(_agentclient_dir ${CMAKE_CURRENT_SOURCE_DIR}/../agentclient)
 add_executable(AgentCardDataSourceTest
     AgentCardDataSourceTest.cpp
-    ${_agentclient_dir}/FakeAgent.cpp
-    ${_agentclient_dir}/FakeAgent.h
-    ${_agentclient_dir}/TestMain.cpp
 )
 set_target_properties(AgentCardDataSourceTest PROPERTIES AUTOMOC ON)
-target_include_directories(AgentCardDataSourceTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${_agentclient_dir})
+target_include_directories(AgentCardDataSourceTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(AgentCardDataSourceTest PRIVATE
     GTest::gtest
-    librekde-kio-core librekde-agentclient
+    librekde-kio-core librekde-agentclient librekde-test-support librekde-test-main
     Qt6::Core Qt6::DBus Qt6::Gui Qt6::Test
 )
 target_compile_features(AgentCardDataSourceTest PRIVATE cxx_std_23)

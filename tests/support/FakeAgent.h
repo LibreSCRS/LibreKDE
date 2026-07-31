@@ -2,15 +2,15 @@
 // SPDX-FileCopyrightText: 2026 hirashix0
 #pragma once
 
-#include "AgentClient.h" // reuse LibreKDE::AgentInterfaceProps + its metatype
-#include "CredentialTypes.h"
-
 #include <QDBusAbstractAdaptor>
+#include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusContext>
 #include <QByteArray>
 #include <QDBusObjectPath>
 #include <QDBusUnixFileDescriptor>
+#include <QDBusVariant>
+#include <QList>
 #include <QMap>
 #include <QObject>
 #include <QString>
@@ -20,20 +20,120 @@
 
 /// @file
 /// @brief A real `org.librescrs.Agent` peer on a private session bus, for
-///        exercising `librekde-agentclient` end-to-end. Mirrors the agent's
-///        wire surface (ObjectManager + Reader1 + Card1 + a scripted
-///        Operation1 with a typed Sign1/Identity1 result), but is driven
-///        entirely by test scripting hooks — no PC/SC, no real card.
+///        exercising an agent client end-to-end. Mirrors the agent's wire
+///        surface (ObjectManager + Reader1 + Card1 + a scripted Operation1
+///        with a typed Sign1/Identity1 result), but is driven entirely by test
+///        scripting hooks — no PC/SC, no real card. It depends on no client
+///        header, so it is not tied to one client: see the wire-shape mirror
+///        note below.
 ///
 /// Run the host process under `dbus-run-session` so the bus is isolated, per
 /// the agent's own DBusServiceTest harness.
 
 namespace LibreKDETest {
 
-// a{sa{sv}} and a{oa{sa{sv}}} — the ObjectManager wire shapes. Reuse the
-// client's interface-props type (and its registered metatype) verbatim.
-using FakeInterfaceProps = LibreKDE::AgentInterfaceProps;
+// --- wire-shape mirrors ----------------------------------------------------
+//
+// Every payload type the fake marshals is declared HERE, in the fake's own
+// namespace, instead of being borrowed from a client's headers. A client keeps
+// its demarshalling types where its own transport can reach them, which for one
+// of the agent clients is a private header that is never installed — a peer
+// cannot include it. So the fake carries its own mirrors.
+//
+// This works because QtDBus routes a payload to a slot by SIGNATURE STRING, not
+// by C++ type: a mirror declared member-for-member like the frozen interface XML
+// is served to, and demarshaled by, ANY client whose own type has the same
+// signature — whatever that type is called or where it lives.
+//
+// The flip side is the reason these are pinned by a test: a mirror whose members
+// drift still COMPILES. It fails at run time, when a payload arrives with a
+// signature no client slot matches, in whichever suite happens to exercise that
+// one interface. FakeAgentWireShapeTest asserts each registered signature string
+// against a hand-transcribed literal so a drift fails at test time instead. That
+// is a pin, not a build edge — this repo has no edge to the agent's published
+// interface XML, so the literals cannot auto-follow a change made there; see the
+// note at the top of that test for what the pin does and does not buy.
+
+/// @brief One Identity1 field — the `(sssv)` tuple of `a{sa{s(sssv)}}`.
+struct FakeIdentityField
+{
+    QString labelKey;
+    QString labelFallback;
+    QString type;       ///< "text" | "date" | "binary"
+    QDBusVariant value; ///< "s" for text/date, "ay" for binary
+};
+
+/// @brief Identity1 field map: group → (field → field-tuple) — the
+///        `a{s(sssv)}` group and the `a{sa{s(sssv)}}` Result payload.
+using FakeIdentityFieldGroup = QMap<QString, FakeIdentityField>;
+using FakeIdentityFields = QMap<QString, FakeIdentityFieldGroup>;
+
+QDBusArgument& operator<<(QDBusArgument& arg, const FakeIdentityField& f);
+const QDBusArgument& operator>>(const QDBusArgument& arg, FakeIdentityField& f);
+
+/// @brief One Certificates1 field — the `(ssv)` tuple (labelKey, labelFallback,
+///        value) of the `a{sa{s(ssv)}}` field-group map. Deliberately one member
+///        SHORTER than Identity1's `(sssv)`: Certificates1 carries no redundant
+///        type string. The intermediate group types are registered too, so Qt
+///        derives the nested container signature in both directions rather than
+///        the fake hand-rolling `beginMap` signatures.
+struct FakeCertField
+{
+    QString labelKey;
+    QString labelFallback;
+    QDBusVariant value; ///< "s" UTF-8 string inside a variant `v`, as the agent emits it
+};
+using FakeCertFieldGroup = QMap<QString, FakeCertField>;
+using FakeCertFieldGroups = QMap<QString, FakeCertFieldGroup>;
+
+QDBusArgument& operator<<(QDBusArgument& arg, const FakeCertField& f);
+const QDBusArgument& operator>>(const QDBusArgument& arg, FakeCertField& f);
+
+/// @brief One Certificates1 entry — the wire struct `(s b a{sa{s(ssv)}} u as as u)`.
+///        Seven members go on the wire; the struct below declares nine, because
+///        the three display strings are NOT wire members. The marshaller folds
+///        them into the `fields` map (`a{sa{s(ssv)}}`, the third wire member)
+///        under the group keys the agent uses, so adding another display string
+///        is a new dict entry and leaves the signature alone.
+struct FakeCertInfo
+{
+    QString certId;                   ///< opaque SHA-256(DER) handle; the value Sign() takes
+    bool signingCapable = false;      ///< paired on-card key + signing-suitable keyUsage
+    QString subjectCn;                ///< subject/cn field group (display only)
+    QString issuerCn;                 ///< issuer/cn field group (display only)
+    QString notAfter;                 ///< validity/notAfter field group (display only)
+    quint32 keyUsageBits = 0;         ///< `u` X.509 KeyUsage bitmask
+    QStringList extendedKeyUsageOids; ///< `as` EKU OIDs (dotted)
+    QStringList chainSubjectCns;      ///< `as` ordered leaf..root subject CNs
+    quint32 trustStatus = 255;        ///< `u` trust verdict (255 = Unknown)
+};
+using FakeCertInfoList = QList<FakeCertInfo>;
+
+QDBusArgument& operator<<(QDBusArgument& arg, const FakeCertInfo& c);
+const QDBusArgument& operator>>(const QDBusArgument& arg, FakeCertInfo& c);
+
+// The remaining shapes are plain Qt containers, so mirroring them costs a
+// typedef and nothing else. Three of the four take no Q_DECLARE_METATYPE:
+// FakeInterfaceProps, FakePhotoMap and FakeCredentialRecords are each literally
+// the same C++ type an agent client's public header already declares one for,
+// and a second declaration of one type in one translation unit does not compile.
+// Qt 6 does not need the macro — QMetaType::fromType<T>() derives the metatype
+// either way — but it is what files a type under the NAME it is spelled with,
+// and QtDBus resolves a slot's reference OUTPUT parameter by exactly that name
+// lookup. FakeCredentialRecords is the one shape used that way, so
+// ensureMetatypes() registers its name explicitly instead.
+
+/// @brief ObjectManager `a{sa{sv}}` interface → properties map.
+using FakeInterfaceProps = QMap<QString, QVariantMap>;
+
+/// @brief ObjectManager `a{oa{sa{sv}}}` GetManagedObjects map.
 using FakeManagedObjects = QMap<QDBusObjectPath, FakeInterfaceProps>;
+
+/// @brief Photo1 `a{sh}` result: `"groupKey:fieldKey"` → sealed memfd.
+using FakePhotoMap = QMap<QString, QDBusUnixFileDescriptor>;
+
+/// @brief Operation.Credentials1 `aa{sv}` records (empty for a mutation).
+using FakeCredentialRecords = QList<QVariantMap>;
 
 class FakeAgent;
 
@@ -272,7 +372,7 @@ public:
                   uint finalErrorCode, bool suppressResult, FakeCertList certScript = {}, bool rawCertResult = false,
                   QByteArray photoBytes = {}, bool photoEmptyMap = false, bool announceConsentPhase = false,
                   bool lostSignalRecoverable = false, QVariantMap credResult = {},
-                  LibreKDE::CredentialRecordsWire credRecords = {});
+                  FakeCredentialRecords credRecords = {});
     ~FakeOperation() override;
 
     [[nodiscard]] QString path() const;
@@ -294,10 +394,10 @@ private:
     /// @brief Build the deterministic Identity1 field map ("personal:given_name"
     ///        = "Ana") the Result signal AND Identity1.GetResult both serve, so
     ///        the recovery pull re-serves exactly what a live signal would.
-    [[nodiscard]] LibreKDE::IdentityFields buildIdentityFields() const;
-    /// @brief Build the CertificateList from m_certScript, shared by the
+    [[nodiscard]] FakeIdentityFields buildIdentityFields() const;
+    /// @brief Build the cert list from m_certScript, shared by the
     ///        Certificates1.Result emit and Certificates1.GetResult recovery.
-    [[nodiscard]] LibreKDE::CertificateList buildCertificateList() const;
+    [[nodiscard]] FakeCertInfoList buildCertificateList() const;
     /// @brief Seal m_photoBytes into m_keptPhotoFd (idempotent). Called on the
     ///        Ok-result RETAIN path — whether or not the Result signal fires —
     ///        so Photo1.GetResult can re-dup a sealed memfd of the same bytes.
@@ -336,7 +436,7 @@ private:
     bool m_announceConsentPhase = false;  // emit Phase=AwaitingConsent after a short delay, before finishing
     int m_keptPhotoFd = -1;               // sealed photo memfd, kept alive past the signal send (owned)
     QVariantMap m_credResult;             // a{sv} mutation result the Operation.Credentials1.Result carries
-    LibreKDE::CredentialRecordsWire m_credRecords; // aa{sv} records (empty for a mutation)
+    FakeCredentialRecords m_credRecords;  // aa{sv} records (empty for a mutation)
     std::unique_ptr<class FakeOperationAdaptor> m_opAdaptor;
     std::unique_ptr<QObject> m_resultAdaptor;
 };
@@ -389,7 +489,7 @@ public:
             QStringLiteral("org.librescrs.Agent.Error.UnknownCredential"); ///< the error name credEntryError sends
         QVariantMap credResult; ///< a{sv} mutation result the minted Operation.Credentials1.Result carries (and
                                 ///< GetResult re-serves) — delivered for EVERY completed attempt, Ok or Error
-        LibreKDE::CredentialRecordsWire
+        FakeCredentialRecords
             credRecords; ///< aa{sv} records a ListCredentials op returns; empty for a mutation (a legitimate result)
     };
 
@@ -603,8 +703,42 @@ private:
     QString m_lastCertDerCertId;
 };
 
+// --- reference-out-parameter introspection ---------------------------------
+//
+// QtDBus splits an adaptor slot's parameters by spelling: moc normalizes a
+// `const T&` input down to plain `T`, so the ones still carrying a trailing `&`
+// are exactly the OUTPUT parameters. For those, and only those, QtDBus resolves
+// the type by NAME — `QMetaType::fromName()` on the string moc recorded — which
+// is a registry the metatype registration does not populate on its own. A name
+// nothing is registered under makes QtDBus match no slot at all: the call comes
+// back an error, and a caller's recovery path quietly gets nothing.
+//
+// Nothing about that is visible to the compiler, so these two accessors let a
+// test read it. Half the fake's adaptors are file-local to the implementation
+// and unreachable from a test any other way.
+
+/// @brief Every `QDBusAbstractAdaptor` this fake defines, across both files.
+///        A NEW ADAPTOR MUST BE ADDED HERE — the out-parameter pin walks exactly
+///        this list, and a slot the walk never sees is a slot nothing checks.
+[[nodiscard]] QList<const QMetaObject*> adaptorMetaObjects();
+
+/// @brief The type name moc recorded for every reference OUTPUT parameter of
+///        every slot on those adaptors, trailing `&` included — the exact
+///        strings QtDBus will look up.
+[[nodiscard]] QList<QByteArray> adaptorReferenceOutParameterTypes();
+
 } // namespace LibreKDETest
 
-// FakeInterfaceProps == LibreKDE::AgentInterfaceProps, already declared a
-// metatype in AgentClient.h; only the managed-objects map is new here.
+// The struct-based mirrors, the containers built on them, and the
+// managed-objects map are types no client header declares, so each takes the
+// macro. FakeInterfaceProps / FakePhotoMap / FakeCredentialRecords deliberately
+// do not — see the note beside their declarations.
 Q_DECLARE_METATYPE(LibreKDETest::FakeManagedObjects)
+Q_DECLARE_METATYPE(LibreKDETest::FakeIdentityField)
+Q_DECLARE_METATYPE(LibreKDETest::FakeIdentityFieldGroup)
+Q_DECLARE_METATYPE(LibreKDETest::FakeIdentityFields)
+Q_DECLARE_METATYPE(LibreKDETest::FakeCertField)
+Q_DECLARE_METATYPE(LibreKDETest::FakeCertFieldGroup)
+Q_DECLARE_METATYPE(LibreKDETest::FakeCertFieldGroups)
+Q_DECLARE_METATYPE(LibreKDETest::FakeCertInfo)
+Q_DECLARE_METATYPE(LibreKDETest::FakeCertInfoList)

@@ -46,13 +46,32 @@ inline void runOnThread(QObject* target, Fn&& fn)
     QMetaObject::invokeMethod(target, std::forward<Fn>(fn), Qt::BlockingQueuedConnection);
 }
 
+/// @brief The agent's real well-known bus name.
+inline QString wellKnownAgentService()
+{
+    return QStringLiteral("org.librescrs.Agent");
+}
+
+/// @brief Which bus names a Harness claims for its fake.
+///
+/// A client that is handed a service name is reached under the per-test unique
+/// name, which is what lets suites run back to back without ever contending for
+/// a name. A client that binds itself to the agent's real well-known name
+/// offers no such hook, so for those the fake has to answer to that name too.
+/// The two modes coexist: claiming the well-known name ADDS it, so a suite
+/// addressing the unique name keeps working unchanged.
+enum class BusNames {
+    UniqueOnly,         ///< only `org.librescrs.Agent.Test.<tag>`
+    UniqueAndWellKnown, ///< that name AND `org.librescrs.Agent` itself
+};
+
 /// @brief Owns the server thread + the main-thread client connection. The
 ///        FakeAgent + its server connection are created and dispatched on the
 ///        worker thread (a plain QObject context object lives there).
 class Harness
 {
 public:
-    explicit Harness(FakeAgent::Config config)
+    explicit Harness(FakeAgent::Config config, BusNames names = BusNames::UniqueOnly)
     {
         static int counter = 0;
         const QString tag = QStringLiteral("lk-fake-%1-%2").arg(QCoreApplication::applicationPid()).arg(counter++);
@@ -61,6 +80,7 @@ public:
         config.service = QStringLiteral("org.librescrs.Agent.Test.%1").arg(tag);
         m_service = config.service;
         m_config = config;
+        m_claimsWellKnown = (names == BusNames::UniqueAndWellKnown);
 
         m_thread = new QThread();
         m_thread->start();
@@ -68,13 +88,23 @@ public:
         m_context->moveToThread(m_thread);
 
         bool named = false;
-        runOnThread(m_context, [this, &named]() {
+        bool wellKnownNamed = true;
+        runOnThread(m_context, [this, &named, &wellKnownNamed]() {
             m_server = std::make_unique<QDBusConnection>(
                 QDBusConnection::connectToBus(QDBusConnection::SessionBus, m_serverConnName));
             m_agent = std::make_unique<FakeAgent>(*m_server, m_config);
             named = m_server->registerService(m_service);
+            if (m_claimsWellKnown) {
+                // A SECOND name on the same connection: both route to this fake.
+                wellKnownNamed = m_server->registerService(wellKnownAgentService());
+            }
         });
         EXPECT_TRUE(named) << "could not claim " << m_service.toStdString() << " (run under dbus-run-session?)";
+        // A refusal here means the name is already owned — a live agent on a bus
+        // that is not private, or a second Harness still holding it. Both make
+        // every subsequent assertion meaningless, so say which.
+        EXPECT_TRUE(wellKnownNamed) << "could not claim " << wellKnownAgentService().toStdString()
+                                    << " (already owned on this bus?)";
 
         m_client =
             std::make_unique<QDBusConnection>(QDBusConnection::connectToBus(QDBusConnection::SessionBus, m_clientName));
@@ -85,6 +115,9 @@ public:
         runOnThread(m_context, [this]() {
             m_agent.reset();
             if (m_server) {
+                if (m_claimsWellKnown) {
+                    m_server->unregisterService(wellKnownAgentService());
+                }
                 m_server->unregisterService(m_service);
             }
             m_server.reset();
@@ -104,6 +137,11 @@ public:
     [[nodiscard]] QString service() const
     {
         return m_service;
+    }
+    /// @brief Whether this Harness also claimed the agent's well-known name.
+    [[nodiscard]] bool claimsWellKnownService() const
+    {
+        return m_claimsWellKnown;
     }
     [[nodiscard]] QString cardPath() const
     {
@@ -339,6 +377,7 @@ private:
     QString m_serverConnName;
     QString m_clientName;
     QString m_service;
+    bool m_claimsWellKnown = false;
     FakeAgent::Config m_config;
     QThread* m_thread = nullptr;
     QObject* m_context = nullptr;

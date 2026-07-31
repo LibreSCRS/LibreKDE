@@ -37,21 +37,18 @@ add_executable(SmartCardHandlerTest
     ${CMAKE_SOURCE_DIR}/components/plasmoid/src/SmartCardHandler.cpp
     ${CMAKE_SOURCE_DIR}/components/plasmoid/src/CardPhotoStore.cpp
     ${CMAKE_SOURCE_DIR}/components/plasmoid/src/CardPhotoProvider.cpp
-    ${CMAKE_SOURCE_DIR}/tests/agentclient/FakeAgent.cpp
-    ${CMAKE_SOURCE_DIR}/tests/agentclient/FakeAgent.h
     ${CMAKE_CURRENT_SOURCE_DIR}/PlasmoidTestMain.cpp
     ${PlasmoidTestLogging_SRCS}
 )
 target_include_directories(SmartCardHandlerTest PRIVATE
     ${CMAKE_SOURCE_DIR}/components/plasmoid/src
-    ${CMAKE_SOURCE_DIR}/tests/agentclient
     ${CMAKE_CURRENT_BINARY_DIR}
     # CardPhotoProvider.cpp includes the export header GenerateExportHeader
     # emits into the plasmoid's binary dir (librekde_plasmoid_export.h).
     ${CMAKE_BINARY_DIR}/components/plasmoid
 )
 target_link_libraries(SmartCardHandlerTest
-    PRIVATE GTest::gtest librekde-agentclient librekde-signing
+    PRIVATE GTest::gtest librekde-agentclient librekde-test-support librekde-signing
             Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::DBus Qt6::Test
             KF6::I18n KF6::CoreAddons KF6::KIOGui KF6::Service LibreKDELogging
 )

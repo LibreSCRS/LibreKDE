@@ -2,21 +2,20 @@
 # SPDX-FileCopyrightText: 2026 hirashix0
 #
 # CredentialController driven by the FakeAgent over a private session bus (reuses
-# the agent-client D-Bus harness + its QCoreApplication TestMain). Runs under
+# the shared D-Bus test harness + its QCoreApplication TestMain). Runs under
 # dbus-run-session, headless (QT_QPA_PLATFORM=offscreen). The test links the
 # credentials-core backing library directly (no app / QML engine needed).
 
 set(CMAKE_AUTOMOC ON)
 
 # CredentialModel role coverage — pure (no D-Bus, no QML engine). Reuses the
-# agentclient TestMain (a QCoreApplication + gtest entry) so ki18n has an app to
+# shared TestMain (a QCoreApplication + gtest entry) so ki18n has an app to
 # resolve the locale; runs headless (no dbus-run-session needed).
 add_executable(CredentialModelTest
     CredentialModelTest.cpp
-    ${CMAKE_SOURCE_DIR}/tests/agentclient/TestMain.cpp
 )
 target_link_libraries(CredentialModelTest PRIVATE
-    GTest::gtest credentials-core librekde-agentclient
+    GTest::gtest credentials-core librekde-agentclient librekde-test-main
     Qt6::Core Qt6::Gui Qt6::Test KF6::I18n
 )
 target_compile_features(CredentialModelTest PRIVATE cxx_std_23)
@@ -27,15 +26,9 @@ set_tests_properties(CredentialModelTest PROPERTIES
 
 add_executable(CredentialControllerTest
     CredentialControllerTest.cpp
-    ${CMAKE_SOURCE_DIR}/tests/agentclient/FakeAgent.cpp
-    ${CMAKE_SOURCE_DIR}/tests/agentclient/FakeAgent.h
-    ${CMAKE_SOURCE_DIR}/tests/agentclient/TestMain.cpp
-)
-target_include_directories(CredentialControllerTest PRIVATE
-    ${CMAKE_SOURCE_DIR}/tests/agentclient
 )
 target_link_libraries(CredentialControllerTest PRIVATE
-    GTest::gtest credentials-core librekde-agentclient
+    GTest::gtest credentials-core librekde-agentclient librekde-test-support librekde-test-main
     Qt6::Core Qt6::DBus Qt6::Test
 )
 target_compile_features(CredentialControllerTest PRIVATE cxx_std_23)
@@ -50,15 +43,9 @@ set_tests_properties(CredentialControllerTest PROPERTIES
 # CredentialControllerTest: FakeAgent + TestMain, under dbus-run-session, headless.
 add_executable(CredentialsE2ETest
     CredentialsE2ETest.cpp
-    ${CMAKE_SOURCE_DIR}/tests/agentclient/FakeAgent.cpp
-    ${CMAKE_SOURCE_DIR}/tests/agentclient/FakeAgent.h
-    ${CMAKE_SOURCE_DIR}/tests/agentclient/TestMain.cpp
-)
-target_include_directories(CredentialsE2ETest PRIVATE
-    ${CMAKE_SOURCE_DIR}/tests/agentclient
 )
 target_link_libraries(CredentialsE2ETest PRIVATE
-    GTest::gtest credentials-core librekde-agentclient
+    GTest::gtest credentials-core librekde-agentclient librekde-test-support librekde-test-main
     Qt6::Core Qt6::DBus Qt6::Test
 )
 target_compile_features(CredentialsE2ETest PRIVATE cxx_std_23)

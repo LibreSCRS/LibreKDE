@@ -7,12 +7,108 @@
 #include <QDBusMessage>
 #include <QDBusMetaType>
 #include <QDBusUnixFileDescriptor>
+#include <QMetaMethod>
 #include <QTimer>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <unistd.h>
 
 namespace LibreKDETest {
+
+// --- wire-shape mirror marshalling -----------------------------------------
+// Only `<<` is exercised (the fake emits, it never demarshals a result), but
+// qDBusRegisterMetaType<T>() installs BOTH operators as the type's marshaller
+// pair, so both must exist for the type to have a registered signature at all.
+
+// (sssv) — the Identity1 field tuple.
+QDBusArgument& operator<<(QDBusArgument& arg, const FakeIdentityField& f)
+{
+    arg.beginStructure();
+    arg << f.labelKey << f.labelFallback << f.type << f.value;
+    arg.endStructure();
+    return arg;
+}
+const QDBusArgument& operator>>(const QDBusArgument& arg, FakeIdentityField& f)
+{
+    arg.beginStructure();
+    arg >> f.labelKey >> f.labelFallback >> f.type >> f.value;
+    arg.endStructure();
+    return arg;
+}
+
+// (ssv) — the Certificates1 field tuple (no type string, unlike Identity1's).
+QDBusArgument& operator<<(QDBusArgument& arg, const FakeCertField& f)
+{
+    arg.beginStructure();
+    arg << f.labelKey << f.labelFallback << f.value;
+    arg.endStructure();
+    return arg;
+}
+const QDBusArgument& operator>>(const QDBusArgument& arg, FakeCertField& f)
+{
+    arg.beginStructure();
+    arg >> f.labelKey >> f.labelFallback >> f.value;
+    arg.endStructure();
+    return arg;
+}
+
+// (s b a{sa{s(ssv)}} u as as u) — one Certificates1 entry. The display strings
+// are folded into the `fields` map here rather than appended as struct members,
+// which is what keeps the struct at seven members on the wire.
+QDBusArgument& operator<<(QDBusArgument& arg, const FakeCertInfo& c)
+{
+    FakeCertFieldGroups fields;
+    if (!c.subjectCn.isEmpty()) {
+        fields[QStringLiteral("subject")][QStringLiteral("cn")] = {
+            QStringLiteral("label_subject_cn"), QStringLiteral("Subject CN"), QDBusVariant(c.subjectCn)};
+    }
+    if (!c.issuerCn.isEmpty()) {
+        fields[QStringLiteral("issuer")][QStringLiteral("cn")] = {
+            QStringLiteral("label_issuer_cn"), QStringLiteral("Issuer CN"), QDBusVariant(c.issuerCn)};
+    }
+    if (!c.notAfter.isEmpty()) {
+        fields[QStringLiteral("validity")][QStringLiteral("notAfter")] = {
+            QStringLiteral("label_not_after"), QStringLiteral("Not after"), QDBusVariant(c.notAfter)};
+    }
+
+    // chainSubjectCns falls back to [leaf CN] when the script left it empty (the
+    // single-entry chain), so an emitted payload always carries a non-empty
+    // chain like the agent's.
+    const QStringList chain = c.chainSubjectCns.isEmpty() ? QStringList{c.subjectCn} : c.chainSubjectCns;
+
+    arg.beginStructure();
+    arg << c.certId << c.signingCapable << fields;
+    arg << static_cast<uint>(c.keyUsageBits);
+    arg << c.extendedKeyUsageOids;
+    arg << chain;
+    arg << static_cast<uint>(c.trustStatus);
+    arg.endStructure();
+    return arg;
+}
+const QDBusArgument& operator>>(const QDBusArgument& arg, FakeCertInfo& c)
+{
+    FakeCertFieldGroups fields;
+    arg.beginStructure();
+    arg >> c.certId >> c.signingCapable >> fields;
+    uint keyUsageBits = 0;
+    uint trustStatus = 0;
+    arg >> keyUsageBits >> c.extendedKeyUsageOids >> c.chainSubjectCns >> trustStatus;
+    c.keyUsageBits = keyUsageBits;
+    c.trustStatus = trustStatus;
+    arg.endStructure();
+
+    // Each field value is a D-Bus variant `v`; the display string lives inside.
+    if (const auto subj = fields.constFind(QStringLiteral("subject")); subj != fields.constEnd()) {
+        c.subjectCn = subj->value(QStringLiteral("cn")).value.variant().toString();
+    }
+    if (const auto iss = fields.constFind(QStringLiteral("issuer")); iss != fields.constEnd()) {
+        c.issuerCn = iss->value(QStringLiteral("cn")).value.variant().toString();
+    }
+    if (const auto val = fields.constFind(QStringLiteral("validity")); val != fields.constEnd()) {
+        c.notAfter = val->value(QStringLiteral("notAfter")).value.variant().toString();
+    }
+    return arg;
+}
 
 namespace {
 constexpr const char* kOperationIface = "org.librescrs.Agent.Operation1";
@@ -27,19 +123,29 @@ void ensureMetatypes()
     if (done) {
         return;
     }
+    // The fake registers its OWN mirrors and nothing else. A client registers
+    // its own demarshalling types itself, on the path that needs them, so there
+    // is nothing here for the fake to do on a client's behalf — and doing it
+    // would tie the fake to whichever client happened to be linked.
     qDBusRegisterMetaType<FakeInterfaceProps>();
     qDBusRegisterMetaType<FakeManagedObjects>();
-    qDBusRegisterMetaType<LibreKDE::IdentityField>();
-    qDBusRegisterMetaType<LibreKDE::IdentityFieldGroup>();
-    qDBusRegisterMetaType<LibreKDE::IdentityFields>();
-    qDBusRegisterMetaType<LibreKDE::CertField>();
-    qDBusRegisterMetaType<LibreKDE::CertFieldGroup>();
-    qDBusRegisterMetaType<LibreKDE::CertFieldGroups>();
-    qDBusRegisterMetaType<LibreKDE::CertificateInfo>();
-    qDBusRegisterMetaType<LibreKDE::CertificateList>();
-    qDBusRegisterMetaType<LibreKDE::PhotoMap>();
+    qDBusRegisterMetaType<FakeIdentityField>();
+    qDBusRegisterMetaType<FakeIdentityFieldGroup>();
+    qDBusRegisterMetaType<FakeIdentityFields>();
+    qDBusRegisterMetaType<FakeCertField>();
+    qDBusRegisterMetaType<FakeCertFieldGroup>();
+    qDBusRegisterMetaType<FakeCertFieldGroups>();
+    qDBusRegisterMetaType<FakeCertInfo>();
+    qDBusRegisterMetaType<FakeCertInfoList>();
+    qDBusRegisterMetaType<FakePhotoMap>();
     // aa{sv} records for the Operation.Credentials1.Result signal + GetResult.
-    LibreKDE::registerCredentialMetatypes();
+    qDBusRegisterMetaType<FakeCredentialRecords>();
+    // ... and under the NAME moc records for it, which is a separate registry:
+    // QtDBus resolves a slot's reference OUTPUT parameter by name lookup, so
+    // Operation.Credentials1.GetResult's `records` out-arg is unreachable
+    // without this even though the type itself is registered above. Must match
+    // how the parameter is spelled in FakeCredentialsAdaptor::GetResult.
+    qRegisterMetaType<FakeCredentialRecords>("LibreKDETest::FakeCredentialRecords");
     done = true;
 }
 
@@ -169,7 +275,7 @@ public Q_SLOTS:
     // GetResult()->a{sa{s(sssv)}}: re-serve the retained identity field map (the
     // late-subscriber recovery pull). NoResult is a D-Bus error, not an empty
     // map, mirroring the frozen contract + FakeSignAdaptor.
-    LibreKDE::IdentityFields GetResult()
+    FakeIdentityFields GetResult()
     {
         if (!m_op->m_resultRetained) {
             m_op->replyNoResult();
@@ -179,7 +285,7 @@ public Q_SLOTS:
     }
 
 Q_SIGNALS:
-    void Result(const LibreKDE::IdentityFields& fields);
+    void Result(const FakeIdentityFields& fields);
 
 private:
     FakeOperation* m_op;
@@ -200,14 +306,14 @@ public Q_SLOTS:
     // GetResult()->a{sh}: re-serve the retained photo(s) as FRESH sealed-memfd
     // dups (the agent retains raw bytes it re-seals per call). NoResult is a
     // D-Bus error, mirroring the frozen contract + FakeSignAdaptor.
-    LibreKDE::PhotoMap GetResult()
+    FakePhotoMap GetResult()
     {
         if (!m_op->m_resultRetained) {
             m_op->replyNoResult();
             return {};
         }
         m_op->retainPhotoFd(); // idempotent — ensure the sealed source fd exists
-        LibreKDE::PhotoMap photos;
+        FakePhotoMap photos;
         if (m_op->m_keptPhotoFd >= 0) {
             const int dup = ::dup(m_op->m_keptPhotoFd);
             photos.insert(QStringLiteral("personal:photo"), QDBusUnixFileDescriptor(dup));
@@ -219,7 +325,7 @@ public Q_SLOTS:
     }
 
 Q_SIGNALS:
-    void Result(const LibreKDE::PhotoMap& photos);
+    void Result(const FakePhotoMap& photos);
 
 private:
     FakeOperation* m_op;
@@ -241,7 +347,7 @@ public Q_SLOTS:
     // GetResult()->a(sba{sa{s(ssv)}}uasasu): re-serve the retained certificate
     // list (the late-subscriber recovery pull). NoResult is a D-Bus error,
     // mirroring the frozen contract + FakeSignAdaptor.
-    LibreKDE::CertificateList GetResult()
+    FakeCertInfoList GetResult()
     {
         if (!m_op->m_resultRetained) {
             m_op->replyNoResult();
@@ -251,7 +357,7 @@ public Q_SLOTS:
     }
 
 Q_SIGNALS:
-    void Result(const LibreKDE::CertificateList& certificates);
+    void Result(const FakeCertInfoList& certificates);
 
 private:
     FakeOperation* m_op;
@@ -277,7 +383,13 @@ public Q_SLOTS:
     // return value (result), the second a trailing reference param (records) —
     // matching the XML's (result, records) ordering + FakeSignAdaptor. NoResult
     // is a D-Bus error, not an empty map, mirroring the frozen contract.
-    QVariantMap GetResult(LibreKDE::CredentialRecordsWire& records)
+    //
+    // `records` is spelled with its full namespace on purpose: QtDBus resolves a
+    // slot's non-const-reference OUTPUT parameter by looking up the type NAME moc
+    // recorded for it, so that name must be one ensureMetatypes() registered. A
+    // spelling neither side agrees on makes QtDBus find no matching slot and
+    // answer the call with an error instead of the payload.
+    QVariantMap GetResult(LibreKDETest::FakeCredentialRecords& records)
     {
         if (!m_op->m_resultRetained) {
             m_op->replyNoResult();
@@ -289,7 +401,7 @@ public Q_SLOTS:
     }
 
 Q_SIGNALS:
-    void Result(const QVariantMap& result, const LibreKDE::CredentialRecordsWire& records);
+    void Result(const QVariantMap& result, const FakeCredentialRecords& records);
 
 private:
     FakeOperation* m_op;
@@ -299,8 +411,7 @@ private:
 FakeOperation::FakeOperation(QObject* parent, QDBusConnection connection, QString path, Kind kind, int delayMs,
                              uint finalStatus, uint finalErrorCode, bool suppressResult, FakeCertList certScript,
                              bool rawCertResult, QByteArray photoBytes, bool photoEmptyMap, bool announceConsentPhase,
-                             bool lostSignalRecoverable, QVariantMap credResult,
-                             LibreKDE::CredentialRecordsWire credRecords)
+                             bool lostSignalRecoverable, QVariantMap credResult, FakeCredentialRecords credRecords)
     : QObject(parent), m_connection(connection), m_path(std::move(path)), m_kind(kind), m_delayMs(delayMs),
       m_finalStatus(finalStatus), m_finalErrorCode(finalErrorCode), m_suppressResult(suppressResult),
       m_lostSignalRecoverable(lostSignalRecoverable), m_certScript(std::move(certScript)),
@@ -470,7 +581,7 @@ void FakeOperation::emitRawCertResult()
                                           const QString& labelKey, const QString& fallback, const QString& value) {
         a.beginMapEntry();
         a << group;
-        a.beginMap(QMetaType::fromType<QString>().id(), qMetaTypeId<LibreKDE::CertField>());
+        a.beginMap(QMetaType::fromType<QString>().id(), qMetaTypeId<FakeCertField>());
         a.beginMapEntry();
         a << fieldKey;
         writeField(a, labelKey, fallback, value);
@@ -480,13 +591,13 @@ void FakeOperation::emitRawCertResult()
     };
 
     QDBusArgument arg;
-    arg.beginArray(qMetaTypeId<LibreKDE::CertificateInfo>());
+    arg.beginArray(qMetaTypeId<FakeCertInfo>());
     for (const FakeCert& fc : m_certScript) {
         arg.beginStructure(); // ( s b a{sa{s(ssv)}} u as as u )
         arg << fc.certId;
         arg << fc.signingCapable;
 
-        arg.beginMap(QMetaType::fromType<QString>().id(), qMetaTypeId<LibreKDE::CertFieldGroup>());
+        arg.beginMap(QMetaType::fromType<QString>().id(), qMetaTypeId<FakeCertFieldGroup>());
         if (!fc.subjectCn.isEmpty()) {
             writeGroup(arg, QStringLiteral("subject"), QStringLiteral("cn"), QStringLiteral("label_subject_cn"),
                        QStringLiteral("Subject CN"), fc.subjectCn);
@@ -515,24 +626,24 @@ void FakeOperation::emitRawCertResult()
     m_connection.send(sig);
 }
 
-LibreKDE::IdentityFields FakeOperation::buildIdentityFields() const
+FakeIdentityFields FakeOperation::buildIdentityFields() const
 {
     // a{sa{s(sssv)}} with one group/one field — the deterministic payload the
     // Identity1.Result signal AND Identity1.GetResult both serve.
-    LibreKDE::IdentityField field{QStringLiteral("label_given_name"), QStringLiteral("Given name"),
-                                  QStringLiteral("text"), QDBusVariant(QStringLiteral("Ana"))};
-    LibreKDE::IdentityFieldGroup group;
+    FakeIdentityField field{QStringLiteral("label_given_name"), QStringLiteral("Given name"), QStringLiteral("text"),
+                            QDBusVariant(QStringLiteral("Ana"))};
+    FakeIdentityFieldGroup group;
     group.insert(QStringLiteral("given_name"), field);
-    LibreKDE::IdentityFields fields;
+    FakeIdentityFields fields;
     fields.insert(QStringLiteral("personal"), group);
     return fields;
 }
 
-LibreKDE::CertificateList FakeOperation::buildCertificateList() const
+FakeCertInfoList FakeOperation::buildCertificateList() const
 {
-    LibreKDE::CertificateList certs;
+    FakeCertInfoList certs;
     for (const FakeCert& fc : m_certScript) {
-        LibreKDE::CertificateInfo ci;
+        FakeCertInfo ci;
         ci.certId = fc.certId;
         ci.signingCapable = fc.signingCapable;
         ci.subjectCn = fc.subjectCn;
@@ -572,7 +683,7 @@ void FakeOperation::emitPhotoResult()
     // guard (a card with no photo at all), distinct from the empty-FD guard (a
     // present-but-empty memfd entry) below.
     if (m_photoEmptyMap) {
-        Q_EMIT static_cast<FakePhotoAdaptor*>(m_resultAdaptor.get())->Result(LibreKDE::PhotoMap{});
+        Q_EMIT static_cast<FakePhotoAdaptor*>(m_resultAdaptor.get())->Result(FakePhotoMap{});
         return;
     }
     // One-entry a{sh}: "personal:photo" -> a dup of the sealed source fd
@@ -581,7 +692,7 @@ void FakeOperation::emitPhotoResult()
     // dups on copy).
     retainPhotoFd();
     int dup = m_keptPhotoFd >= 0 ? ::dup(m_keptPhotoFd) : -1;
-    LibreKDE::PhotoMap photos;
+    FakePhotoMap photos;
     photos.insert(QStringLiteral("personal:photo"), QDBusUnixFileDescriptor(dup));
     Q_EMIT static_cast<FakePhotoAdaptor*>(m_resultAdaptor.get())->Result(photos);
     if (dup >= 0) {
@@ -1104,8 +1215,7 @@ QDBusObjectPath FakeAgent::mintOperation(FakeOperation::Kind kind, bool withCred
     const bool photoEmptyMap = (kind == FakeOperation::Kind::Photo) && m_config.photoEmptyMap;
     // A Credentials MUTATION result carries no records (withCredRecords=false):
     // records ride ListCredentials results alone, exactly like the real agent.
-    const LibreKDE::CredentialRecordsWire credRecords =
-        withCredRecords ? m_config.credRecords : LibreKDE::CredentialRecordsWire{};
+    const FakeCredentialRecords credRecords = withCredRecords ? m_config.credRecords : FakeCredentialRecords{};
     auto* op = new FakeOperation(this, m_connection, opPath, kind, delay, m_config.finalStatus, m_config.finalErrorCode,
                                  suppressResult, m_config.certScript, m_config.rawCertResult, m_config.photoBytes,
                                  photoEmptyMap, m_config.announceConsentPhase, m_config.lostSignalRecoverable,
@@ -1377,6 +1487,41 @@ void FakeAgent::dropCardSilently()
     m_cardObject->deleteLater();
     m_cardObject = nullptr;
     m_cardAdaptor = nullptr;
+}
+
+// --- reference-out-parameter introspection ---------------------------------
+// Lives at the bottom of this file because half these classes are declared in
+// it, so this is the first point where all twelve are complete types.
+QList<const QMetaObject*> adaptorMetaObjects()
+{
+    return {
+        &WedgedPropertiesAdaptor::staticMetaObject, &ObjectManagerAdaptor::staticMetaObject,
+        &ReaderAdaptor::staticMetaObject,           &CardAdaptor::staticMetaObject,
+        &CredentialsAdaptor::staticMetaObject,      &Pkcs11Adaptor::staticMetaObject,
+        &FakeOperationAdaptor::staticMetaObject,    &FakeSignAdaptor::staticMetaObject,
+        &FakeIdentityAdaptor::staticMetaObject,     &FakePhotoAdaptor::staticMetaObject,
+        &FakeCertificatesAdaptor::staticMetaObject, &FakeCredentialsAdaptor::staticMetaObject,
+    };
+}
+
+QList<QByteArray> adaptorReferenceOutParameterTypes()
+{
+    QList<QByteArray> out;
+    for (const QMetaObject* mo : adaptorMetaObjects()) {
+        // From methodOffset(): the adaptor's OWN methods, skipping the ones
+        // QObject and QDBusAbstractAdaptor contribute.
+        for (int i = mo->methodOffset(); i < mo->methodCount(); ++i) {
+            const QList<QByteArray> params = mo->method(i).parameterTypes();
+            for (const QByteArray& type : params) {
+                // A surviving `&` means moc did not normalize it away, which it
+                // does for every `const T&` — so this is an output parameter.
+                if (type.endsWith('&')) {
+                    out.append(type);
+                }
+            }
+        }
+    }
+    return out;
 }
 
 } // namespace LibreKDETest
