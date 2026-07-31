@@ -65,6 +65,12 @@ option(LIBREKDE_BUILD_CREDENTIALS "Build the credential-management window" ON)
 option(BUILD_TESTING "Build tests" ON)
 include(CTest)
 
+# LibreAgent::ClientQt — the Qt client library for org.librescrs.Agent over
+# D-Bus. Nothing links it yet (shared/agentclient still carries LibreKDE's own
+# vendored client); this makes the shared library available to the build so a
+# later phase can migrate onto it without also having to plumb its discovery.
+include(cmake/FindOrUseLibreAgent.cmake)
+
 # Qt6::Widgets at root scope (see the note above) — created whenever a signing
 # surface (plasmoid or Purpose) is built, so librekde-signing and its consumers
 # resolve the target from any subdirectory.

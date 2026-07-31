@@ -4,9 +4,13 @@ name: CI
 # LibreKDE is currently unpublished — this workflow activates on the first
 # push to GitHub. LibreKDE is LM-free AND LibreLinux-free at build time: the
 # plasmoid, Purpose plugin and card:/ KIO worker are thin clients that talk to
-# the org.librescrs.Agent D-Bus service only at RUNTIME. So this CI is
-# self-contained — it needs Qt6 + KF6 + Plasma 6 dev packages and nothing from
-# the rest of the stack.
+# the org.librescrs.Agent D-Bus service only at RUNTIME. The build-linux job
+# checks out and builds LibreSCRS/LibreAgent from source (Core off,
+# LibreMiddleware disabled) purely to produce the LibreAgent::ClientQt library
+# the build resolves via find_package() (nothing links it yet) — that sibling
+# build never pulls in LibreMiddleware or LibreLinux, so the
+# LM-free/LibreLinux-free invariant still holds; it is just no longer a
+# single-repo checkout.
 
 on:
   push:
@@ -44,11 +48,23 @@ jobs:
     # env and the LibreKDE PKGBUILD dep set (packaging/arch/PKGBUILD).
     runs-on: ubuntu-latest
     container: archlinux:latest
+    env:
+      # Where LibreAgent's Qt client library is installed and where LibreKDE's
+      # Configure step below points CMAKE_PREFIX_PATH.
+      AGENT_PREFIX: /opt/libreagent-clientqt
+      # Git ref of LibreAgent to build against. Track its trunk during the
+      # development cycle, same convention as MIDDLEWARE_REF: main in the
+      # LibreAgent and LibreLinux workflows; LibreKDE's own
+      # find_package(LibreAgent 4.2 ...) enforces the required version
+      # independently of this ref.
+      AGENT_REF: main
     steps:
       - name: Install system dependencies
         # Build deps from the LibreKDE PKGBUILD makedepends + the runtime KF6/
         # Plasma/Qt packages its find_package() calls need at configure time.
         # qt6-declarative supplies qmllint for the plasmoid QML lint step.
+        # qt6-base + dbus also cover everything LibreAgent's ClientQt-only
+        # build below needs; no additional packages are required for it.
         run: |
           pacman -Syu --noconfirm
           pacman -S --noconfirm --needed \
@@ -70,19 +86,77 @@ jobs:
           locale-gen
 
       - uses: actions/checkout@v4
+        with:
+          path: LibreKDE
+
+      # --- LibreAgent: build the Qt client library from source + install to a
+      # prefix. This job's only LibreAgent dependency is the installable,
+      # component-filtered ClientQt CONFIG package (sonamed shared library)
+      # that a later phase will migrate LibreKDE's own client onto — that
+      # package shape only exists once LibreAgent has actually released it, so
+      # LibreAgent must publish its component-filtered, sonamed ClientQt
+      # package before this workflow runs against a LibreKDE change; pointing
+      # AGENT_REF at a LibreAgent `main` that predates that release would
+      # silently build the older, unfiltered, no-soname package shape instead.
+      - name: Checkout LibreAgent
+        uses: actions/checkout@v4
+        with:
+          repository: LibreSCRS/LibreAgent
+          ref: ${{ env.AGENT_REF }}
+          path: LibreAgent
+
+      # Core OFF and LibreMiddleware disabled: this job's only reason to build
+      # LibreAgent is to obtain LibreAgent::ClientQt, and LibreKDE itself must
+      # stay LibreMiddleware-free at build time, so the sibling build it
+      # depends on is held to the same rule.
+      # CMAKE_DISABLE_FIND_PACKAGE_LibreMiddleware=ON is a deliberate backstop,
+      # not dead weight: it is a real CMake variable find_package() consults,
+      # so it turns any future accidental find_package(LibreMiddleware ...)
+      # in this configuration into a hard configure error instead of a silent
+      # success. With Core off that find_package() call is never reached at
+      # all, so CMake currently reports this variable as unused too -- that is
+      # expected here, not a sign the flag is dead.
+      # LIBREAGENT_INSTALL_WIRE_ARCHIVE=OFF mirrors LibreAgent's own packaging
+      # recipe (packaging/arch/PKGBUILD in the LibreAgent repo, not this one):
+      # Wire is linked statically into liblibrescrs-agentclient-qt.so, so the
+      # standalone archive is redundant in a ClientQt-only prefix.
+      # No BUILD_TESTING flag: two independent gates in LibreAgent's own CMake
+      # add its test binaries regardless of that variable. Root tests/ (wire +
+      # spike only) is added whenever this is the top-level project with Core
+      # or Wire enabled; client/qt/tests (the ClientQt suite) is added by a
+      # separate, unconditional `if(PROJECT_IS_TOP_LEVEL)` in
+      # client/qt/CMakeLists.txt, with no Core-or-Wire test of its own. Neither
+      # gate has an opt-out, so all three suites are configured and built as a
+      # side effect of this step either way — this job simply never runs them
+      # (no ctest call against this checkout).
+      - name: Build & install LibreAgent (ClientQt only, LM-free)
+        working-directory: LibreAgent
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DLIBREAGENT_BUILD_CORE=OFF \
+            -DLIBREAGENT_BUILD_WIRE=ON \
+            -DLIBREAGENT_BUILD_CLIENT_QT=ON \
+            -DLIBREAGENT_INSTALL_WIRE_ARCHIVE=OFF \
+            -DCMAKE_DISABLE_FIND_PACKAGE_LibreMiddleware=ON
+          cmake --build build -j4
+          cmake --install build --prefix "$AGENT_PREFIX"
 
       # Explicit component flags pin the package contract (their CMake option
       # defaults are already ON, but pin them so CI matches the PKGBUILD).
       - name: Configure
+        working-directory: LibreKDE
         run: |
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
             -DLIBREKDE_BUILD_PLASMOID=ON \
             -DLIBREKDE_BUILD_PURPOSE=ON \
             -DLIBREKDE_BUILD_KIO=ON \
-            -DBUILD_TESTING=ON
+            -DBUILD_TESTING=ON \
+            -DCMAKE_PREFIX_PATH="$AGENT_PREFIX"
 
       - name: Build
+        working-directory: LibreKDE
         run: cmake --build build -j4
 
       # qmllint over the plasmoid QML (Qt6 qmllint, shipped by qt6-declarative).
@@ -90,6 +164,7 @@ jobs:
       # Qt6 qmllint lives in $(qmake6 -query QT_INSTALL_BINS) (e.g.
       # /usr/lib/qt6/bin), NOT on PATH — only the Qt5 build drops it in /usr/bin.
       - name: qmllint (plasmoid QML)
+        working-directory: LibreKDE
         run: |
           QMLLINT="$(qmake6 -query QT_INSTALL_BINS)/qmllint"
           find components/plasmoid -name "*.qml" -print0 | xargs -0 "$QMLLINT"
@@ -98,6 +173,7 @@ jobs:
       # private session bus the agentclient D-Bus tests connect to. No
       # LIBRESCRS_TEST_PIN: there is no card/secret path in these clients.
       - name: Test
+        working-directory: LibreKDE
         env:
           QT_QPA_PLATFORM: offscreen
         run: dbus-run-session -- ctest --test-dir build --output-on-failure

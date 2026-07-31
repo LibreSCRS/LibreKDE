@@ -22,6 +22,7 @@ url="https://github.com/LibreSCRS/LibreKDE"
 license=('LGPL-2.1-or-later')
 depends=(
     'librescrs-agent'   # the D-Bus agent this client talks to
+    'librescrs-agent-client-qt' # LibreAgent::ClientQt (find_package(LibreAgent CONFIG))
     'plasma-workspace'  # Plasma 6 shell (plasmoid host)
     'libplasma'         # find_package(Plasma 6.0)
     'qt6-base'          # Core/Gui/DBus/Widgets
@@ -45,6 +46,8 @@ makedepends=(
     'gtest'                 # BUILD_TESTING unit tests
     'qt6-tools'             # lrelease for ki18n .po -> .qm (ECMPoQmTools)
     'dbus'                  # dbus-run-session for the D-Bus client tests
+    'librescrs-agent-client-qt' # find_package(LibreAgent 4.2 CONFIG COMPONENTS ClientQt)
+                                #   at configure time (cmake/FindOrUseLibreAgent.cmake)
 )
 source=(
     "$pkgname-$pkgver.tar.gz::https://github.com/LibreSCRS/LibreKDE/archive/refs/tags/v$pkgver.tar.gz"
