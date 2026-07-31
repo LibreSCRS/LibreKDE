@@ -58,9 +58,13 @@ using LibreSCRS::AgentClient::ErrorCode;
                        "The smart-card service did not answer in time. Try again.")
             .toString();
     case CallError::AccessDenied:
+        // States the fact and stops there, deliberately. The same bucket also
+        // carries the caller simply not being logged in, and that user is not
+        // lacking a permission — pointing them at an administrator sends them
+        // the wrong way. Nothing on this axis can tell the two apart; only the
+        // wire's own named-error axis can, so precise help belongs there.
         return ki18ndc("librekde", "@info:status the system denied this application access to the smart-card service",
-                       "Permission to use the smart-card service was denied. Ask your system administrator if this "
-                       "should be allowed.")
+                       "Permission to use the smart-card service was denied.")
             .toString();
     case CallError::InvalidArguments:
         // The widest bucket, and the one where naming either an actor or a
@@ -76,7 +80,7 @@ using LibreSCRS::AgentClient::ErrorCode;
         return ki18ndc("librekde",
                        "@info:status the request was rejected before any work on it started; do not name who "
                        "rejected it, it may be this application, the smart-card service, or the message bus",
-                       "This request was refused before it could be carried out.")
+                       "This request was refused before any work on it started.")
             .toString();
     case CallError::TransportFailure:
         return ki18ndc("librekde", "@info:status the connection to the smart-card service broke during the request",

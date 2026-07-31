@@ -297,14 +297,16 @@ msgstr "Previše zahteva za potpisivanje. Pokušajte ponovo uskoro."
 # for a failure that classified on neither axis and said nothing.
 #
 # DRAFT, awaiting a native review. The Serbian below is a first pass and is not
-# settled copy. Two of the English strings also have open wording questions,
-# and their Serbian follows whatever the English settles on:
-#   * the access-denied string sends the reader to a system administrator,
-#     which misdirects for the member of that bucket that means nobody is
-#     logged in rather than a permission being withheld;
-#   * the refusal string's "before it could be carried out" faintly implies the
-#     request might have gone through later, which is untrue when the two sides
-#     simply speak different versions.
+# settled copy. The English is settled: the two strings that had open wording
+# questions were decided, and the Serbian here follows those decisions.
+#   * the access-denied string no longer sends the reader to a system
+#     administrator, which misdirected for the member of that bucket that means
+#     nobody is logged in rather than a permission being withheld; it now
+#     states the fact and stops;
+#   * the refusal string now says "before any work on it started", because
+#     "before it could be carried out" faintly implied the request might have
+#     gone through later, which is untrue when the two sides simply speak
+#     different versions.
 # DRAFT: awaiting native review — wording not settled.
 #: shared/agentclient/ErrorText.cpp
 msgctxt "@info:status the operation failed without reporting any reason"
@@ -332,12 +334,8 @@ msgstr "Servis za pametne kartice nije odgovorio na vreme. Pokušajte ponovo."
 msgctxt ""
 "@info:status the system denied this application access to the smart-card "
 "service"
-msgid ""
-"Permission to use the smart-card service was denied. Ask your system "
-"administrator if this should be allowed."
-msgstr ""
-"Pristup servisu za pametne kartice je odbijen. Pitajte administratora "
-"sistema da li ovo treba da bude dozvoljeno."
+msgid "Permission to use the smart-card service was denied."
+msgstr "Pristup servisu za pametne kartice je odbijen."
 
 # DRAFT: awaiting native review — wording not settled.
 #: shared/agentclient/ErrorText.cpp
@@ -345,8 +343,8 @@ msgctxt ""
 "@info:status the request was rejected before any work on it started; do not "
 "name who rejected it, it may be this application, the smart-card service, or "
 "the message bus"
-msgid "This request was refused before it could be carried out."
-msgstr "Ovaj zahtev je odbijen pre nego što je mogao da bude izvršen."
+msgid "This request was refused before any work on it started."
+msgstr "Ovaj zahtev je odbijen pre nego što je počeo rad na njemu."
 
 # DRAFT: awaiting native review — wording not settled.
 #: shared/agentclient/ErrorText.cpp
