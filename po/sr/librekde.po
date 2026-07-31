@@ -296,9 +296,9 @@ msgstr "Превише захтева за потписивање. Покуша�
 # carries no error code of its own — one per transport outcome, plus a floor
 # for a failure that classified on neither axis and said nothing.
 #
-# DRAFT, awaiting a native review. The Serbian below is a first pass and is not
-# settled copy. The English is settled: the two strings that had open wording
-# questions were decided, and the Serbian here follows those decisions.
+# The Serbian below has had its native review and is settled copy, as is the
+# English. Two English strings had open wording questions and were decided;
+# the Serbian follows those decisions.
 #   * the access-denied string no longer sends the reader to a system
 #     administrator, which misdirected for the member of that bucket that means
 #     nobody is logged in rather than a permission being withheld; it now
@@ -307,29 +307,25 @@ msgstr "Превише захтева за потписивање. Покуша�
 #     "before it could be carried out" faintly implied the request might have
 #     gone through later, which is untrue when the two sides simply speak
 #     different versions.
-# DRAFT: awaiting native review — wording not settled.
 #: shared/agentclient/ErrorText.cpp
 msgctxt "@info:status the operation failed without reporting any reason"
 msgid "The operation did not finish, and no reason was reported."
 msgstr "Операција није завршена, а разлог није пријављен."
 
-# DRAFT: awaiting native review — wording not settled.
 #: shared/agentclient/ErrorText.cpp
 msgctxt "@info:status the smart-card service could not be reached at all"
 msgid ""
 "Could not reach the smart-card service. Check that it is installed and "
 "running."
 msgstr ""
-"Није могуће приступити сервису за паметне картице. Проверите да ли је "
-"инсталиран и покренут."
+"Сервис за паметне картице није доступан. Проверите да ли је инсталиран и "
+"покренут."
 
-# DRAFT: awaiting native review — wording not settled.
 #: shared/agentclient/ErrorText.cpp
 msgctxt "@info:status the smart-card service did not answer in time"
 msgid "The smart-card service did not answer in time. Try again."
 msgstr "Сервис за паметне картице није одговорио на време. Покушајте поново."
 
-# DRAFT: awaiting native review — wording not settled.
 #: shared/agentclient/ErrorText.cpp
 msgctxt ""
 "@info:status the system denied this application access to the smart-card "
@@ -337,16 +333,14 @@ msgctxt ""
 msgid "Permission to use the smart-card service was denied."
 msgstr "Приступ сервису за паметне картице је одбијен."
 
-# DRAFT: awaiting native review — wording not settled.
 #: shared/agentclient/ErrorText.cpp
 msgctxt ""
 "@info:status the request was rejected before any work on it started; do not "
 "name who rejected it, it may be this application, the smart-card service, or "
 "the message bus"
 msgid "This request was refused before any work on it started."
-msgstr "Овај захтев је одбијен пре него што је почео рад на њему."
+msgstr "Овај захтев је одбијен пре него што је ишта урађено."
 
-# DRAFT: awaiting native review — wording not settled.
 #: shared/agentclient/ErrorText.cpp
 msgctxt ""
 "@info:status the connection to the smart-card service broke during the "
@@ -354,7 +348,6 @@ msgctxt ""
 msgid "The connection to the smart-card service was lost. Try again."
 msgstr "Веза са сервисом за паметне картице је прекинута. Покушајте поново."
 
-# DRAFT: awaiting native review — wording not settled.
 #: shared/agentclient/ErrorText.cpp
 msgctxt "@info:status the smart-card service's reply could not be understood"
 msgid ""
