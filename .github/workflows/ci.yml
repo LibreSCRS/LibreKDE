@@ -6,8 +6,10 @@ name: CI
 # plasmoid, Purpose plugin and card:/ KIO worker are thin clients that talk to
 # the org.librescrs.Agent D-Bus service only at RUNTIME. The build-linux job
 # checks out and builds LibreSCRS/LibreAgent from source (Core off,
-# LibreMiddleware disabled) purely to produce the LibreAgent::ClientQt library
-# the build resolves via find_package() (nothing links it yet) — that sibling
+# LibreMiddleware disabled) to produce the LibreAgent::ClientQt library the
+# build resolves via find_package(). Every component links that library, as do
+# shared/agentclient and shared/signing, so the sibling checkout is a hard
+# build-time dependency and this workflow CANNOT pass without it — that sibling
 # build never pulls in LibreMiddleware or LibreLinux, so the
 # LM-free/LibreLinux-free invariant still holds; it is just no longer a
 # single-repo checkout.
@@ -92,7 +94,7 @@ jobs:
       # --- LibreAgent: build the Qt client library from source + install to a
       # prefix. This job's only LibreAgent dependency is the installable,
       # component-filtered ClientQt CONFIG package (sonamed shared library)
-      # that a later phase will migrate LibreKDE's own client onto — that
+      # that LibreKDE's components now link directly — that
       # package shape only exists once LibreAgent has actually released it, so
       # LibreAgent must publish its component-filtered, sonamed ClientQt
       # package before this workflow runs against a LibreKDE change; pointing

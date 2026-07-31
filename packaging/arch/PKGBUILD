@@ -9,7 +9,17 @@
 # depends on `librescrs-agent` (the agent package built from pkgbase
 # `librelinux`), NOT on `librescrs-middleware`.
 #
-# Dependency chain: librescrs-middleware <= librelinux <= librekde
+# It also LINKS `librescrs-agent-client-qt`, the Qt client library
+# (LibreAgent::ClientQt). That package has its OWN pkgbase of the same name,
+# built from the LibreAgent repository — it is not one of the packages
+# `librelinux` produces. It appears in both depends (the shared library at
+# runtime) and makedepends (the CONFIG package find_package() resolves at
+# configure time). Its own depends are Qt6 and libc only, so it pulls no part
+# of the middleware stack in with it.
+#
+# Dependency chain — two roots, not one:
+#     librescrs-middleware  <=  librelinux  <=  librekde
+#     librescrs-agent-client-qt  <=  librekde
 #
 # Versioning: independent SemVer (0.x until the D-Bus wire surface freezes).
 

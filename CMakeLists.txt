@@ -70,8 +70,10 @@ include(CTest)
 # at ROOT scope, before add_subdirectory(shared), so every subdirectory resolves
 # the imported target. shared/signing links it for the card and operation types
 # in its public interface; shared/agentclient links it for the CallError and
-# ErrorCode value types ErrorText's composed entry point takes. The surfaces
-# still holding LibreKDE's own vendored client do not yet.
+# ErrorCode value types ErrorText's composed entry point takes. Every component
+# — plasmoid, credentials, kio, purpose — links it too, and names it explicitly
+# rather than relying on transitive propagation. LibreKDE no longer carries a
+# vendored client of its own: this library is the only one.
 include(cmake/FindOrUseLibreAgent.cmake)
 
 # Qt6::Widgets at root scope (see the note above) — created whenever a signing
