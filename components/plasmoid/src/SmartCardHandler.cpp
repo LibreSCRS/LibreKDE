@@ -587,7 +587,8 @@ void SmartCardHandler::signFile(const QString& fileUrl)
         // certs and the deterministic first was picked implicitly — the
         // success message then names it; a lone auto-selected cert
         // needs no callout.
-        Q_EMIT signSucceeded(outputPath, m_lastSignCertLabel);
+        Q_EMIT signSucceeded(outputPath, m_lastSignCertLabel,
+                             job->signMeta().value(QStringLiteral("level")).toString());
         job->deleteLater();
     });
     connect(job, &LibreKDE::SignJob::failed, this, [this, job](const QString& message) {

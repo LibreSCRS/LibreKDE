@@ -43,12 +43,10 @@ namespace {
 ///
 /// The wire tokens `MimeFormatMap` speaks ARE that vocabulary
 /// (pades|cades|xades|jades|asice); packaging is the two-valued split
-/// `SignChoice::enveloped()` already makes. No timestamp authority and no
-/// visible-signature placement are requested, so both stay the agent's own
-/// configuration. The level does NOT: the typed options always carry one, so
-/// the agent's configured default level (and its upgrade when a timestamp
-/// authority is configured) no longer applies to a request made through here —
-/// every signature this Job asks for is the baseline level.
+/// `SignChoice::enveloped()` already makes. No timestamp authority, no
+/// visible-signature placement and no level are requested, so all three stay
+/// the agent's own configuration — including its configured default level and
+/// that value's upgrade when a timestamp authority is set.
 [[nodiscard]] std::optional<Client::SignOptions> toSignOptions(const SignChoice& choice)
 {
     Client::SignOptions options;
@@ -66,6 +64,10 @@ namespace {
         return std::nullopt;
     }
     options.packaging = choice.enveloped() ? Client::Packaging::Enveloped : Client::Packaging::Detached;
+    // The agent's configuration is the signing policy, not this client's.
+    // Stated explicitly even though it is the default, because a level that
+    // silently overrode that policy is exactly the defect this replaces.
+    options.level = Client::SignatureLevel::Auto;
     return options;
 }
 
@@ -96,6 +98,7 @@ struct SignJob::Private
     SignChoice choice;
     Client::SignOptions signOptions;
     QString outputPath;
+    QVariantMap signMeta;
     Client::AgentOperation* certOp = nullptr;
     Client::AgentOperation* signOp = nullptr;
     bool emitted = false;
@@ -118,6 +121,11 @@ SignJob::~SignJob() = default;
 QString SignJob::outputPath() const
 {
     return d->outputPath;
+}
+
+QVariantMap SignJob::signMeta() const
+{
+    return d->signMeta;
 }
 
 void SignJob::fail(const QString& message)
@@ -301,6 +309,13 @@ void SignJob::onSignFinished()
         fail(ErrorText::forOutcome(op->errorCode(), op->callError(), op->messageFallback()));
         return;
     }
+
+    // What the agent says it actually produced — read off the live operation in
+    // this slot, like the artifact below, since the deleteLater above only takes
+    // effect on the next event-loop turn. Kept because the request may have
+    // deferred the level, in which case this is the only place the resolved one
+    // appears.
+    d->signMeta = op->signMeta();
 
     // Single-shot: takeSignedArtifact() MOVES the sealed fd out of the operation,
     // so it is called exactly once and every read below goes through this local.

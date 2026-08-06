@@ -101,18 +101,34 @@ ColumnLayout {
     // never become a styled link in the result banner.
     Connections {
         target: signAction.smartCard
-        function onSignSucceeded(outputPath, certLabel) {
+        function onSignSucceeded(outputPath, certLabel, level) {
             var name = outputPath.substring(outputPath.lastIndexOf("/") + 1)
             // certLabel is non-empty only when the card carried SEVERAL signing
             // certs and the deterministic first was picked implicitly — name it
             // so the choice is never silent (a real chooser comes later).
-            signResult.text = certLabel.length > 0
-                ? i18nc("@info:status a file was signed with an implicitly picked certificate; %1 file name, %2 certificate name",
-                        "Signed %1 with certificate %2",
-                        signAction.smartCard.plainDisplay(name),
-                        signAction.smartCard.plainDisplay(certLabel))
-                : i18nc("@info:status a file was signed", "Signed %1",
-                        signAction.smartCard.plainDisplay(name))
+            //
+            // The level is what the agent REPORTS having produced, not what was
+            // asked for — nothing here asks. It is shown uppercased, the way the
+            // AdES levels are written (B-T), and omitted entirely when the agent
+            // reported none rather than shown as a blank.
+            var shown = signAction.smartCard.plainDisplay(name)
+            if (level.length > 0) {
+                signResult.text = certLabel.length > 0
+                    ? i18nc("@info:status a file was signed with an implicitly picked certificate; %1 file name, %2 certificate name, %3 AdES conformance level such as B-T",
+                            "Signed %1 with certificate %2 at %3",
+                            shown,
+                            signAction.smartCard.plainDisplay(certLabel),
+                            level.toUpperCase())
+                    : i18nc("@info:status a file was signed; %1 file name, %2 AdES conformance level such as B-T",
+                            "Signed %1 at %2", shown, level.toUpperCase())
+            } else {
+                signResult.text = certLabel.length > 0
+                    ? i18nc("@info:status a file was signed with an implicitly picked certificate; %1 file name, %2 certificate name",
+                            "Signed %1 with certificate %2",
+                            shown,
+                            signAction.smartCard.plainDisplay(certLabel))
+                    : i18nc("@info:status a file was signed", "Signed %1", shown)
+            }
             signResult.type = Kirigami.MessageType.Positive
             signResult.visible = true
         }

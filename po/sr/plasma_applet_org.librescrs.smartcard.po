@@ -334,14 +334,28 @@ msgctxt "@title:window choose a file to sign"
 msgid "Choose a file to sign"
 msgstr "Изаберите фајл за потписивање"
 
-#: components/plasmoid/package/contents/ui/SignFileAction.qml:79
+#: components/plasmoid/package/contents/ui/SignFileAction.qml:117
+msgctxt ""
+"@info:status a file was signed with an implicitly picked certificate; %1 "
+"file name, %2 certificate name, %3 AdES conformance level such as B-T"
+msgid "Signed %1 with certificate %2 at %3"
+msgstr "Потписано: %1 сертификатом %2, ниво %3"
+
+#: components/plasmoid/package/contents/ui/SignFileAction.qml:122
+msgctxt ""
+"@info:status a file was signed; %1 file name, %2 AdES conformance level such "
+"as B-T"
+msgid "Signed %1 at %2"
+msgstr "Потписано: %1, ниво %2"
+
+#: components/plasmoid/package/contents/ui/SignFileAction.qml:126
 msgctxt ""
 "@info:status a file was signed with an implicitly picked certificate; %1 "
 "file name, %2 certificate name"
 msgid "Signed %1 with certificate %2"
 msgstr "Потписано: %1 сертификатом %2"
 
-#: components/plasmoid/package/contents/ui/SignFileAction.qml:82
+#: components/plasmoid/package/contents/ui/SignFileAction.qml:130
 msgctxt "@info:status a file was signed"
 msgid "Signed %1"
 msgstr "Потписано: %1"

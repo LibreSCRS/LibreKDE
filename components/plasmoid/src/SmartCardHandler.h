@@ -439,7 +439,11 @@ Q_SIGNALS:
     ///        non-empty ONLY when the card carried several signing certs (the
     ///        deterministic first-cert pick must not stay silent); empty for
     ///        the common lone-cert auto-selection.
-    void signSucceeded(const QString& outputPath, const QString& certLabel);
+    /// @param level the AdES conformance level the agent actually produced
+    ///        (`b-b`/`b-t`/`b-lt`/`b-lta`), which is not necessarily one this
+    ///        client asked for — it does not ask. Empty if the agent reported
+    ///        no metadata, in which case it is simply not shown.
+    void signSucceeded(const QString& outputPath, const QString& certLabel, const QString& level);
     void signFailed(const QString& message);
     void boundReaderNameChanged();
     void boundReaderPresentChanged();

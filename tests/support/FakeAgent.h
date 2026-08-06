@@ -378,6 +378,13 @@ public:
     [[nodiscard]] QString path() const;
     void start();
 
+    /// @brief The `sign-meta` a{sv} this op's Sign1 Result signal AND its
+    ///        GetResult recovery both serve. One source for both, so a test
+    ///        that scripts a level cannot have the two paths disagree.
+    ///        Defaults to the invisible baseline shape.
+    void setSignMeta(QVariantMap meta);
+    [[nodiscard]] static QVariantMap defaultSignMeta();
+
     /// @brief Send the frozen NoResult D-Bus error for the active GetResult call
     ///        (mirrors the real Sign1 contract; sets setDelayedReply so the
     ///        adaptor's return value is discarded).
@@ -425,18 +432,19 @@ private:
     uint m_finalErrorCode;
     bool m_suppressResult; ///< finish Ok WITHOUT emitting the typed Result AND with nothing to recover (total loss)
     bool m_completed = false;
-    bool m_lostSignalRecoverable = false; ///< finish Ok, SUPPRESS the Result signal, but RETAIN the payload so
-                                          ///< GetResult recovers it (the deterministic lost-signal race)
-    bool m_resultRetained = false;        ///< an Ok result was retained -> GetResult serves it (else NoResult)
-    int m_keptArtifactFd = -1;            // for Sign GetResult recovery (owned)
-    FakeCertList m_certScript;            // for Certificates1.Result
-    bool m_rawCertResult = false;         // emit cert Result via a hand-marshalled raw signal
-    QByteArray m_photoBytes;              // bytes the Photo1.Result sealed memfd carries
-    bool m_photoEmptyMap = false;         // emit an EMPTY a{sh} (no entries) instead of one "personal:photo" entry
-    bool m_announceConsentPhase = false;  // emit Phase=AwaitingConsent after a short delay, before finishing
-    int m_keptPhotoFd = -1;               // sealed photo memfd, kept alive past the signal send (owned)
-    QVariantMap m_credResult;             // a{sv} mutation result the Operation.Credentials1.Result carries
-    FakeCredentialRecords m_credRecords;  // aa{sv} records (empty for a mutation)
+    bool m_lostSignalRecoverable = false;       ///< finish Ok, SUPPRESS the Result signal, but RETAIN the payload so
+                                                ///< GetResult recovers it (the deterministic lost-signal race)
+    bool m_resultRetained = false;              ///< an Ok result was retained -> GetResult serves it (else NoResult)
+    int m_keptArtifactFd = -1;                  // for Sign GetResult recovery (owned)
+    QVariantMap m_signMeta = defaultSignMeta(); // sign-meta served by BOTH the Result signal and GetResult
+    FakeCertList m_certScript;                  // for Certificates1.Result
+    bool m_rawCertResult = false;               // emit cert Result via a hand-marshalled raw signal
+    QByteArray m_photoBytes;                    // bytes the Photo1.Result sealed memfd carries
+    bool m_photoEmptyMap = false;        // emit an EMPTY a{sh} (no entries) instead of one "personal:photo" entry
+    bool m_announceConsentPhase = false; // emit Phase=AwaitingConsent after a short delay, before finishing
+    int m_keptPhotoFd = -1;              // sealed photo memfd, kept alive past the signal send (owned)
+    QVariantMap m_credResult;            // a{sv} mutation result the Operation.Credentials1.Result carries
+    FakeCredentialRecords m_credRecords; // aa{sv} records (empty for a mutation)
     std::unique_ptr<class FakeOperationAdaptor> m_opAdaptor;
     std::unique_ptr<QObject> m_resultAdaptor;
 };
@@ -491,6 +499,7 @@ public:
                                 ///< GetResult re-serves) — delivered for EVERY completed attempt, Ok or Error
         FakeCredentialRecords
             credRecords; ///< aa{sv} records a ListCredentials op returns; empty for a mutation (a legitimate result)
+        QVariantMap signMeta; ///< sign-meta a Sign op reports; empty → FakeOperation::defaultSignMeta()
     };
 
     FakeAgent(QDBusConnection connection, Config config, QObject* parent = nullptr);

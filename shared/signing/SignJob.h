@@ -9,6 +9,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QVariantMap>
 #include <memory>
 
 /// @file
@@ -59,6 +60,15 @@ public:
 
     /// @brief The resolved output path (valid after `succeeded`).
     [[nodiscard]] QString outputPath() const;
+
+    /// @brief The agent's own metadata for the produced signature — the
+    ///        `sign-meta` map (`format`, `level`, `tsaUsed`, `chainComplete`).
+    ///        Valid after `succeeded`; empty otherwise.
+    ///
+    /// The resolved level is not necessarily the level requested: a request
+    /// that defers resolves against the agent's configured default, so this is
+    /// the only honest answer to what was actually produced.
+    [[nodiscard]] QVariantMap signMeta() const;
 
 Q_SIGNALS:
     void succeeded(const QString& outputPath);

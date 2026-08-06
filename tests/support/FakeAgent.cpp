@@ -249,10 +249,7 @@ public Q_SLOTS:
             meta = QVariantMap{};
             return QDBusUnixFileDescriptor();
         }
-        meta.insert(QStringLiteral("format"), QStringLiteral("pades"));
-        meta.insert(QStringLiteral("level"), QStringLiteral("b-b"));
-        meta.insert(QStringLiteral("tsaUsed"), false);
-        meta.insert(QStringLiteral("chainComplete"), false);
+        meta = m_op->m_signMeta;
         return QDBusUnixFileDescriptor(m_op->m_keptArtifactFd);
     }
 
@@ -449,6 +446,19 @@ QString FakeOperation::path() const
     return m_path;
 }
 
+QVariantMap FakeOperation::defaultSignMeta()
+{
+    return QVariantMap{{QStringLiteral("format"), QStringLiteral("pades")},
+                       {QStringLiteral("level"), QStringLiteral("b-b")},
+                       {QStringLiteral("tsaUsed"), false},
+                       {QStringLiteral("chainComplete"), false}};
+}
+
+void FakeOperation::setSignMeta(QVariantMap meta)
+{
+    m_signMeta = std::move(meta);
+}
+
 void FakeOperation::replyNoResult()
 {
     setDelayedReply(true); // discard the adaptor's (null-fd) return value
@@ -520,14 +530,9 @@ void FakeOperation::fire()
             if (m_kind == Kind::Sign) {
                 m_keptArtifactFd = makeSealedArtifact(QByteArrayLiteral("FAKE-SIGNED-ARTIFACT"));
                 if (emitSignal) {
-                    QVariantMap meta;
-                    meta.insert(QStringLiteral("format"), QStringLiteral("pades"));
-                    meta.insert(QStringLiteral("level"), QStringLiteral("b-b"));
-                    meta.insert(QStringLiteral("tsaUsed"), false);
-                    meta.insert(QStringLiteral("chainComplete"), false);
                     int dup = m_keptArtifactFd >= 0 ? ::dup(m_keptArtifactFd) : -1;
                     Q_EMIT static_cast<FakeSignAdaptor*>(m_resultAdaptor.get())
-                        ->Result(QDBusUnixFileDescriptor(dup), meta);
+                        ->Result(QDBusUnixFileDescriptor(dup), m_signMeta);
                     if (dup >= 0) {
                         ::close(dup);
                     }
@@ -1230,6 +1235,9 @@ QDBusObjectPath FakeAgent::mintOperation(FakeOperation::Kind kind, bool withCred
                                  suppressResult, m_config.certScript, m_config.rawCertResult, m_config.photoBytes,
                                  photoEmptyMap, m_config.announceConsentPhase, m_config.lostSignalRecoverable,
                                  m_config.credResult, credRecords);
+    if (!m_config.signMeta.isEmpty()) {
+        op->setSignMeta(m_config.signMeta);
+    }
     m_operations.append(op);
     // When raceResultBeforeReturn is set, delay is 0 so start() fires Result +
     // Finished synchronously here, BEFORE we return the path — the client

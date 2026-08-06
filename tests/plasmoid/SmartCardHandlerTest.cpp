@@ -1765,6 +1765,37 @@ TEST(SmartCardHandler, SignSuccessNamesImplicitlyPickedCertOnlyForMultiCert)
     }
 }
 
+// The banner says which conformance level came out, which is not necessarily
+// one this client asked for — it does not ask. Scripted to a level the request
+// could not have produced by accident, so the assertion proves the value came
+// from the agent's own metadata.
+TEST(SmartCardHandler, SignSucceededCarriesTheResolvedLevel)
+{
+    FakeAgent::Config cfg;
+    cfg.capabilities = Client::Cap::Pki;
+    cfg.certScript = {{QStringLiteral("cert-sign"), true, QStringLiteral("Signer")}};
+    cfg.signMeta = QVariantMap{{QStringLiteral("format"), QStringLiteral("pades")},
+                               {QStringLiteral("level"), QStringLiteral("b-lt")},
+                               {QStringLiteral("tsaUsed"), true},
+                               {QStringLiteral("chainComplete"), true}};
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    auto handler = makeHandler(h);
+    ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PkiOnly); }));
+
+    QSignalSpy spy(handler.get(), &SmartCardHandler::signSucceeded);
+    QTemporaryDir dir;
+    const QString input = dir.filePath(QStringLiteral("doc.pdf"));
+    QFile f(input);
+    ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+    f.write("%PDF-1.4\nlevel\n");
+    f.close();
+    handler->signFile(QUrl::fromLocalFile(input).toString());
+    ASSERT_TRUE(waitFor([&]() { return spy.count() == 1; }));
+    EXPECT_EQ(spy.first().at(2).toString(), QStringLiteral("b-lt"));
+    // And nothing on the way out asked for it.
+    EXPECT_FALSE(h.lastSignOptions().contains(QStringLiteral("level")));
+}
+
 // Spec test (b): the plasmoid "Sign a file…" and the Purpose path produce a
 // BYTE-IDENTICAL agent Sign request for the same input + cert. Run the plasmoid
 // path (SmartCardHandler::signFile), capture the wire args, then run the Purpose

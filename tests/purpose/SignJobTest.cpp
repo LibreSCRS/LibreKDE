@@ -112,6 +112,69 @@ TEST(SignJob, HappyPathWritesEnvelopedOutput)
     EXPECT_EQ(of.readAll(), QByteArray("FAKE-SIGNED-ARTIFACT"));
 }
 
+// --- the agent's own account of what it produced ---------------------------
+
+TEST(SignJob, ExposesTheAgentsResolvedSignMetaAfterSuccess)
+{
+    FakeAgent::Config cfg;
+    cfg.capabilities = Client::Cap::Pki;
+    cfg.certScript = {{QStringLiteral("cert-A"), true, QStringLiteral("Ana")}};
+    // A level the request did NOT ask for: the point of reading the meta is
+    // that the agent resolved it, so scripting the default would prove nothing.
+    cfg.signMeta = QVariantMap{{QStringLiteral("format"), QStringLiteral("pades")},
+                               {QStringLiteral("level"), QStringLiteral("b-t")},
+                               {QStringLiteral("tsaUsed"), true},
+                               {QStringLiteral("chainComplete"), true}};
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
+    Client::AgentCard* card = client.card(h.cardPath());
+    ASSERT_NE(card, nullptr);
+
+    QTemporaryDir dir;
+    const QString input = dir.filePath(QStringLiteral("meta.pdf"));
+    QFile f(input);
+    ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+    f.write("%PDF-1.4\n");
+    f.close();
+
+    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), alwaysOverwrite());
+    QSignalSpy ok(&job, &SignJob::succeeded);
+    job.start();
+    ASSERT_TRUE(waitFor([&] { return ok.count() > 0; }));
+
+    EXPECT_EQ(job.signMeta().value(QStringLiteral("level")).toString(), QStringLiteral("b-t"));
+    EXPECT_TRUE(job.signMeta().value(QStringLiteral("tsaUsed")).toBool());
+}
+
+TEST(SignJob, DoesNotOverrideTheAgentsConfiguredLevel)
+{
+    FakeAgent::Config cfg;
+    cfg.capabilities = Client::Cap::Pki;
+    cfg.certScript = {{QStringLiteral("cert-A"), true, QStringLiteral("Ana")}};
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
+    Client::AgentCard* card = client.card(h.cardPath());
+    ASSERT_NE(card, nullptr);
+
+    QTemporaryDir dir;
+    const QString input = dir.filePath(QStringLiteral("policy.pdf"));
+    QFile f(input);
+    ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+    f.write("%PDF-1.4\n");
+    f.close();
+
+    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), alwaysOverwrite());
+    QSignalSpy ok(&job, &SignJob::succeeded);
+    job.start();
+    ASSERT_TRUE(waitFor([&] { return ok.count() > 0; }));
+
+    // The job asks for a format and a packaging; the level is the agent's to
+    // choose, so no level reaches the wire.
+    const QVariantMap wireOptions = h.lastSignOptions();
+    EXPECT_FALSE(wireOptions.contains(QStringLiteral("level")));
+    EXPECT_EQ(wireOptions.value(QStringLiteral("format")).toString(), QStringLiteral("pades"));
+}
+
 // --- phase relay: the active op's phaseChanged reaches SignJob::phaseChanged --
 
 TEST(SignJob, RelaysPhaseChangedFromActiveOperation)
