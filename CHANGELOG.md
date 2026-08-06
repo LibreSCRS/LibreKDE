@@ -29,6 +29,17 @@ every entry below describes a change to what you get by building from source.
 
 ### Fixed
 
+- The card details no longer list three internal chip-signature checks among
+  your personal data. They arrived labelled with their own internal names,
+  reading "unknown", and each was listed twice — they are a diagnostic about
+  the card's own integrity, not something a card holder can read or act on, so
+  they are no longer shown. The card's type is now named in your own language
+  rather than in English, and so is the date the address last changed.
+- A card that carries no address-change date now says so, in your own language,
+  instead of showing the placeholder the chip stores in that spot. What the
+  card returned is still passed through untouched everywhere else; only this
+  one field, and only when it holds something that is not a date, is replaced
+  by readable text.
 - Signing from LibreKDE no longer forces the baseline signature level. The
   agent applies the level it is configured with, and upgrades a baseline
   default to a timestamped one when a timestamp authority is set, the same

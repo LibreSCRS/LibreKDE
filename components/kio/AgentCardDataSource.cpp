@@ -267,13 +267,16 @@ IdentityResult AgentCardDataSource::readIdentity(const QString& cardId)
     }
 
     for (const Client::IdentityRow& row : Client::flattenIdentityFields(op->identityResult())) {
+        if (isHiddenIdentityRow(row)) {
+            continue;
+        }
         IdentityFieldView view;
         view.group = row.groupKey;
         view.fieldKey = row.fieldKey;
-        // Localize via the frozen label key (shared resolver — the SAME rule the
-        // plasmoid uses); this is the display label renderIdentityTxt emits.
+        // Shared resolvers — the SAME rules the plasmoid uses; this is the
+        // display label and value renderIdentityTxt emits.
         view.labelFallback = localizedFieldLabel(row);
-        view.value = row.value;
+        view.value = localizedFieldValue(row);
         result.fields << view;
     }
     return result;

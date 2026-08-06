@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // SPDX-FileCopyrightText: 2026 hirashix0
 //
-// Exercises the shared identity-field label resolver (localizedFieldLabel):
-//  - a KNOWN frozen labelKey resolves to the real Serbian translation, proving
-//    the ki18ndc("librekde", …) table + the sr catalog line up end-to-end;
-//  - an UNKNOWN key falls back to the agent-authored English label;
-//  - an unknown key with no fallback degrades to the raw fieldKey.
+// Exercises the shared identity-field display rules: label resolution (known
+// key → real Serbian string, unknown key → agent fallback → raw fieldKey), the
+// card-verification row filter, and the address-date value fallback.
+//
+// Assertions check CONTENT, not presence: each names the exact Serbian string,
+// and the coverage test pins the size of the mapped-key set, so an entry
+// dropped from the table cannot pass silently.
 //
 // The sr catalog is compiled into a private XDG data tree by CMake and exposed
 // via XDG_DATA_DIRS, so the translation resolves through KLocalizedString's
@@ -22,7 +24,10 @@
 
 #include <gtest/gtest.h>
 
+using LibreKDE::isHiddenIdentityRow;
 using LibreKDE::localizedFieldLabel;
+using LibreKDE::localizedFieldValue;
+using LibreKDE::mappedLabelKeys;
 using LibreSCRS::AgentClient::IdentityRow;
 
 namespace {
@@ -33,6 +38,14 @@ IdentityRow makeRow(const QString& labelKey, const QString& labelFallback, const
     row.labelKey = labelKey;
     row.labelFallback = labelFallback;
     row.fieldKey = fieldKey;
+    return row;
+}
+
+IdentityRow makeValueRow(const QString& labelKey, const QString& value)
+{
+    IdentityRow row;
+    row.labelKey = labelKey;
+    row.value = value;
     return row;
 }
 
@@ -65,6 +78,83 @@ TEST(IdentityLabel, UnknownKeyWithNoFallbackUsesFieldKey)
     const QString label =
         localizedFieldLabel(makeRow(QStringLiteral("field.no_such_key"), QString(), QStringLiteral("raw_field_key")));
     EXPECT_EQ(label, QStringLiteral("raw_field_key"));
+}
+
+// The two keys the hand test found rendering in English.
+TEST(IdentityLabel, CardTypeAndAddressDateResolveToSerbian)
+{
+    KLocalizedString::setLanguages({QStringLiteral("sr")});
+    EXPECT_EQ(localizedFieldLabel(
+                  makeRow(QStringLiteral("field.card_type"), QStringLiteral("Card Type"), QStringLiteral("card_type"))),
+              QString::fromUtf8("Тип картице"));
+    EXPECT_EQ(localizedFieldLabel(makeRow(QStringLiteral("field.address_date"), QStringLiteral("Address Date"),
+                                          QStringLiteral("address_date"))),
+              QString::fromUtf8("Датум промене адресе"));
+    KLocalizedString::clearLanguages();
+}
+
+// A dropped entry changes the count even when every assertion above still
+// finds its own key.
+TEST(IdentityLabel, MappedKeyCoverageIsPinned)
+{
+    const QStringList keys = mappedLabelKeys();
+    EXPECT_EQ(keys.size(), 68);
+    EXPECT_TRUE(keys.contains(QStringLiteral("field.card_type")));
+    EXPECT_TRUE(keys.contains(QStringLiteral("field.address_date")));
+    // Hidden rows are filtered, never labelled.
+    EXPECT_FALSE(keys.contains(QStringLiteral("field.card_verification")));
+    EXPECT_FALSE(keys.contains(QStringLiteral("field.fixed_verification")));
+    EXPECT_FALSE(keys.contains(QStringLiteral("field.variable_verification")));
+}
+
+TEST(IdentityRowFilter, CardVerificationRowsAreHidden)
+{
+    for (const QString& key : {QStringLiteral("field.card_verification"), QStringLiteral("field.fixed_verification"),
+                               QStringLiteral("field.variable_verification")}) {
+        EXPECT_TRUE(isHiddenIdentityRow(makeRow(key, key, key))) << qPrintable(key);
+    }
+}
+
+TEST(IdentityRowFilter, OrdinaryRowsSurvive)
+{
+    EXPECT_FALSE(isHiddenIdentityRow(
+        makeRow(QStringLiteral("field.surname"), QStringLiteral("Surname"), QStringLiteral("surname"))));
+    EXPECT_FALSE(isHiddenIdentityRow(
+        makeRow(QStringLiteral("field.card_type"), QStringLiteral("Card Type"), QStringLiteral("card_type"))));
+    // A key that merely CONTAINS "verification" is not one of the three.
+    EXPECT_FALSE(
+        isHiddenIdentityRow(makeRow(QStringLiteral("field.verification_note"), QStringLiteral("Verification Note"),
+                                    QStringLiteral("verification_note"))));
+}
+
+// The card carries a placeholder where the address-change date belongs; the
+// middleware ships it verbatim, so the display is where it becomes readable.
+TEST(IdentityValue, AddressDateThatIsNotADateReadsAsUnknown)
+{
+    KLocalizedString::setLanguages({QStringLiteral("sr")});
+    EXPECT_EQ(localizedFieldValue(makeValueRow(QStringLiteral("field.address_date"), QStringLiteral("00001"))),
+              QString::fromUtf8("Непознато"));
+    EXPECT_EQ(localizedFieldValue(makeValueRow(QStringLiteral("field.address_date"), QStringLiteral("15.03.2020"))),
+              QStringLiteral("15.03.2020"));
+    // The value read off a live card, which must survive untouched.
+    EXPECT_EQ(localizedFieldValue(makeValueRow(QStringLiteral("field.address_date"), QStringLiteral("01.11.2019"))),
+              QStringLiteral("01.11.2019"));
+    // Date-SHAPED but impossible: rejected because the value is parsed as a
+    // date rather than pattern-matched.
+    EXPECT_EQ(localizedFieldValue(makeValueRow(QStringLiteral("field.address_date"), QStringLiteral("32.13.2020"))),
+              QString::fromUtf8("Непознато"));
+    KLocalizedString::clearLanguages();
+}
+
+// No blanket date policing — every other field is passed through byte for byte.
+TEST(IdentityValue, OtherFieldsPassThroughUntouched)
+{
+    KLocalizedString::setLanguages({QStringLiteral("sr")});
+    EXPECT_EQ(localizedFieldValue(makeValueRow(QStringLiteral("field.personal_number"), QStringLiteral("00001"))),
+              QStringLiteral("00001"));
+    EXPECT_EQ(localizedFieldValue(makeValueRow(QStringLiteral("field.date_of_birth"), QStringLiteral("00001"))),
+              QStringLiteral("00001"));
+    KLocalizedString::clearLanguages();
 }
 
 int main(int argc, char** argv)

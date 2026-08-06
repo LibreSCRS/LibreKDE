@@ -574,6 +574,14 @@ msgctxt "@item:intable identity field"
 msgid "Telephone"
 msgstr "Телефон"
 
+msgctxt "@item:intable identity field (when the address last changed)"
+msgid "Address Date"
+msgstr "Датум промене адресе"
+
+msgctxt "@item:intable identity field value (card carries no date)"
+msgid "Unknown"
+msgstr "Непознато"
+
 msgctxt "@item:intable identity field"
 msgid "Document Number"
 msgstr "Број документа"
@@ -673,6 +681,10 @@ msgstr "Аутентичност података"
 msgctxt "@item:intable identity field"
 msgid "Chip Genuineness"
 msgstr "Аутентичност чипа"
+
+msgctxt "@item:intable identity field (card generation)"
+msgid "Card Type"
+msgstr "Тип картице"
 
 msgctxt "@item:intable identity field (token label)"
 msgid "Label"

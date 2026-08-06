@@ -1023,17 +1023,16 @@ void SmartCardHandler::rebuildIdentityModel(const QList<Client::FieldGroup>& gro
     // and adapts to QVariantMap for the QML Repeater.
     QVariantList flat;
     for (const Client::IdentityRow& row : Client::flattenIdentityFields(groups)) {
-        if (row.value.isEmpty()) {
+        if (row.value.isEmpty() || LibreKDE::isHiddenIdentityRow(row)) {
             continue;
         }
         QVariantMap out;
         out.insert(QStringLiteral("groupKey"), row.groupKey);
         out.insert(QStringLiteral("fieldKey"), row.fieldKey);
-        // Localize via the frozen label key the agent ships (the host's own
-        // table — the SAME rule the card:/ worker uses), falling back to the
-        // agent's English label.
+        // Localize label AND value via the host's own tables — the SAME rules
+        // the card:/ worker uses, falling back to the agent's English label.
         out.insert(QStringLiteral("label"), LibreKDE::localizedFieldLabel(row));
-        out.insert(QStringLiteral("value"), row.value);
+        out.insert(QStringLiteral("value"), LibreKDE::localizedFieldValue(row));
         flat.append(out);
     }
 

@@ -5,6 +5,7 @@
 
 #include <KLocalizedString>
 
+#include <QDate>
 #include <QHash>
 
 namespace LibreKDE {
@@ -86,6 +87,8 @@ const QHash<QString, KLocalizedString>& labelTable()
         {QStringLiteral("field.apartment_number"),
          ki18ndc("librekde", "@item:intable identity field", "Apartment Number")},
         {QStringLiteral("field.telephone"), ki18ndc("librekde", "@item:intable identity field", "Telephone")},
+        {QStringLiteral("field.address_date"),
+         ki18ndc("librekde", "@item:intable identity field (when the address last changed)", "Address Date")},
 
         // --- Document -------------------------------------------------------
         {QStringLiteral("field.document_number"),
@@ -130,6 +133,10 @@ const QHash<QString, KLocalizedString>& labelTable()
         {QStringLiteral("field.overall_genuineness"),
          ki18ndc("librekde", "@item:intable identity field", "Chip Genuineness")},
 
+        // --- Card metadata --------------------------------------------------
+        {QStringLiteral("field.card_type"),
+         ki18ndc("librekde", "@item:intable identity field (card generation)", "Card Type")},
+
         // --- PKCS#15 / OpenSC token info ------------------------------------
         {QStringLiteral("field.label"), ki18ndc("librekde", "@item:intable identity field (token label)", "Label")},
         {QStringLiteral("field.serial_number"), ki18ndc("librekde", "@item:intable identity field", "Serial Number")},
@@ -149,6 +156,31 @@ QString localizedFieldLabel(const LibreSCRS::AgentClient::IdentityRow& row)
         return row.labelFallback;
     }
     return row.fieldKey;
+}
+
+bool isHiddenIdentityRow(const LibreSCRS::AgentClient::IdentityRow& row)
+{
+    return row.labelKey == QLatin1String("field.card_verification") ||
+           row.labelKey == QLatin1String("field.fixed_verification") ||
+           row.labelKey == QLatin1String("field.variable_verification");
+}
+
+QString localizedFieldValue(const LibreSCRS::AgentClient::IdentityRow& row)
+{
+    // The identity plugins render a real date as dd.MM.yyyy and pass anything
+    // they cannot read through untouched, so a value that will not parse as
+    // that date is the card's placeholder rather than a date. Parsing rather
+    // than shape-matching also rejects an impossible day or month.
+    if (row.labelKey == QLatin1String("field.address_date") && !row.value.isEmpty() &&
+        !QDate::fromString(row.value, QStringLiteral("dd.MM.yyyy")).isValid()) {
+        return ki18ndc("librekde", "@item:intable identity field value (card carries no date)", "Unknown").toString();
+    }
+    return row.value;
+}
+
+QStringList mappedLabelKeys()
+{
+    return labelTable().keys();
 }
 
 } // namespace LibreKDE
