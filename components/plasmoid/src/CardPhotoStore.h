@@ -79,8 +79,7 @@ private:
 ///        `initializeEngine` (historically via `QQmlEngine::singletonInstance`
 ///        → unbounded recursion → stack overflow; the same hazard applies to
 ///        any engine-time object lookup). Backed by `Q_GLOBAL_STATIC` — the
-///        LibreKDE shared-Qt-state pattern, as used by `shared/session`'s
-///        `CardSessionContext`.
+///        sanctioned shared-state idiom for Qt hosts in this project.
 [[nodiscard]] std::shared_ptr<CardPhotoStore> sharedCardPhotoStore();
 
 } // namespace LibreKDE::Plasmoid

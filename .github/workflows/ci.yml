@@ -74,6 +74,7 @@ jobs:
             extra-cmake-modules \
             qt6-base qt6-declarative qt6-tools \
             ki18n kcoreaddons knotifications kconfig kio purpose \
+            kirigami kdbusaddons \
             plasma-workspace libplasma \
             gtest dbus
 
@@ -154,6 +155,7 @@ jobs:
             -DLIBREKDE_BUILD_PLASMOID=ON \
             -DLIBREKDE_BUILD_PURPOSE=ON \
             -DLIBREKDE_BUILD_KIO=ON \
+            -DLIBREKDE_BUILD_CREDENTIALS=ON \
             -DBUILD_TESTING=ON \
             -DCMAKE_PREFIX_PATH="$AGENT_PREFIX"
 

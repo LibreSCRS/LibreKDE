@@ -11,7 +11,7 @@ namespace LibreKDE::Plasmoid {
 
 // The one process-wide CardPhotoStore, shared by SmartCardHandler (the GUI-thread
 // writer) and the QML CardPhotoProvider (the image-provider reader). Q_GLOBAL_STATIC
-// is the LibreKDE shared-Qt-state idiom (cf. shared/session's CardSessionContext);
+// is the sanctioned shared-state idiom for Qt hosts in this project;
 // it decouples the store from the `SmartCard` QML singleton so
 // installCardPhotoProvider() need not resolve that singleton at engine init —
 // resolving it there re-enters the module's own initializeEngine
