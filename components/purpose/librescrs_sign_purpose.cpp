@@ -72,6 +72,15 @@ void SignPurposeJob::start()
         finishWithError(KJob::UserDefinedError, i18nc("@info:status", "No file was selected to sign."));
         return;
     }
+    // One signature, one artifact, one cert prompt: this action signs a single
+    // file. A multi-file share must fail loudly here — silently signing only
+    // the first selection would misreport what happened to the rest.
+    if (urls.size() > 1) {
+        finishWithError(KJob::UserDefinedError,
+                        i18ncp("@info:status", "Select a single file to sign — %1 file was shared.",
+                               "Select a single file to sign — %1 files were shared.", urls.size()));
+        return;
+    }
 
     const QUrl url(urls.first().toString());
     if (!url.isLocalFile()) {

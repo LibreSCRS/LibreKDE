@@ -3,8 +3,10 @@
 
 #include "SmartCardHandler.h"
 
+#include "DisplayText.h"
 #include "ErrorText.h"
 #include "IdentityRows.h" // LibreKDE::localizedFieldLabel
+#include "Readers.h"
 #include "SignJob.h"
 #include "plasmoid_log_categories.h"
 
@@ -35,7 +37,6 @@
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QStandardPaths>
-#include <QTextDocument> // Qt::mightBeRichText
 #include <QUrl>
 
 #include <algorithm>
@@ -55,20 +56,9 @@ namespace Client = LibreSCRS::AgentClient;
 
 namespace {
 
-// The reader/card finders the plasmoid needs, over the client's own
-// deterministic `readers()` view. They are pure functions of that list, so the
-// library does not carry them; every consumer re-adds the ones it uses.
-
-/// The first reader (in the client's id-sorted order) holding a resolvable card.
-Client::AgentReader* firstReaderWithCard(Client::AgentClient& client)
-{
-    for (Client::AgentReader* reader : client.readers()) {
-        if (reader != nullptr && reader->card() != nullptr) {
-            return reader;
-        }
-    }
-    return nullptr;
-}
+// The one finder the plasmoid needs beyond the shared Readers helpers: a pure
+// function of the client's deterministic `readers()` view, name-keyed for the
+// master-detail chips, so only this component carries it.
 
 /// The first reader of the given friendly @p name that holds a resolvable card.
 /// Two identically-named readers collide on the first match.
@@ -285,7 +275,7 @@ Client::AgentReader* SmartCardHandler::pickActiveReader()
             return selected;
         }
     }
-    return firstReaderWithCard(*m_client);
+    return Readers::firstReaderWithCard(*m_client);
 }
 
 bool SmartCardHandler::computeCardDetected() const
@@ -1283,10 +1273,9 @@ QUrl SmartCardHandler::cardUrlForReader(const QString& readerName)
 
 QString SmartCardHandler::plainDisplay(const QString& text)
 {
-    // See the header note: escape ONLY what AutoText would promote to
-    // StyledText, so a hostile value renders as literal characters while every
-    // legitimate value stays byte-identical.
-    return Qt::mightBeRichText(text) ? text.toHtmlEscaped() : text;
+    // The shared rule (see the header note and DisplayText.h): one rich-text
+    // neutralizer for every host surface, re-exposed here as the QML seam.
+    return DisplayText::plainDisplay(text);
 }
 
 void SmartCardHandler::setBusy(bool busy)

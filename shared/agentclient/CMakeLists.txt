@@ -8,6 +8,9 @@
 # vocabulary and the frozen identity label keys into localized, user-facing
 # strings. Every LibreKDE surface (plasmoid, credential window, card:/ worker,
 # Purpose signing) draws its copy from here, so the wording is decided once.
+# Alongside the text layer live the small host-side helpers the components
+# would otherwise duplicate verbatim: the first-reader-with-card finder
+# (Readers) and the rich-text neutralizer (DisplayText).
 #
 # Deliberately LibreMiddleware-free, as before: this links no card core.
 
@@ -16,8 +19,12 @@ add_library(librekde-agentclient STATIC
     ErrorText.cpp
     CredentialText.h
     CredentialText.cpp
+    DisplayText.h
+    DisplayText.cpp
     IdentityRows.h
     IdentityRows.cpp
+    Readers.h
+    Readers.cpp
 )
 target_include_directories(librekde-agentclient PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # LibreAgent::ClientQt is PUBLIC because all three public headers here name that
@@ -31,7 +38,9 @@ target_include_directories(librekde-agentclient PUBLIC ${CMAKE_CURRENT_SOURCE_DI
 # not worth its upkeep when the client library already publishes the type.
 target_link_libraries(librekde-agentclient
     PUBLIC  Qt6::Core LibreAgent::ClientQt
-    PRIVATE KF6::I18n
+    # Qt6::Gui only for Qt::mightBeRichText (DisplayText's rich-text probe) —
+    # private, since no public header here names a QtGui type.
+    PRIVATE KF6::I18n Qt6::Gui
 )
 target_compile_features(librekde-agentclient PUBLIC cxx_std_23)
 # No AUTOMOC: nothing here derives from QObject any more — the D-Bus proxies that

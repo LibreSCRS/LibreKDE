@@ -4,7 +4,9 @@
 #include "CredentialController.h"
 
 #include "CredentialText.h"
+#include "DisplayText.h"
 #include "ErrorText.h"
+#include "Readers.h"
 
 #include <LibreSCRS/AgentClient/AgentCapabilities.h>
 #include <LibreSCRS/AgentClient/AgentCard.h>
@@ -17,7 +19,6 @@
 #include <KLocalizedString>
 
 #include <QLoggingCategory>
-#include <QTextDocument> // Qt::mightBeRichText
 
 #include <optional>
 #include <utility>
@@ -34,25 +35,6 @@ namespace LibreKDE::Credentials {
 // types — translation stays with the host, the types stay with the library, and
 // there is no second spelling of either to cross.
 namespace Client = LibreSCRS::AgentClient;
-
-namespace {
-
-// The reader finder this window needs, over the client's own deterministic
-// `readers()` view. It is a pure function of that list, so the library does not
-// carry it; every consumer re-adds the ones it uses.
-
-/// The first reader (in the client's id-sorted order) holding a resolvable card.
-Client::AgentReader* firstReaderWithCard(Client::AgentClient& client)
-{
-    for (Client::AgentReader* reader : client.readers()) {
-        if (reader != nullptr && reader->card() != nullptr) {
-            return reader;
-        }
-    }
-    return nullptr;
-}
-
-} // namespace
 
 CredentialController::CredentialController(QObject* parent) : CredentialController(Client::sharedAgentClient(), parent)
 {}
@@ -152,7 +134,7 @@ void CredentialController::refresh()
         // dead-ending on NoCard. The explicit binding stays sticky (m_readerId
         // is untouched): should the bound reader (re)appear, it wins again on
         // the next registry event.
-        reader = firstReaderWithCard(*m_client);
+        reader = Readers::firstReaderWithCard(*m_client);
     }
     if (reader == nullptr) {
         // Unbound with no fallback target: no card to manage anywhere.
@@ -734,10 +716,9 @@ void CredentialController::relistAfterMutation()
 
 QString CredentialController::plainDisplay(const QString& text)
 {
-    // See the header note: escape ONLY what AutoText would promote to
-    // StyledText, so a hostile value renders as literal characters while every
-    // legitimate value stays byte-identical.
-    return Qt::mightBeRichText(text) ? text.toHtmlEscaped() : text;
+    // The shared rule (see the header note and DisplayText.h): one rich-text
+    // neutralizer for every host surface, re-exposed here as the QML seam.
+    return DisplayText::plainDisplay(text);
 }
 
 void CredentialController::setResult(bool isError, const QString& message)

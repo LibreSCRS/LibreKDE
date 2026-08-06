@@ -186,8 +186,8 @@ public:
     /// ORIGINAL literal characters (the entity sequences are themselves
     /// rich-detected). Values without markup pass through byte-identical, so no
     /// legitimate string is ever altered. Controllable sinks use
-    /// `textFormat: Text.PlainText` directly instead. Mirrors the plasmoid's
-    /// `SmartCardHandler::plainDisplay`.
+    /// `textFormat: Text.PlainText` directly instead. One shared rule with the
+    /// plasmoid (`DisplayText::plainDisplay`), re-exposed here as the QML seam.
     Q_INVOKABLE [[nodiscard]] static QString plainDisplay(const QString& text);
 
 Q_SIGNALS:
