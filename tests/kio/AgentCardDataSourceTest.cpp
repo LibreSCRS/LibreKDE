@@ -22,7 +22,9 @@
 #include "TestBus.h"
 
 #include <LibreSCRS/AgentClient/AgentCapabilities.h>
+#include <LibreSCRS/AgentClient/AgentCard.h>
 #include <LibreSCRS/AgentClient/AgentClient.h>
+#include <LibreSCRS/AgentClient/AgentOperation.h>
 #include <LibreSCRS/AgentClient/Types.h>
 
 #include <QBuffer>
@@ -223,6 +225,30 @@ TEST(AgentCardDataSource, GetPhotoHappyPathReadsSealedMemfdBytes)
     // The bytes must match the sealed-memfd contents exactly (exercises the
     // sealed-payload read).
     EXPECT_EQ(result.bytes, cfg.photoBytes);
+}
+
+// A worker process lives as long as the file-manager session, so every terminal
+// read must reap its own operation — a card kept in the reader all day must not
+// accumulate one dead QObject under the AgentCard per identity.txt/photo/cert
+// open (getCertificateDer always owned its op; the card reads reap the same way).
+TEST(AgentCardDataSource, FinishedReadsLeaveNoOperationChildrenBehind)
+{
+    FakeAgent::Config cfg;
+    cfg.capabilities = Client::Cap::IdentityData | Client::Cap::Pki;
+    cfg.photoBytes = tinyPngBytes();
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
+    Client::AgentCard* card = client.card(h.cardPath());
+    ASSERT_NE(card, nullptr);
+
+    AgentCardDataSource source(client);
+    for (int i = 0; i < 3; ++i) {
+        EXPECT_EQ(source.readIdentity(h.cardPath()).status, ReadStatus::Ok);
+        EXPECT_EQ(source.readCertificates(h.cardPath()).status, ReadStatus::Ok);
+        EXPECT_EQ(source.getPhoto(h.cardPath()).status, ReadStatus::Ok);
+    }
+    EXPECT_TRUE(card->findChildren<Client::AgentOperation*>().isEmpty())
+        << "finished card reads must not pile up as AgentCard children for the card's lifetime";
 }
 
 // ============================================================================

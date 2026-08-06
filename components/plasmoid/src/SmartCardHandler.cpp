@@ -374,18 +374,26 @@ void SmartCardHandler::bindCard(Client::AgentCard* card)
         m_card->disconnect(this);
     }
     if (m_identityOp != nullptr) {
+        // Mirror the credentials window's re-target rule: stop listening BEFORE
+        // the agent-side cancel, then reap. The fire-and-forget Cancel dismisses
+        // any secure prompt the abandoned read may have raised (a re-target must
+        // never leave an orphaned CAN prompt behind). Reached with a LIVE op on
+        // a card SWITCH mid-read (chip click / rebind — no client death-sweep
+        // terminalizes the op then).
         m_identityOp->disconnect(this);
+        m_identityOp->cancel();
+        m_identityOp->deleteLater(); // parented to the old card; reap our read early
         m_identityOp = nullptr;
         // The discarded op can no longer drive onOperationFinished (the only
-        // other setBusy(false) site), so release the busy latch HERE. Reached
-        // with a LIVE op on a card SWITCH mid-read (chip click / rebind — no
-        // client death-sweep terminalizes the op then); left latched, busy
-        // permanently disables the PreAuth "Read Card…" button. The
-        // photo op below needs no counterpart — it carries no busy flag.
+        // other setBusy(false) site), so release the busy latch HERE; left
+        // latched, busy permanently disables the PreAuth "Read Card…" button.
+        // The photo op below needs no counterpart — it carries no busy flag.
         setBusy(false);
     }
     if (m_photoOp != nullptr) {
         m_photoOp->disconnect(this);
+        m_photoOp->cancel();
+        m_photoOp->deleteLater();
         m_photoOp = nullptr;
     }
     m_card = card;
@@ -671,7 +679,10 @@ void SmartCardHandler::onPhotoFinished()
     }
     if (op->status() != Client::OperationStatus::Ok) {
         // Best effort: no photo shown. Say why — a refused entry lands here too.
-        qCWarning(LibreKDE::Plasmoid::Logging).noquote()
+        // Quoted deliberately: the fallback can carry card-derived text, and
+        // QDebug's quoting escapes control characters — an embedded newline must
+        // not be able to forge a journal line.
+        qCWarning(LibreKDE::Plasmoid::Logging)
             << "photo read failed:" << static_cast<int>(op->errorCode()) << op->messageFallback();
         return;
     }
@@ -919,10 +930,15 @@ QStringList SmartCardHandler::readerDisplayLabels(const QStringList& rawNames)
         const QString tail = parsed[i].serialTail;
         QString disambiguated = tail.isEmpty() ? QStringLiteral("%1 (%2)").arg(labels[i]).arg(i + 1)
                                                : QStringLiteral("%1 (%2)").arg(labels[i], tail);
-        // Guard against the (unlikely) case the disambiguated form still clashes.
+        // Guard against the (unlikely) case the disambiguated form still
+        // clashes — e.g. two same-model units reporting one shared serial,
+        // where the index fallback can reproduce the very label it flees.
+        // Re-validate after every substitution, bumping the ordinal until the
+        // label is genuinely unique (seen is finite, so this terminates).
+        int ordinal = i + 1;
         while (seen.value(disambiguated, 0) > 0) {
-            disambiguated = QStringLiteral("%1 (%2)").arg(labels[i]).arg(i + 1);
-            break;
+            disambiguated = QStringLiteral("%1 (%2)").arg(labels[i]).arg(ordinal);
+            ++ordinal;
         }
         seen[disambiguated] += 1;
         labels[i] = disambiguated;

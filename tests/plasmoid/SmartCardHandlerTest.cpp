@@ -230,6 +230,18 @@ TEST(SmartCardHandler, ReaderDisplayLabelsUniqueAndSafe)
     EXPECT_NE(twins.at(0), twins.at(1)) << "identical models must be disambiguated";
     EXPECT_TRUE(twins.at(0).startsWith(QStringLiteral("Gemalto PC Twin")));
 
+    // Two same-model units REPORTING THE SAME serial: the serial-tail form
+    // collides for the second unit, and with that shared tail being "2" the
+    // 1-based index fallback reproduces the very label it flees — the guard
+    // must keep re-validating until a genuinely unique label comes out.
+    const QStringList sameSerial = SmartCardHandler::readerDisplayLabels({
+        QStringLiteral("Alpha (2) 00 00"),
+        QStringLiteral("Alpha (2) 01 00"),
+    });
+    ASSERT_EQ(sameSerial.size(), 2);
+    EXPECT_NE(sameSerial.at(0), sameSerial.at(1))
+        << "the disambiguated fallback must itself be re-checked for uniqueness";
+
     // A name that yields nothing after cleaning falls back to the raw string.
     const QStringList odd = SmartCardHandler::readerDisplayLabels({QStringLiteral("Reader")});
     ASSERT_EQ(odd.size(), 1);
@@ -1089,6 +1101,42 @@ TEST(SmartCardHandler, FreeReadFollowsChipSwitchBetweenSameStateCards)
         << "switching between two same-classification cards must re-issue the free read";
     EXPECT_GT(h.operationCount(), opsAfterA);
     EXPECT_EQ(handler->state(), static_cast<int>(State::IdentityOnly));
+}
+
+// Regression (b): a chip switch that abandons an in-flight identity read must
+// cancel it AGENT-SIDE (fire-and-forget Cancel), matching the credentials
+// window's re-target rule — a secure prompt raised by the abandoned read must
+// be dismissed, never orphaned. Client-side disconnect alone leaves the agent
+// op running.
+TEST(SmartCardHandler, ChipSwitchMidIdentityReadCancelsAbandonedAgentSideOp)
+{
+    FakeAgent::Config cfg;
+    cfg.capabilities = Client::Cap::IdentityData; // reader/0 "Fake": IdentityOnly, no pre-auth
+    cfg.operationDelayMs = 400;                   // hold the identity read in flight across the switch
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+
+    auto handler = makeHandler(h);
+    ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::IdentityOnly); }));
+
+    // A second reader "Fake2" holding a card of the SAME classification.
+    h.emitReaderArrivesEmpty();
+    waitFor([]() { return false; }, 50);
+    h.emitArrivedReaderCardAdded(Client::Cap::IdentityData);
+    waitFor([]() { return false; }, 50);
+    h.emitArrivedReaderHasCard();
+    ASSERT_TRUE(waitFor([&]() { return handler->readersWithCards().size() == 2; }));
+
+    // The popup opens: card A's free read is now in flight (held by the delay).
+    handler->setViewActive(true);
+    ASSERT_TRUE(waitFor([&]() { return handler->busy(); }));
+    ASSERT_EQ(h.cancelledOperationCount(), 0);
+
+    // Chip click on "Fake2" mid-read: the rebind abandons card A's identity op.
+    handler->selectReader(QStringLiteral("Fake2"));
+    ASSERT_TRUE(waitFor([&]() { return h.cancelledOperationCount() >= 1; }))
+        << "the abandoned in-flight identity read must be cancelled agent-side (prompt dismissal)";
+    // The switch target's own read still completes.
+    ASSERT_TRUE(waitFor([&]() { return handler->readerName() == QStringLiteral("Fake2") && handler->hasIdentity(); }));
 }
 
 // boundReaderPresent distinguishes a bound reader that is physically on the bus

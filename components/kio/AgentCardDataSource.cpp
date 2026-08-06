@@ -252,6 +252,11 @@ IdentityResult AgentCardDataSource::readIdentity(const QString& cardId)
         result.status = ReadStatus::CardRemoved;
         return result;
     }
+    // Own the surviving operation from here (see getCertificateDer): the worker
+    // process lives as long as the file-manager session, so leaving each finished
+    // op parented to the card would accumulate one dead QObject per open until
+    // card removal.
+    const std::unique_ptr<Client::AgentOperation> owned(op);
     if (!reachedTerminal) {
         // Genuine machine-phase stall (a consent wait suppresses the backstop, so
         // this is never a CAN wait). Ask the agent to abandon; surface Unavailable
@@ -293,13 +298,14 @@ CertListResult AgentCardDataSource::readCertificates(const QString& cardId)
     Client::AgentOperation* op = card->readCertificates();
     // See readIdentity(): driveToFinished() may spin while the card is pulled, in
     // which case the client's removal sweep deletes the op mid-loop. Re-check the
-    // QPointer before any post-loop deref.
+    // QPointer before any post-loop deref, then own the survivor so it is reaped.
     QPointer<Client::AgentOperation> guard(op);
     const bool reachedTerminal = driveToFinished(op, m_opStallTimeoutMs);
     if (!guard) {
         result.status = ReadStatus::CardRemoved;
         return result;
     }
+    const std::unique_ptr<Client::AgentOperation> owned(op);
     if (!reachedTerminal) {
         op->cancel();
         result.status = ReadStatus::Unavailable;
@@ -325,13 +331,14 @@ PhotoResult AgentCardDataSource::getPhoto(const QString& cardId)
     Client::AgentOperation* op = card->getPhoto();
     // See readIdentity(): driveToFinished() may spin while the card is pulled, in
     // which case the client's removal sweep deletes the op mid-loop. Re-check the
-    // QPointer before any post-loop deref.
+    // QPointer before any post-loop deref, then own the survivor so it is reaped.
     QPointer<Client::AgentOperation> guard(op);
     const bool reachedTerminal = driveToFinished(op, m_opStallTimeoutMs);
     if (!guard) {
         result.status = ReadStatus::CardRemoved;
         return result;
     }
+    const std::unique_ptr<Client::AgentOperation> owned(op);
     if (!reachedTerminal) {
         op->cancel();
         result.status = ReadStatus::Unavailable;

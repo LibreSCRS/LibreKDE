@@ -686,7 +686,11 @@ void CredentialController::handleRefusal(Client::SyncError named, Client::AgentO
         // card, so a re-fetch cannot clear it. A dedicated wire error for ambiguous
         // credentials is the planned follow-up once every mirror can be extended
         // together; the client keeps handling this one gracefully regardless.
-        qCWarning(lcCredentials).noquote() << "credential verb refused as InvalidRequest:" << op->messageFallback();
+        // Quoted deliberately: the fallback can carry card-derived text, and
+        // QDebug's quoting escapes control characters — an embedded newline must
+        // not be able to forge a journal line. The UI side already treats these
+        // strings as hostile (plainDisplay); the log side does too.
+        qCWarning(lcCredentials) << "credential verb refused as InvalidRequest:" << op->messageFallback();
         setResult(false, ki18nd("librekde", "The card refused the request.").toString());
         transitionTo(State::Result);
         return;
@@ -706,9 +710,11 @@ void CredentialController::handleRefusal(Client::SyncError named, Client::AgentO
     // stable in that sense; `callError` is a client-local classification with no
     // such promise and is logged for the extra separation it gives between refusals
     // sharing an error code, not because its number is durable.
-    qCWarning(lcCredentials).noquote() << "credential verb refused at method entry (error code"
-                                       << static_cast<int>(op->errorCode()) << ", call error"
-                                       << static_cast<int>(op->callError()) << "):" << op->messageFallback();
+    // Quoted deliberately (see the InvalidRequest arm): the fallback is
+    // agent-supplied and must not be able to forge journal lines.
+    qCWarning(lcCredentials) << "credential verb refused at method entry (error code"
+                             << static_cast<int>(op->errorCode()) << ", call error" << static_cast<int>(op->callError())
+                             << "):" << op->messageFallback();
     setResult(false, ki18nd("librekde", "The action could not be started.").toString());
     transitionTo(State::Result);
     relistAfterMutation();
