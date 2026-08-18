@@ -16,6 +16,38 @@
 /// `IdentityRow` below). That library deliberately never translates, so the
 /// key→label mapping is the host's, and this is where it lives — once, for
 /// every LibreKDE surface that renders identity fields.
+///
+/// @par Identity-render invariants (all LibreKDE surfaces)
+///
+/// These hold for the plasmoid popup, the `card:/` KIO worker and anything
+/// added later. They are not style: each one has a defect on the other side of
+/// it, and the `IdentityRenderFence` ctest case (tools/identity-render-fence.cmake)
+/// fails the build's test step when a source line breaks one.
+///
+/// 1. **Render from the FINAL result only.** An identity read also offers a
+///    progressive per-group stream while it runs. The client library documents
+///    those groups as HINTS: nothing fixes their order, nothing promises the
+///    set is complete, and a plugin that resolves a field late may emit it only
+///    into the final result. A view assembled from that stream is an
+///    order-dependent view of an unordered source — it shows a group heading
+///    twice, or a field under a heading it does not belong to, on whatever card
+///    happens to emit differently. No LibreKDE surface subscribes to it.
+///
+/// 2. **Do not depend on row order.** The order rows arrive in is the emitting
+///    plugin's business and is not part of any contract this repo can enforce.
+///    A renderer that groups rows must group them by group KEY (each group
+///    emitted once, holding all of its rows) and not by adjacency; a renderer
+///    that picks rows must state the rule it picks by. `renderIdentityTxt`
+///    keeps groups in first-appearance order for a stable file, which is a
+///    choice of output shape, not a claim about the input.
+///
+/// 3. **Render each row once per view.** A curated summary is a SUBSET of the
+///    full model, so a view that shows both must SUBTRACT one from the other
+///    (the plasmoid publishes `identityDetails` = fields − summary for exactly
+///    this) — otherwise every summarised field is drawn a second time as soon
+///    as the details are revealed. Subtract by the row's (groupKey, fieldKey)
+///    identity, never by its rendered text: the same key can legitimately
+///    appear under two groups, and text matching would drop both copies.
 
 namespace LibreKDE {
 

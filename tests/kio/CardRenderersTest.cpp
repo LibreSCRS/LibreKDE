@@ -10,7 +10,9 @@
 
 #include <QDateTime>
 #include <QLocale>
+#include <algorithm>
 #include <gtest/gtest.h>
+#include <vector>
 
 namespace Client = LibreSCRS::AgentClient;
 
@@ -163,6 +165,74 @@ TEST(CardRenderers, IdentityTxtGroupsAndLabels)
     EXPECT_TRUE(txt.contains(QStringLiteral("[personal]")));
     EXPECT_TRUE(txt.contains(QStringLiteral("Given name: Ana")));
     EXPECT_TRUE(txt.contains(QStringLiteral("Surname: Anić")));
+}
+
+// identity.txt carries ONE `[group]` header per group, whatever order the rows
+// arrive in. The renderer used to emit a header every time the group changed
+// from the previous row (a run-length grouper), so a field list that revisits a
+// group — two rows of "personal", one "document", another "personal" — printed
+// `[personal]` TWICE and split one group across two sections of the file. The
+// row order the agent happens to use is not part of any contract this repo can
+// enforce, so the file's shape must not depend on it.
+TEST(CardRenderers, IdentityTxtEmitsOneHeaderPerGroupWhenGroupsInterleave)
+{
+    QList<IdentityFieldView> fields{
+        IdentityFieldView{QStringLiteral("personal"), QStringLiteral("given_name"), QStringLiteral("Given name"),
+                          QStringLiteral("Ana")},
+        IdentityFieldView{QStringLiteral("document"), QStringLiteral("document_number"),
+                          QStringLiteral("Document number"), QStringLiteral("T00000000")},
+        IdentityFieldView{QStringLiteral("personal"), QStringLiteral("surname"), QStringLiteral("Surname"),
+                          QStringLiteral("Anić")},
+    };
+    const QString txt = renderIdentityTxt(fields);
+    EXPECT_EQ(txt.count(QStringLiteral("[personal]")), 1) << txt.toStdString();
+    EXPECT_EQ(txt.count(QStringLiteral("[document]")), 1) << txt.toStdString();
+    // Both "personal" rows sit under the single "personal" header, i.e. ahead of
+    // the "document" one: the group is contiguous in the output even though it
+    // was not in the input.
+    EXPECT_LT(txt.indexOf(QStringLiteral("Surname: Anić")), txt.indexOf(QStringLiteral("[document]")))
+        << txt.toStdString();
+    EXPECT_LT(txt.indexOf(QStringLiteral("[personal]")), txt.indexOf(QStringLiteral("Given name: Ana")))
+        << txt.toStdString();
+}
+
+// The invariant behind the case above, asserted over EVERY permutation of a
+// four-row two-group list rather than one hand-picked arrangement: whatever
+// order the rows arrive in, each group gets exactly one header and every row is
+// rendered exactly once. This is the fence against a future renderer that is
+// merely accidentally right for the order today's agent happens to emit.
+TEST(CardRenderers, IdentityTxtHoldsOneHeaderPerGroupUnderEveryRowOrder)
+{
+    QList<IdentityFieldView> fields{
+        IdentityFieldView{QStringLiteral("personal"), QStringLiteral("given_name"), QStringLiteral("Given name"),
+                          QStringLiteral("Ana")},
+        IdentityFieldView{QStringLiteral("document"), QStringLiteral("document_number"),
+                          QStringLiteral("Document number"), QStringLiteral("T00000000")},
+        IdentityFieldView{QStringLiteral("personal"), QStringLiteral("surname"), QStringLiteral("Surname"),
+                          QStringLiteral("Anić")},
+        IdentityFieldView{QStringLiteral("document"), QStringLiteral("expiry_date"), QStringLiteral("Expiry"),
+                          QStringLiteral("01.01.2030")},
+    };
+    // Permute by index so the fixture above stays the single source of the rows.
+    std::vector<int> order{0, 1, 2, 3};
+    std::sort(order.begin(), order.end());
+    int permutations = 0;
+    do {
+        QList<IdentityFieldView> permuted;
+        permuted.reserve(fields.size());
+        for (const int i : order) {
+            permuted << fields.at(i);
+        }
+        const QString txt = renderIdentityTxt(permuted);
+        ++permutations;
+        EXPECT_EQ(txt.count(QStringLiteral("[personal]")), 1) << txt.toStdString();
+        EXPECT_EQ(txt.count(QStringLiteral("[document]")), 1) << txt.toStdString();
+        for (const IdentityFieldView& f : fields) {
+            const QString line = QStringLiteral("%1: %2\n").arg(f.labelFallback, f.value);
+            EXPECT_EQ(txt.count(line), 1) << line.toStdString() << " in\n" << txt.toStdString();
+        }
+    } while (std::next_permutation(order.begin(), order.end()));
+    EXPECT_EQ(permutations, 24) << "the permutation walk did not cover 4!";
 }
 
 TEST(CardRenderers, InfoTxtListsCapabilities)

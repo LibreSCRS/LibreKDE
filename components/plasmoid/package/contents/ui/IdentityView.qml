@@ -107,11 +107,15 @@ ColumnLayout {
                 }
             }
 
-            // Progressive disclosure: reveal the full field groups in place.
+            // Progressive disclosure: reveal the REMAINING field groups in
+            // place. `identityDetails` is the model minus the rows the summary
+            // above already shows, so expanding adds rows rather than repeating
+            // the ones on screen; the button is offered only when there are
+            // such rows.
             PlasmaComponents.Button {
                 id: expander
                 visible: identityView.smartCard.hasIdentity
-                         && identityView.smartCard.identityFields.length > identityView.smartCard.identitySummary.length
+                         && identityView.smartCard.identityDetails.length > 0
                 Layout.alignment: Qt.AlignHCenter
                 checkable: true
                 icon.name: checked ? "arrow-up" : "arrow-down"
@@ -125,7 +129,10 @@ ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
                 Repeater {
-                    model: identityView.smartCard.identityFields
+                    // NOT identityFields: that list still contains the rows the
+                    // summary above is already showing, so binding it here
+                    // renders each of them a second time.
+                    model: identityView.smartCard.identityDetails
                     delegate: RowLayout {
                         required property var modelData
                         Layout.fillWidth: true

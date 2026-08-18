@@ -971,6 +971,81 @@ TEST(SmartCardHandlerSummary, EmptyNameComponentDoesNotSuppressFullName)
     EXPECT_EQ(summary.first().toMap().value(QStringLiteral("value")).toString(), QStringLiteral("SPECIMEN FULLNAME"));
 }
 
+// The summary and the detail list PARTITION the flattened model. The popup
+// renders both — the summary always, the detail list once the expander is
+// checked — so a detail list that is the whole model prints every summarised
+// row a SECOND time the moment the user expands ("Card Type" twice, and the
+// name, and the document number). Together they must contain every row exactly
+// once.
+TEST(SmartCardHandlerSummary, SummaryAndDetailsPartitionTheFields)
+{
+    const QVariantList fields = {
+        summaryRow("personal", "surname", "SPECIMENSURNAME"),
+        summaryRow("personal", "given_names", "SPECIMEN"),
+        summaryRow("personal", "address", "Neka ulica 1"),
+        summaryRow("document", "document_number", "T00000000"),
+        summaryRow("meta", "card_type", "eID"),
+        summaryRow("meta", "issuing_authority", "MUP"),
+    };
+    const QVariantList summary = SmartCardHandler::curateIdentitySummary(fields);
+    const QVariantList details = SmartCardHandler::curateIdentityDetails(fields, summary);
+
+    // Exhaustive, not spot-checked: every row lands in exactly one of the two.
+    ASSERT_EQ(summary.size() + details.size(), fields.size())
+        << "summary " << summary.size() << " + details " << details.size() << " != fields " << fields.size();
+    const auto identityOf = [](const QVariant& entry) {
+        const QVariantMap row = entry.toMap();
+        return row.value(QStringLiteral("groupKey")).toString() + QLatin1Char('/') +
+               row.value(QStringLiteral("fieldKey")).toString();
+    };
+    QStringList seen;
+    for (const QVariant& entry : summary) {
+        seen << identityOf(entry);
+    }
+    for (const QVariant& entry : details) {
+        seen << identityOf(entry);
+    }
+    QStringList expected;
+    for (const QVariant& entry : fields) {
+        expected << identityOf(entry);
+    }
+    seen.sort();
+    expected.sort();
+    EXPECT_EQ(seen, expected);
+
+    // The concrete symptom, named: the card type is summarised, so it must NOT
+    // also be in the rows the expander reveals.
+    for (const QVariant& entry : details) {
+        EXPECT_NE(identityOf(entry), QStringLiteral("meta/card_type"))
+            << "card_type is in the summary; the expander must not repeat it";
+    }
+    EXPECT_FALSE(details.isEmpty()) << "the un-summarised rows (address, issuing authority) must survive";
+}
+
+// A field key that appears under TWO groups is a real shape (the identity
+// plugins emit one), and the summary takes only ONE of the two. Matching rows
+// by their rendered text would drop both; matching by (groupKey, fieldKey)
+// keeps the copy the summary did not take.
+TEST(SmartCardHandlerSummary, DetailsKeepTheSecondGroupsCopyOfASummarisedKey)
+{
+    const QVariantList fields = {
+        summaryRow("meta", "card_type", "eID"),
+        summaryRow("extra", "card_type", "eID"),
+        summaryRow("personal", "surname", "SPECIMENSURNAME"),
+    };
+    const QVariantList summary = SmartCardHandler::curateIdentitySummary(fields);
+    const QVariantList details = SmartCardHandler::curateIdentityDetails(fields, summary);
+    ASSERT_EQ(summary.size() + details.size(), fields.size());
+
+    int cardTypeInDetails = 0;
+    for (const QVariant& entry : details) {
+        if (entry.toMap().value(QStringLiteral("fieldKey")).toString() == QStringLiteral("card_type")) {
+            ++cardTypeInDetails;
+        }
+    }
+    EXPECT_EQ(cardTypeInDetails, 1) << "exactly the group copy the summary did not take";
+}
+
 // The lazy card-I/O invariant: a Can card issues ZERO agent operations on
 // popup-open / classification. Only the explicit readIdentity() reads.
 TEST(SmartCardHandler, CanCardIssuesNoImplicitCardIo)

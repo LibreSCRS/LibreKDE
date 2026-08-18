@@ -5,6 +5,10 @@
 
 #include <LibreSCRS/AgentClient/AgentCapabilities.h> // Cap::*, has()
 
+#include <QHash>
+
+#include <utility> // std::as_const
+
 // Short local spelling for the agent client library, as in AgentCardDataSource.
 namespace Client = LibreSCRS::AgentClient;
 
@@ -105,18 +109,36 @@ QString primaryPurpose(quint32 keyUsageBits, const RenderLabels& labels)
 
 QString renderIdentityTxt(const QList<IdentityFieldView>& fields)
 {
-    QString out;
-    QString currentGroup;
+    // Group by IDENTITY, not by adjacency. A run-length grouper (emit a header
+    // whenever the group differs from the previous row) is only correct while
+    // every group's rows happen to arrive contiguously — and nothing in the wire
+    // contract promises that: the agent's field groups are a map the client
+    // decodes, and the row order a plugin emits is its own business. Under any
+    // list that revisits a group, a run-length grouper prints that group's
+    // header twice and splits one group across two sections of a file users
+    // diff and script against.
+    //
+    // So: collect each group's rows on first sight of the group, keep the
+    // groups in first-appearance order (a stable, order-derived shape rather
+    // than an alphabetical one this repo would then have to defend), and emit
+    // each group exactly once.
+    QStringList groupOrder;
+    QHash<QString, QString> rowsByGroup;
     for (const IdentityFieldView& f : fields) {
-        if (f.group != currentGroup) {
-            currentGroup = f.group;
-            if (!out.isEmpty()) {
-                out += QLatin1Char('\n');
-            }
-            out += QStringLiteral("[%1]\n").arg(currentGroup);
+        if (!rowsByGroup.contains(f.group)) {
+            groupOrder << f.group;
         }
         const QString label = f.labelFallback.isEmpty() ? f.fieldKey : f.labelFallback;
-        out += QStringLiteral("%1: %2\n").arg(label, f.value);
+        rowsByGroup[f.group] += QStringLiteral("%1: %2\n").arg(label, f.value);
+    }
+
+    QString out;
+    for (const QString& group : std::as_const(groupOrder)) {
+        if (!out.isEmpty()) {
+            out += QLatin1Char('\n');
+        }
+        out += QStringLiteral("[%1]\n").arg(group);
+        out += rowsByGroup.value(group);
     }
     return out;
 }

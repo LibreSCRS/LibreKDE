@@ -110,9 +110,16 @@ class SmartCardHandler : public QObject
     Q_PROPERTY(QVariantList identityFields READ identityFields NOTIFY identityChanged)
     /// A curated subset of `identityFields`: the identifying fields (name /
     /// personal number / document number / type / expiry, in a fixed preferred
-    /// order), each { "label", "value" }. Falls back to the first rows so it is
-    /// never empty on an unrecognized card. Drives the summary.
+    /// order), each { "groupKey", "fieldKey", "label", "value" }. Falls back to
+    /// the first rows so it is never empty on an unrecognized card. Drives the
+    /// summary.
     Q_PROPERTY(QVariantList identitySummary READ identitySummary NOTIFY identityChanged)
+    /// `identityFields` MINUS the rows `identitySummary` already shows — the
+    /// rows the expander reveals. The two lists partition `identityFields`, so
+    /// a view that renders the summary and this one shows every field exactly
+    /// once; a view that renders the summary and `identityFields` shows every
+    /// summarised field TWICE. Drives the expanded detail list.
+    Q_PROPERTY(QVariantList identityDetails READ identityDetails NOTIFY identityChanged)
     /// True while an agent Sign started by `signFile()` is in flight (drives the
     /// "Sign a file…" button's busy/disabled state and a never-blank affordance).
     Q_PROPERTY(bool signingBusy READ signingBusy NOTIFY signingBusyChanged)
@@ -216,6 +223,10 @@ public:
     [[nodiscard]] QVariantList identitySummary() const
     {
         return m_identitySummary;
+    }
+    [[nodiscard]] QVariantList identityDetails() const
+    {
+        return m_identityDetails;
     }
     [[nodiscard]] bool signingBusy() const
     {
@@ -348,6 +359,16 @@ public:
     /// documents not a person name at all) becomes the headline ONLY when no
     /// non-empty MRZ name component is present in @p fields.
     [[nodiscard]] static QVariantList curateIdentitySummary(const QVariantList& fields);
+
+    /// Pure, testable: the rows of @p fields that @p summary does NOT already
+    /// show, in their original order — the other half of the split.
+    ///
+    /// `curateIdentitySummary` + this function PARTITION @p fields: together
+    /// they contain every row exactly once. Rows are matched by their
+    /// (groupKey, fieldKey) identity, not by their rendered text, so a key
+    /// that legitimately appears under TWO groups keeps the copy the summary
+    /// did not take.
+    [[nodiscard]] static QVariantList curateIdentityDetails(const QVariantList& fields, const QVariantList& summary);
 
     /// @brief The shared photo store the QML `CardPhotoProvider` reads from.
     ///        Co-owned (shared_ptr) so the provider can outlive this handler.
@@ -562,6 +583,7 @@ private:
     QString m_cardLabel;
     QVariantList m_identityFields;
     QVariantList m_identitySummary;
+    QVariantList m_identityDetails;
     bool m_viewActive = false;                    // content visible (popup expanded); gates the free read
     QString m_boundReaderName;                    // persisted per-widget binding ("" = Auto)
     bool m_boundReaderPresent = false;            // bound reader currently on the bus (in the roster)

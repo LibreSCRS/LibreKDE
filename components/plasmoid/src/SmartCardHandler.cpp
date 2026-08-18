@@ -36,6 +36,7 @@
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSaveFile>
+#include <QSet>
 #include <QStandardPaths>
 #include <QUrl>
 
@@ -1044,7 +1045,43 @@ void SmartCardHandler::rebuildIdentityModel(const QList<Client::FieldGroup>& gro
 
     m_identityFields = flat;
     m_identitySummary = curateIdentitySummary(flat);
+    m_identityDetails = curateIdentityDetails(flat, m_identitySummary);
     Q_EMIT identityChanged();
+}
+
+QVariantList SmartCardHandler::curateIdentityDetails(const QVariantList& fields, const QVariantList& summary)
+{
+    // The popup renders the summary AND, once expanded, this list. They must
+    // therefore partition the model: anything in both is printed twice on
+    // screen, which is exactly how a summarised row like the card type came to
+    // appear under its own heading and again in the expanded list.
+    //
+    // Subtract by (groupKey, fieldKey) — the row's identity — rather than by
+    // its rendered text. `curateIdentitySummary` takes at most ONE row per
+    // curated key, so a key emitted under two groups must keep the copy the
+    // summary did not take; text matching would drop both.
+    const auto identityOf = [](const QVariantMap& row) {
+        return std::pair<QString, QString>{row.value(QStringLiteral("groupKey")).toString(),
+                                           row.value(QStringLiteral("fieldKey")).toString()};
+    };
+    QSet<std::pair<QString, QString>> summarised;
+    summarised.reserve(summary.size());
+    for (const QVariant& entry : summary) {
+        summarised.insert(identityOf(entry.toMap()));
+    }
+
+    QVariantList details;
+    details.reserve(fields.size());
+    for (const QVariant& entry : fields) {
+        // Erase on first match: a summary row stands for exactly one source
+        // row, so a model that repeats one (groupKey, fieldKey) keeps the
+        // repeats visible instead of silently swallowing them all.
+        if (summarised.remove(identityOf(entry.toMap()))) {
+            continue;
+        }
+        details.append(entry);
+    }
+    return details;
 }
 
 QVariantList SmartCardHandler::curateIdentitySummary(const QVariantList& fields)
@@ -1110,8 +1147,15 @@ QVariantList SmartCardHandler::curateIdentitySummary(const QVariantList& fields)
     if (!hasNameComponent) {
         effectiveKeys.prepend(QStringLiteral("full_name"));
     }
+    // The summary row carries the source row's IDENTITY (groupKey/fieldKey)
+    // alongside the two fields the delegate renders. The delegate reads only
+    // label/value, but `curateIdentityDetails` has to subtract these rows from
+    // the full model, and rendered text is not an identity: a key that appears
+    // under two groups renders the same string twice.
     const auto toSummaryRow = [](const QVariantMap& row) {
         QVariantMap out;
+        out.insert(QStringLiteral("groupKey"), row.value(QStringLiteral("groupKey")));
+        out.insert(QStringLiteral("fieldKey"), row.value(QStringLiteral("fieldKey")));
         out.insert(QStringLiteral("label"), row.value(QStringLiteral("label")));
         out.insert(QStringLiteral("value"), row.value(QStringLiteral("value")));
         return out;
@@ -1147,6 +1191,7 @@ void SmartCardHandler::clearIdentity()
     }
     m_identityFields.clear();
     m_identitySummary.clear();
+    m_identityDetails.clear();
     Q_EMIT identityChanged();
 }
 
