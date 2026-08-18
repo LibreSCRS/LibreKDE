@@ -3,6 +3,7 @@
 
 #include "CredentialController.h"
 
+#include "Cards.h" // LibreKDE::Cards::hasCapability
 #include "CredentialText.h"
 #include "DisplayText.h"
 #include "ErrorText.h"
@@ -161,9 +162,7 @@ void CredentialController::classify()
     }
     // A card that does not advertise PIN management has no surface here (identity
     // reading / signing live in the plasmoid + Purpose plugin, not this window).
-    // The capability set arrives as wire tokens; the bitfield bridge is how the
-    // library's own pure helpers consume them.
-    if (!Client::has(Client::capabilityBits(m_card->capabilities()), Client::Cap::PinManagement)) {
+    if (!LibreKDE::Cards::hasCapability(*m_card, Client::Cap::PinManagement)) {
         resetListState();
         m_model->setRecords({});
         transitionTo(State::NotManageable);

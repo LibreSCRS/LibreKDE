@@ -3,6 +3,7 @@
 
 #include "SmartCardHandler.h"
 
+#include "Cards.h" // LibreKDE::Cards::hasCapability
 #include "DisplayText.h"
 #include "ErrorText.h"
 #include "IdentityRows.h" // LibreKDE::localizedFieldLabel
@@ -786,8 +787,7 @@ void SmartCardHandler::updatePinManagementAvailable()
     // signal is what keeps the QML launcher affordance live: transitionTo()
     // dedupes stateChanged, so a capability flip that keeps the coarse state
     // (Hybrid stays Hybrid) fires only this.
-    const bool available =
-        m_card && Client::has(Client::capabilityBits(m_card->capabilities()), Client::Cap::PinManagement);
+    const bool available = m_card != nullptr && LibreKDE::Cards::hasCapability(*m_card, Client::Cap::PinManagement);
     if (m_pinManagementAvailable == available) {
         return;
     }

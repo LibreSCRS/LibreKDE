@@ -16,6 +16,7 @@
 #include "CardPhotoProvider.h"
 #include "CardPhotoStore.h"
 #include "CardStateModel.h"
+#include "Cards.h" // LibreKDE::Cards::firstWithCapability — the finder the Purpose plugin calls
 #include "SignJob.h"
 #include "SmartCardHandler.h"
 #include "TestBus.h"
@@ -69,24 +70,6 @@ std::unique_ptr<SmartCardHandler> makeHandler(Harness& h)
         << "the handler's client binds the agent's well-known name; a Harness that does not claim it "
            "leaves every assertion below measuring an absent agent";
     return std::make_unique<SmartCardHandler>(std::make_shared<Client::AgentClient>());
-}
-
-// The first card advertising @p cap, over the client's own deterministic
-// `readers()` view. A pure function of that list, so the library does not carry
-// it; the sign-parity case below re-adds the one finder it needs, exactly as the
-// component itself does.
-Client::AgentCard* cardWithCapability(Client::AgentClient& client, std::uint32_t cap)
-{
-    for (Client::AgentReader* reader : client.readers()) {
-        if (reader == nullptr) {
-            continue;
-        }
-        Client::AgentCard* card = reader->card();
-        if (card != nullptr && Client::has(Client::capabilityBits(card->capabilities()), cap)) {
-            return card;
-        }
-    }
-    return nullptr;
 }
 
 // Encode a tiny 2x2 image to PNG so the FakeAgent's Photo1.Result memfd carries
@@ -1955,9 +1938,12 @@ TEST(SignParity, PlasmoidAndPurposeProduceIdenticalWireSign)
     const QByteArray inA = h.lastSignInputBytes();
 
     // --- Purpose path: a SignJob over the same card, as SignPurposeJob builds it ---
+    // Through the SAME finder the Purpose plugin calls, not a copy of it: a
+    // parity assertion that re-implements the primitive it is comparing across
+    // cannot catch the primitive drifting.
     auto* client2 = new Client::AgentClient();
-    ASSERT_TRUE(waitFor([&]() { return cardWithCapability(*client2, Client::Cap::Pki) != nullptr; }));
-    Client::AgentCard* card2 = cardWithCapability(*client2, Client::Cap::Pki);
+    ASSERT_TRUE(waitFor([&]() { return Cards::firstWithCapability(*client2, Client::Cap::Pki) != nullptr; }));
+    Client::AgentCard* card2 = Cards::firstWithCapability(*client2, Client::Cap::Pki);
     ASSERT_NE(card2, nullptr);
 
     QTemporaryDir dirB; // different dir -> the second run never hits the overwrite seam

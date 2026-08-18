@@ -3,6 +3,7 @@
 
 #include "SignJob.h"
 
+#include "Cards.h" // LibreKDE::Cards::hasCapability
 #include "ErrorText.h"
 #include "signing_log_categories.h"
 
@@ -147,7 +148,7 @@ void SignJob::start()
     // Capability gate: the card must advertise PKI before we even enumerate
     // certs (the agent would reject Sign on a non-PKI card with
     // CapabilityMissing anyway, but failing here is faster and clearer).
-    if (!Client::has(Client::capabilityBits(d->card->capabilities()), Client::Cap::Pki)) {
+    if (!LibreKDE::Cards::hasCapability(*d->card, Client::Cap::Pki)) {
         fail(i18nc("@info:status card has no PKI capability", "This card does not support signing."));
         return;
     }

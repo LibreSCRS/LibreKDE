@@ -10,7 +10,8 @@
 # Purpose signing) draws its copy from here, so the wording is decided once.
 # Alongside the text layer live the small host-side helpers the components
 # would otherwise duplicate verbatim: the first-reader-with-card finder
-# (Readers) and the rich-text neutralizer (DisplayText).
+# (Readers), the card capability predicates (Cards) and the rich-text
+# neutralizer (DisplayText).
 #
 # Deliberately LibreMiddleware-free, as before: this links no card core.
 
@@ -25,6 +26,8 @@ add_library(librekde-agentclient STATIC
     IdentityRows.cpp
     Readers.h
     Readers.cpp
+    Cards.h
+    Cards.cpp
 )
 target_include_directories(librekde-agentclient PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # LibreAgent::ClientQt is PUBLIC because all three public headers here name that

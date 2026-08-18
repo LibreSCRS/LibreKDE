@@ -109,3 +109,12 @@ set_tests_properties(ErrorTextCoverageTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFO
 # librekde_add_dbus_test helper, and the harness it links, live in
 # tests/support; this file is its only caller.
 librekde_add_dbus_test(FakeAgentWireShapeTest)
+
+# The shared card capability predicates, over a real AgentClient against the
+# fake. Exercises the one definition every component links, so a defect in it
+# fails HERE rather than in whichever surface happens to notice.
+librekde_add_dbus_test(CardsTest)
+# Named explicitly, though librekde-agentclient carries it PUBLIC: this suite
+# includes the client library's own headers, and a test's dependency on headers
+# it includes itself must not rest on another target's public interface.
+target_link_libraries(CardsTest PRIVATE LibreAgent::ClientQt)
