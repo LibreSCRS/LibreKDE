@@ -202,6 +202,86 @@ TEST(CardSelection, AmbiguityWithoutAChooserSelectsNothing)
     EXPECT_TRUE(selection.cancelled);
 }
 
+// The production chooser is a MODAL dialog: QInputDialog::getItem() runs a
+// nested event loop, and everything the agent announces while it is up is
+// delivered inside that loop — a card removal included, which the client
+// services by DELETING the AgentCard. So a chooser that holds card pointers
+// across the call hands back freed memory. These two pin the only safe shape:
+// nothing but VALUES may cross the chooser, and the answer is re-resolved
+// against the registry as it stands when the dialog closes.
+//
+// Removal is driven through the real wire (InterfacesRemoved) and the loop is
+// pumped until the client has actually dropped the card, so the delete really
+// has happened by the time the chooser answers — a synchronous fake that never
+// spins a loop cannot reproduce this at all.
+TEST(CardSelection, AChosenCardRemovedInsideTheChooserSelectsNothing)
+{
+    FakeAgent::Config cfg;
+    cfg.capabilities = Client::Cap::Pki;
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+
+    auto client = makeClient(h);
+    ASSERT_TRUE(waitFor([&]() { return client->readers().size() == 1; }));
+    addSecondReaderWithCard(h, *client, Client::Cap::Pki);
+
+    Client::AgentCard* doomed = client->readers().at(0)->card();
+    ASSERT_NE(doomed, nullptr);
+    const QString doomedId = doomed->id();
+
+    int calls = 0;
+    const LibreKDE::CardChooser chooser = [&](const QList<LibreKDE::CardChoice>& cands) -> std::optional<QString> {
+        ++calls;
+        EXPECT_EQ(cands.size(), 2);
+        // The card the user is about to name is pulled out of the reader while
+        // the dialog is still open, and the client deletes it before we answer.
+        h.setCardPresent(false);
+        EXPECT_TRUE(waitFor([&]() { return client->card(doomedId) == nullptr; }))
+            << "the removal never reached the client, so this test would not be exercising a freed card at all";
+        return doomedId;
+    };
+
+    const SigningCardSelection selection = chooseSigningCard(*client, chooser);
+
+    EXPECT_EQ(calls, 1);
+    EXPECT_EQ(selection.card, nullptr) << "the chosen card was deleted while the dialog was open — resolving it from a "
+                                          "list captured BEFORE the dialog returns a dangling AgentCard*";
+    EXPECT_FALSE(selection.cancelled) << "the user did not decline; the card they named stopped existing";
+}
+
+// The complementary half: a removal during the dialog must not poison a choice
+// that is still valid. The OTHER card goes away, and the one the user actually
+// named still comes back live and signable.
+TEST(CardSelection, RemovingAnotherCardInsideTheChooserStillHonoursTheChoice)
+{
+    FakeAgent::Config cfg;
+    cfg.capabilities = Client::Cap::Pki;
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+
+    auto client = makeClient(h);
+    ASSERT_TRUE(waitFor([&]() { return client->readers().size() == 1; }));
+    addSecondReaderWithCard(h, *client, Client::Cap::Pki);
+
+    Client::AgentCard* doomed = client->readers().at(0)->card();
+    Client::AgentCard* survivor = client->readers().at(1)->card();
+    ASSERT_NE(doomed, nullptr);
+    ASSERT_NE(survivor, nullptr);
+    const QString doomedId = doomed->id();
+    const QString survivorId = survivor->id();
+
+    const LibreKDE::CardChooser chooser = [&](const QList<LibreKDE::CardChoice>&) -> std::optional<QString> {
+        h.setCardPresent(false); // the card the user did NOT pick
+        EXPECT_TRUE(waitFor([&]() { return client->card(doomedId) == nullptr; }));
+        return survivorId;
+    };
+
+    const SigningCardSelection selection = chooseSigningCard(*client, chooser);
+
+    ASSERT_NE(selection.card, nullptr) << "the chosen card is still in the reader; only its neighbour left";
+    EXPECT_EQ(selection.card, client->card(survivorId));
+    EXPECT_EQ(selection.card->id(), survivorId);
+    EXPECT_FALSE(selection.cancelled);
+}
+
 // A chooser answering with an id that names no candidate is a bug in the
 // chooser; substituting some other card would sign with one the user did not
 // pick, so nothing is selected.

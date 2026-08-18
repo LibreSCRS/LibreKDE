@@ -7,12 +7,17 @@
 
 #include <KLocalizedString>
 
+#include <QComboBox>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QInputDialog>
+#include <QLabel>
 #include <QList>
 #include <QLocale>
 #include <QMessageBox>
 #include <QString>
 #include <QStringList>
+#include <QVBoxLayout>
 
 namespace LibreKDE::Signing {
 
@@ -83,14 +88,38 @@ LibreKDE::CardChooser widgetCardChooser()
             }
             labels << label;
         }
-        bool ok = false;
-        const QString chosen = QInputDialog::getItem(
-            nullptr, i18nc("@title:window", "Choose a Card to Sign With"),
-            i18nc("@label:listbox", "More than one card can sign. Choose one:"), labels, 0, false, &ok);
-        if (!ok) {
+
+        // Built by hand rather than via QInputDialog::getItem() because that
+        // helper answers with the selected TEXT, and this list can legitimately
+        // hold the same text twice: two identical readers ("SCM SCR3310" in
+        // both slots) holding cards whose type has not been read yet render
+        // byte-identical labels. Mapping text back through indexOf() would then
+        // always resolve to the FIRST of them and sign with the card the user
+        // did not point at — silently, since the label they clicked is exactly
+        // the label they get. The combo's INDEX is the selection; it is
+        // positional, so duplicate labels cannot alias.
+        QDialog dialog(nullptr);
+        dialog.setWindowTitle(i18nc("@title:window", "Choose a Card to Sign With"));
+        auto* layout = new QVBoxLayout(&dialog);
+        auto* prompt = new QLabel(i18nc("@label:listbox", "More than one card can sign. Choose one:"), &dialog);
+        // Reader names and card types are agent-supplied strings; a QLabel
+        // renders rich text by default, so pin it plain like every other place
+        // this repo draws card-supplied text.
+        prompt->setTextFormat(Qt::PlainText);
+        auto* combo = new QComboBox(&dialog);
+        combo->addItems(labels);
+        combo->setCurrentIndex(0);
+        auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+        QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+        QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+        layout->addWidget(prompt);
+        layout->addWidget(combo);
+        layout->addWidget(buttons);
+
+        if (dialog.exec() != QDialog::Accepted) {
             return std::nullopt;
         }
-        const int idx = labels.indexOf(chosen);
+        const int idx = combo->currentIndex();
         if (idx < 0 || idx >= cands.size()) {
             return std::nullopt;
         }

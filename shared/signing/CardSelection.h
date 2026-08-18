@@ -33,8 +33,15 @@ struct SigningCardSelection
 ///   - exactly one → that card, @p chooser NOT called;
 ///   - more than one → @p chooser is called with all of them, in the client's
 ///     deterministic reader order, and the card whose id it returns is the
-///     result. A declined choice reports `cancelled`; an id naming no
-///     candidate yields a null card rather than a silent substitution.
+///     result. A declined choice reports `cancelled`; an id naming no card
+///     yields a null card rather than a silent substitution.
+///
+/// @p chooser is assumed to be MODAL, and therefore to run a nested event loop
+/// in which the card registry can change under it. Only values are handed to it,
+/// and its answer is resolved against the registry as it stands when it returns
+/// — so a card pulled out of its reader while the dialog was open comes back as
+/// a null card (NOT a cancellation: the user chose, the card left) rather than
+/// as a pointer to a card the client has already deleted.
 ///
 /// The two silent cases are the point, not an optimisation: a desk with a
 /// single card must never gain a dialog whose only answer is the card already
