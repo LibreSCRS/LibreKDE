@@ -17,6 +17,16 @@ add_test(NAME IdentityRenderFence
          COMMAND ${CMAKE_COMMAND} -DLIBREKDE_SOURCE_DIR=${CMAKE_SOURCE_DIR}
                  -P ${CMAKE_SOURCE_DIR}/tools/identity-render-fence.cmake)
 
+# The catalog gate was runnable only by hand, and the one drift it exists to
+# catch — a source string moving without its .po entries following — happened
+# anyway. Registered beside the fence so it runs everywhere ctest does.
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    add_test(NAME CatalogReconcile
+             COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/check-catalogs.py
+             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+endif()
+
 add_subdirectory(support)
 add_subdirectory(agentclient)
 if(LIBREKDE_BUILD_PLASMOID)
