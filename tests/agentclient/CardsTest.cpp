@@ -20,7 +20,7 @@
 
 namespace Client = LibreSCRS::AgentClient;
 using namespace LibreKDETest;
-using LibreKDE::Cards::firstWithCapability;
+using LibreKDE::Cards::cardsWithCapability;
 using LibreKDE::Cards::hasCapability;
 
 namespace {
@@ -36,19 +36,31 @@ std::unique_ptr<Client::AgentClient> makeClient(Harness& h)
     return std::make_unique<Client::AgentClient>();
 }
 
+// reader/1 arrives already holding a card of the given capabilities — the
+// faithful three-step sequence (reader, then card, then the HasCard flip), with
+// the client loop pumped between the steps.
+void addSecondReaderWithCard(Harness& h, Client::AgentClient& client, unsigned capabilities)
+{
+    h.emitReaderArrivesEmpty();
+    ASSERT_TRUE(waitFor([&]() { return client.readers().size() == 2; }));
+    h.emitArrivedReaderCardAdded(capabilities);
+    h.emitArrivedReaderHasCard();
+    ASSERT_TRUE(waitFor([&]() { return client.readers().at(1)->card() != nullptr; }));
+}
+
 } // namespace
 
-// No agent on the bus at all: the registry is empty and the finder answers
-// nullptr rather than dereferencing its way through it.
-TEST(Cards, FirstWithCapabilityIsNullWithoutAnAgent)
+// No agent on the bus at all: the registry is empty and the walk answers an
+// empty list rather than dereferencing its way through it.
+TEST(Cards, NoCandidatesWithoutAnAgent)
 {
     auto client = std::make_unique<Client::AgentClient>();
-    EXPECT_EQ(firstWithCapability(*client, Client::Cap::Pki), nullptr);
+    EXPECT_TRUE(cardsWithCapability(*client, Client::Cap::Pki).isEmpty());
     EXPECT_TRUE(client->readers().isEmpty());
 }
 
 // A reader is present but holds no card.
-TEST(Cards, FirstWithCapabilityIsNullWhenNoReaderHoldsACard)
+TEST(Cards, NoCandidatesWhenNoReaderHoldsACard)
 {
     FakeAgent::Config cfg;
     cfg.hasCard = false;
@@ -56,12 +68,12 @@ TEST(Cards, FirstWithCapabilityIsNullWhenNoReaderHoldsACard)
 
     auto client = makeClient(h);
     ASSERT_TRUE(waitFor([&]() { return !client->readers().isEmpty(); }));
-    EXPECT_EQ(firstWithCapability(*client, Client::Cap::Pki), nullptr);
+    EXPECT_TRUE(cardsWithCapability(*client, Client::Cap::Pki).isEmpty());
 }
 
-// A card is present but advertises a DIFFERENT capability. The finder is a
-// capability question, not a presence question.
-TEST(Cards, FirstWithCapabilityIsNullWhenNoCardAdvertisesIt)
+// A card is present but advertises a DIFFERENT capability. This is a capability
+// question, not a presence question.
+TEST(Cards, NoCandidatesWhenNoCardAdvertisesTheCapability)
 {
     FakeAgent::Config cfg;
     cfg.capabilities = Client::Cap::IdentityData;
@@ -74,12 +86,12 @@ TEST(Cards, FirstWithCapabilityIsNullWhenNoCardAdvertisesIt)
 
     EXPECT_TRUE(hasCapability(*card, Client::Cap::IdentityData));
     EXPECT_FALSE(hasCapability(*card, Client::Cap::Pki));
-    EXPECT_EQ(firstWithCapability(*client, Client::Cap::Pki), nullptr);
+    EXPECT_TRUE(cardsWithCapability(*client, Client::Cap::Pki).isEmpty());
 }
 
-// Two cards present, only the SECOND capable: the finder walks past the first
+// Two cards present, only the SECOND capable: the walk passes over the first
 // rather than stopping at "a card exists".
-TEST(Cards, FirstWithCapabilitySkipsAnIncapableCard)
+TEST(Cards, IncapableCardIsNotACandidate)
 {
     FakeAgent::Config cfg;
     cfg.capabilities = Client::Cap::IdentityData; // reader/0: identity only
@@ -87,24 +99,17 @@ TEST(Cards, FirstWithCapabilitySkipsAnIncapableCard)
 
     auto client = makeClient(h);
     ASSERT_TRUE(waitFor([&]() { return client->readers().size() == 1; }));
+    addSecondReaderWithCard(h, *client, Client::Cap::Pki);
 
-    // reader/1 arrives already holding a PKI card (the faithful three-step
-    // sequence: reader, then card, then the HasCard flip).
-    h.emitReaderArrivesEmpty();
-    ASSERT_TRUE(waitFor([&]() { return client->readers().size() == 2; }));
-    h.emitArrivedReaderCardAdded(Client::Cap::Pki);
-    h.emitArrivedReaderHasCard();
-    ASSERT_TRUE(waitFor([&]() { return firstWithCapability(*client, Client::Cap::Pki) != nullptr; }));
-
-    Client::AgentCard* found = firstWithCapability(*client, Client::Cap::Pki);
-    ASSERT_NE(found, nullptr);
-    EXPECT_TRUE(hasCapability(*found, Client::Cap::Pki));
-    EXPECT_NE(found, client->readers().at(0)->card()) << "the identity-only card must not be chosen";
+    const QList<Client::AgentCard*> pki = cardsWithCapability(*client, Client::Cap::Pki);
+    ASSERT_EQ(pki.size(), 1);
+    EXPECT_EQ(pki.at(0), client->readers().at(1)->card());
+    EXPECT_NE(pki.at(0), client->readers().at(0)->card()) << "the identity-only card must not be a candidate";
 }
 
-// Two capable cards: FIRST in the client's own id-sorted reader order wins, so
-// two surfaces asking the same question reach the same card.
-TEST(Cards, FirstWithCapabilityTakesTheFirstInReaderOrder)
+// Two capable cards: both are candidates, in the client's own id-sorted reader
+// order, so two surfaces asking of the same registry see the same list.
+TEST(Cards, TwoCapableCardsAreBothCandidatesInReaderOrder)
 {
     FakeAgent::Config cfg;
     cfg.capabilities = Client::Cap::Pki;
@@ -112,13 +117,12 @@ TEST(Cards, FirstWithCapabilityTakesTheFirstInReaderOrder)
 
     auto client = makeClient(h);
     ASSERT_TRUE(waitFor([&]() { return client->readers().size() == 1; }));
-    h.emitReaderArrivesEmpty();
-    ASSERT_TRUE(waitFor([&]() { return client->readers().size() == 2; }));
-    h.emitArrivedReaderCardAdded(Client::Cap::Pki);
-    h.emitArrivedReaderHasCard();
-    ASSERT_TRUE(waitFor([&]() { return client->readers().at(1)->card() != nullptr; }));
+    addSecondReaderWithCard(h, *client, Client::Cap::Pki);
 
-    EXPECT_EQ(firstWithCapability(*client, Client::Cap::Pki), client->readers().at(0)->card());
+    const QList<Client::AgentCard*> pki = cardsWithCapability(*client, Client::Cap::Pki);
+    ASSERT_EQ(pki.size(), 2);
+    EXPECT_EQ(pki.at(0), client->readers().at(0)->card());
+    EXPECT_EQ(pki.at(1), client->readers().at(1)->card());
 }
 
 // A capability bit this build has NO NAME for. The wire carries capabilities as
@@ -143,5 +147,5 @@ TEST(Cards, UnnamedCapabilityBitSurvivesTheTokenRoundTrip)
 
     EXPECT_TRUE(hasCapability(*card, kUnnamedBit));
     EXPECT_TRUE(hasCapability(*card, Client::Cap::Pki));
-    EXPECT_EQ(firstWithCapability(*client, kUnnamedBit), card);
+    EXPECT_EQ(cardsWithCapability(*client, kUnnamedBit), QList<Client::AgentCard*>{card});
 }

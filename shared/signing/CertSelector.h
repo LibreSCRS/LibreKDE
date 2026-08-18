@@ -31,4 +31,25 @@ using CertChooser =
 ///        so this only ever guards the derived signed-output filename.
 using OverwriteConfirmer = std::function<bool(const QString& outputPath)>;
 
+/// @brief One signing-capable card offered to a `CardChooser`.
+///
+/// Value type, not a live `AgentCard*`: a chooser renders a list and answers
+/// with an id, and giving it card proxies would let a dialog reach the card.
+struct CardChoice
+{
+    QString cardId;     ///< Opaque card id — the value handed back; never parsed.
+    QString readerName; ///< The reader holding it: what actually tells two cards apart on a desk.
+    QString cardType;   ///< The card's type identifier; EMPTY until a read resolves it.
+};
+
+/// @brief Choose one card to sign with from @p candidates (length ≥ 2).
+///
+/// Return the chosen card's `cardId`, or `std::nullopt` to cancel the
+/// operation. Deliberately the same shape as `CertChooser`, and called under
+/// the same rule: only when the choice is genuinely AMBIGUOUS. With no
+/// signing-capable card there is nothing to ask about, and with exactly one the
+/// prompt would be a dialog whose only answer is the one already known — so the
+/// single-card desk, which is nearly every desk, never sees it.
+using CardChooser = std::function<std::optional<QString>(const QList<CardChoice>& candidates)>;
+
 } // namespace LibreKDE

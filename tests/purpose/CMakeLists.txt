@@ -35,3 +35,23 @@ target_link_libraries(SignJobTest PRIVATE
 target_compile_features(SignJobTest PRIVATE cxx_std_23)
 add_test(NAME SignJobTest COMMAND dbus-run-session -- $<TARGET_FILE:SignJobTest>)
 set_tests_properties(SignJobTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
+
+# Which card signs, against the FakeAgent with one and with two signing-capable
+# cards. Drives the injected chooser seam directly (a recording fake), so the
+# "no prompt with fewer than two candidates" half of the rule is asserted and
+# not merely implied by the returned card.
+add_executable(CardSelectionTest
+    CardSelectionTest.cpp
+)
+set_target_properties(CardSelectionTest PROPERTIES AUTOMOC ON)
+target_link_libraries(CardSelectionTest PRIVATE
+    GTest::gtest
+    LibreAgent::ClientQt
+    librekde-test-support
+    librekde-test-main
+    librekde-signing
+    Qt6::Core Qt6::DBus Qt6::Test
+)
+target_compile_features(CardSelectionTest PRIVATE cxx_std_23)
+add_test(NAME CardSelectionTest COMMAND dbus-run-session -- $<TARGET_FILE:CardSelectionTest>)
+set_tests_properties(CardSelectionTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")

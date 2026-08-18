@@ -3,11 +3,10 @@
 
 #include "librescrs_sign_purpose.h"
 
-#include "Cards.h" // LibreKDE::Cards::firstWithCapability
+#include "CardSelection.h" // LibreKDE::Signing::chooseSigningCard
 #include "SignJob.h"
 #include "SignSeams.h"
 
-#include <LibreSCRS/AgentClient/AgentCapabilities.h>
 #include <LibreSCRS/AgentClient/AgentCard.h>
 #include <LibreSCRS/AgentClient/AgentClient.h>
 #include <LibreSCRS/AgentClient/SharedAgentClient.h>
@@ -69,11 +68,20 @@ void SignPurposeJob::start()
         return;
     }
 
-    // The first present PKI-capable card, over the client's deterministic reader
-    // view. Multi-card fan-out beyond "first signing-capable card" is a
-    // LibreCelik concern; the Share action signs with the obvious card and
-    // defers to the cert chooser for key selection.
-    Client::AgentCard* card = LibreKDE::Cards::firstWithCapability(*m_client, Client::Cap::Pki);
+    // Which card signs. On the ordinary desk — no signing-capable card, or
+    // exactly one — this asks nothing and behaves exactly as before. It prompts
+    // only when the desk genuinely holds more than one card that could sign,
+    // where picking silently would sign with a card the user never chose. Key
+    // selection within the chosen card remains the cert chooser's job, one step
+    // later; wider multi-card management stays a LibreCelik concern.
+    const LibreKDE::Signing::SigningCardSelection selection =
+        LibreKDE::Signing::chooseSigningCard(*m_client, LibreKDE::Signing::widgetCardChooser());
+    if (selection.cancelled) {
+        finishWithError(KJob::KilledJobError,
+                        i18nc("@info:status user cancelled the card chooser", "Signing was cancelled."));
+        return;
+    }
+    Client::AgentCard* card = selection.card;
     if (card == nullptr) {
         finishWithError(KJob::UserDefinedError, i18nc("@info:status", "Insert a smart card that supports signing."));
         return;

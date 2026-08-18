@@ -32,12 +32,6 @@ target_link_libraries(librescrs_sign_purpose
         KF6::I18n KF6::CoreAddons
         KF6::Purpose
         LibreAgent::ClientQt
-        # Named explicitly for the same reason as the client library above: this
-        # shim includes the host-side card finder's header itself. It would be
-        # LINKED transitively through librekde-signing (which carries it
-        # PRIVATE), but a static library's PRIVATE dependency propagates as
-        # link-only — the include directory does not come with it.
-        librekde-agentclient
         librekde-signing
 )
 target_compile_features(librescrs_sign_purpose PRIVATE cxx_std_23)

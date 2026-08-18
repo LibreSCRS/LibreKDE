@@ -4,6 +4,8 @@
 #include <LibreSCRS/AgentClient/AgentCard.h>
 #include <LibreSCRS/AgentClient/AgentClient.h>
 
+#include <QList>
+
 #include <cstdint>
 
 /// @file
@@ -29,12 +31,14 @@ namespace LibreKDE::Cards {
 /// caller may ask this question in bit terms.
 [[nodiscard]] bool hasCapability(const LibreSCRS::AgentClient::AgentCard& card, std::uint32_t cap);
 
-/// @brief The first present card advertising @p cap, in the client's id-sorted
-///        reader order, or `nullptr` when no present card does.
+/// @brief Every present card advertising @p cap, in the client's id-sorted
+///        reader order. Empty when none does.
 ///
-/// "First" is the client's deterministic order, not an arbitrary one, so two
-/// surfaces asking the same question of the same registry reach the same card.
-[[nodiscard]] LibreSCRS::AgentClient::AgentCard* firstWithCapability(LibreSCRS::AgentClient::AgentClient& client,
-                                                                     std::uint32_t cap);
+/// The whole list rather than the first match, because "is this ambiguous?" is
+/// a question its callers have to answer before they can answer "which one?" —
+/// and the order is the client's deterministic one, not an arbitrary one, so
+/// two surfaces asking of the same registry see the same list.
+[[nodiscard]] QList<LibreSCRS::AgentClient::AgentCard*> cardsWithCapability(LibreSCRS::AgentClient::AgentClient& client,
+                                                                            std::uint32_t cap);
 
 } // namespace LibreKDE::Cards

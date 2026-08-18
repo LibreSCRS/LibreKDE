@@ -217,6 +217,19 @@ msgctxt "@info:status"
 msgid "The LibreSCRS smart-card service is not running."
 msgstr "LibreSCRS servis za pametne kartice nije pokrenut."
 
+#: components/purpose/librescrs_sign_purpose.cpp:52
+msgctxt "@info:status"
+msgid "Select a single file to sign — %1 file was shared."
+msgid_plural "Select a single file to sign — %1 files were shared."
+msgstr[0] "Izaberite jedan fajl za potpisivanje — podeljen je %1 fajl."
+msgstr[1] "Izaberite jedan fajl za potpisivanje — podeljena su %1 fajla."
+msgstr[2] "Izaberite jedan fajl za potpisivanje — podeljeno je %1 fajlova."
+
+#: components/purpose/librescrs_sign_purpose.cpp:82
+msgctxt "@info:status user cancelled the card chooser"
+msgid "Signing was cancelled."
+msgstr "Potpisivanje je otkazano."
+
 #: components/purpose/librescrs_sign_purpose.cpp:63
 msgctxt "@info:status"
 msgid "Insert a smart card that supports signing."
@@ -372,6 +385,16 @@ msgstr "Ova kartica ima više sertifikata za potpisivanje. Izaberite jedan:"
 msgctxt "@title:window"
 msgid "Overwrite Signed File?"
 msgstr "Prepisati potpisani fajl?"
+
+#: shared/signing/SignSeams.cpp:88
+msgctxt "@title:window"
+msgid "Choose a Card to Sign With"
+msgstr "Izbor kartice za potpisivanje"
+
+#: shared/signing/SignSeams.cpp:89
+msgctxt "@label:listbox"
+msgid "More than one card can sign. Choose one:"
+msgstr "Više kartica može da potpiše. Izaberite jednu:"
 
 #: shared/signing/SignSeams.cpp:49
 msgctxt "@info"

@@ -16,7 +16,7 @@
 #include "CardPhotoProvider.h"
 #include "CardPhotoStore.h"
 #include "CardStateModel.h"
-#include "Cards.h" // LibreKDE::Cards::firstWithCapability — the finder the Purpose plugin calls
+#include "CardSelection.h" // LibreKDE::Signing::chooseSigningCard — the resolution the Purpose plugin calls
 #include "SignJob.h"
 #include "SmartCardHandler.h"
 #include "TestBus.h"
@@ -1938,13 +1938,22 @@ TEST(SignParity, PlasmoidAndPurposeProduceIdenticalWireSign)
     const QByteArray inA = h.lastSignInputBytes();
 
     // --- Purpose path: a SignJob over the same card, as SignPurposeJob builds it ---
-    // Through the SAME finder the Purpose plugin calls, not a copy of it: a
-    // parity assertion that re-implements the primitive it is comparing across
-    // cannot catch the primitive drifting.
+    // Through the SAME card resolution the Purpose plugin calls, not a copy of
+    // it: a parity assertion that re-implements the primitive it is comparing
+    // across cannot catch the primitive drifting. One card is present, so the
+    // chooser below is never invoked — asserted, so this stays a single-card
+    // parity case and not an accidental multi-card one.
     auto* client2 = new Client::AgentClient();
-    ASSERT_TRUE(waitFor([&]() { return Cards::firstWithCapability(*client2, Client::Cap::Pki) != nullptr; }));
-    Client::AgentCard* card2 = Cards::firstWithCapability(*client2, Client::Cap::Pki);
+    int cardChooserCalls = 0;
+    LibreKDE::CardChooser countingChooser = [&cardChooserCalls](const QList<LibreKDE::CardChoice>&) {
+        ++cardChooserCalls;
+        return std::optional<QString>();
+    };
+    ASSERT_TRUE(
+        waitFor([&]() { return LibreKDE::Signing::chooseSigningCard(*client2, countingChooser).card != nullptr; }));
+    Client::AgentCard* card2 = LibreKDE::Signing::chooseSigningCard(*client2, countingChooser).card;
     ASSERT_NE(card2, nullptr);
+    EXPECT_EQ(cardChooserCalls, 0) << "a single-card fixture must never raise the card chooser";
 
     QTemporaryDir dirB; // different dir -> the second run never hits the overwrite seam
     const QString inputB = dirB.filePath(QStringLiteral("doc.pdf"));

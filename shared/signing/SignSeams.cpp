@@ -67,4 +67,35 @@ LibreKDE::OverwriteConfirmer widgetOverwriteConfirmer()
     };
 }
 
+LibreKDE::CardChooser widgetCardChooser()
+{
+    return [](const QList<LibreKDE::CardChoice>& cands) -> std::optional<QString> {
+        QStringList labels;
+        labels.reserve(cands.size());
+        for (const LibreKDE::CardChoice& c : cands) {
+            // The reader name is what a person can act on; the card id is an
+            // opaque token and only worth showing when there is nothing better.
+            // The card type is appended when the agent has resolved it — it is
+            // empty until a read does, so it can never be the whole label.
+            QString label = c.readerName.isEmpty() ? c.cardId : c.readerName;
+            if (!c.cardType.isEmpty()) {
+                label += QStringLiteral(" — %1").arg(c.cardType);
+            }
+            labels << label;
+        }
+        bool ok = false;
+        const QString chosen = QInputDialog::getItem(
+            nullptr, i18nc("@title:window", "Choose a Card to Sign With"),
+            i18nc("@label:listbox", "More than one card can sign. Choose one:"), labels, 0, false, &ok);
+        if (!ok) {
+            return std::nullopt;
+        }
+        const int idx = labels.indexOf(chosen);
+        if (idx < 0 || idx >= cands.size()) {
+            return std::nullopt;
+        }
+        return cands.at(idx).cardId;
+    };
+}
+
 } // namespace LibreKDE::Signing

@@ -34,6 +34,8 @@ add_library(librekde-signing STATIC
     MimeFormatMap.h
     MimeFormatMap.cpp
     CertSelector.h
+    CardSelection.h
+    CardSelection.cpp
     SignJob.h
     SignJob.cpp
     SignSeams.h

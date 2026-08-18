@@ -28,10 +28,12 @@ namespace LibreKDE::Purpose {
 ///        the input URL, writing the artifact next to it.
 ///
 /// Purpose hands the job its inputs through `data()` (a `QJsonObject`): `urls`
-/// (a single-element array — the file to sign) and `mimeType`. The job picks a
-/// PKI-capable card from `AgentClient`, wires the KF6 cert-chooser and
-/// overwrite-confirm dialogs into a `LibreKDE::SignJob`, runs it, and reports
-/// the output path through `setOutput` + `emitResult` (or `setError`).
+/// (a single-element array — the file to sign) and `mimeType`. The job resolves
+/// a signing-capable card from `AgentClient` — silently when the desk holds at
+/// most one, through the card chooser when it genuinely holds more — then wires
+/// the KF6 cert-chooser and overwrite-confirm dialogs into a
+/// `LibreKDE::SignJob`, runs it, and reports the output path through
+/// `setOutput` + `emitResult` (or `setError`).
 class SignPurposeJob : public ::Purpose::Job
 {
     Q_OBJECT

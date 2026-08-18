@@ -12,18 +12,20 @@ bool hasCapability(const LibreSCRS::AgentClient::AgentCard& card, std::uint32_t 
     return LibreSCRS::AgentClient::has(LibreSCRS::AgentClient::capabilityBits(card.capabilities()), cap);
 }
 
-LibreSCRS::AgentClient::AgentCard* firstWithCapability(LibreSCRS::AgentClient::AgentClient& client, std::uint32_t cap)
+QList<LibreSCRS::AgentClient::AgentCard*> cardsWithCapability(LibreSCRS::AgentClient::AgentClient& client,
+                                                              std::uint32_t cap)
 {
+    QList<LibreSCRS::AgentClient::AgentCard*> out;
     for (LibreSCRS::AgentClient::AgentReader* reader : client.readers()) {
         if (reader == nullptr) {
             continue;
         }
         LibreSCRS::AgentClient::AgentCard* card = reader->card();
         if (card != nullptr && hasCapability(*card, cap)) {
-            return card;
+            out << card;
         }
     }
-    return nullptr;
+    return out;
 }
 
 } // namespace LibreKDE::Cards

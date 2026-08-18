@@ -27,4 +27,11 @@ namespace LibreKDE::Signing {
 /// @brief An `OverwriteConfirmer` backed by a modal QMessageBox Yes/No question.
 [[nodiscard]] LibreKDE::OverwriteConfirmer widgetOverwriteConfirmer();
 
+/// @brief A `CardChooser` backed by a modal QInputDialog single-selection list
+///        of the candidate cards, labelled by the reader holding each one.
+///
+/// Only ever invoked with more than one candidate (see `chooseSigningCard`), so
+/// constructing it costs nothing on the single-card desk that never sees it.
+[[nodiscard]] LibreKDE::CardChooser widgetCardChooser();
+
 } // namespace LibreKDE::Signing
