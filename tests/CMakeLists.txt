@@ -20,12 +20,25 @@ add_test(NAME IdentityRenderFence
 # The catalog gate was runnable only by hand, and the one drift it exists to
 # catch — a source string moving without its .po entries following — happened
 # anyway. Registered beside the fence so it runs everywhere ctest does.
+#
+# Registered UNCONDITIONALLY, unlike the fence above which needs no interpreter.
+# Wrapping the add_test() in if(Python3_Interpreter_FOUND) meant that on a host
+# without an interpreter the test did not exist at all and ctest reported a
+# clean run — the same silent pass this gate exists to end, and precisely the
+# configuration a packager builds in (neither the CI package list nor the
+# PKGBUILD declared python until this was found). A missing interpreter must
+# fail the gate, not delete it. Python3 is now a declared test dependency in
+# both, and when find_package cannot locate one the script is invoked through
+# its own shebang so the failure is loud.
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
-    add_test(NAME CatalogReconcile
-             COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/check-catalogs.py
-             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    set(_catalog_gate_command ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/check-catalogs.py)
+else()
+    set(_catalog_gate_command ${CMAKE_SOURCE_DIR}/tools/check-catalogs.py)
 endif()
+add_test(NAME CatalogReconcile
+         COMMAND ${_catalog_gate_command}
+         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_subdirectory(support)
 add_subdirectory(agentclient)

@@ -10,7 +10,6 @@
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
-#include <QInputDialog>
 #include <QLabel>
 #include <QList>
 #include <QLocale>
@@ -20,6 +19,61 @@
 #include <QVBoxLayout>
 
 namespace LibreKDE::Signing {
+
+namespace {
+
+/// @brief Modal single-selection dialog whose answer is the chosen INDEX.
+///
+/// Built by hand rather than via QInputDialog::getItem() because that helper
+/// answers with the selected TEXT, and BOTH choosers in this file can
+/// legitimately render the same text twice: two identical readers ("SCM
+/// SCR3310" in both slots) holding cards whose type has not been read yet, or
+/// two signing certificates issued together, carrying the same subject CN and
+/// the same expiry. Mapping text back through indexOf() then always resolves
+/// to the FIRST of them, so the user signs with the card — or the KEY — they
+/// did not point at, silently, since the label they clicked is exactly the
+/// label they get. An index is positional, so duplicate labels cannot alias.
+///
+/// Returns the index into @p labels, or nullopt when the user cancels.
+[[nodiscard]] std::optional<int> chooseByIndex(const QString& windowTitle, const QString& promptText,
+                                               const QStringList& labels)
+{
+    QDialog dialog(nullptr);
+    dialog.setWindowTitle(windowTitle);
+    auto* layout = new QVBoxLayout(&dialog);
+    auto* prompt = new QLabel(promptText, &dialog);
+    // The prompt is a translated literal, not card data — the agent-supplied
+    // reader names, card types and certificate subjects go into the combo,
+    // whose items are drawn through QStyle and never interpret rich text.
+    // Pinned plain anyway so the label cannot start rendering markup if the
+    // prompt ever becomes data.
+    prompt->setTextFormat(Qt::PlainText);
+    auto* combo = new QComboBox(&dialog);
+    combo->addItems(labels);
+    combo->setCurrentIndex(0);
+    // QInputDialog paired its label with the input widget, which is what gives
+    // the list a name in the accessibility tree; a hand-built dialog has to say
+    // so itself or the combo reaches a screen reader unnamed.
+    prompt->setBuddy(combo);
+    combo->setAccessibleName(promptText);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(prompt);
+    layout->addWidget(combo);
+    layout->addWidget(buttons);
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return std::nullopt;
+    }
+    const int idx = combo->currentIndex();
+    if (idx < 0 || idx >= labels.size()) {
+        return std::nullopt;
+    }
+    return idx;
+}
+
+} // namespace
 
 LibreKDE::CertChooser widgetCertChooser()
 {
@@ -46,18 +100,13 @@ LibreKDE::CertChooser widgetCertChooser()
             }
             labels << label;
         }
-        bool ok = false;
-        const QString chosen = QInputDialog::getItem(
-            nullptr, i18nc("@title:window", "Choose a Signing Certificate"),
-            i18nc("@label:listbox", "This card has several signing certificates. Choose one:"), labels, 0, false, &ok);
-        if (!ok) {
+        const std::optional<int> idx =
+            chooseByIndex(i18nc("@title:window", "Choose a Signing Certificate"),
+                          i18nc("@label:listbox", "This card has several signing certificates. Choose one:"), labels);
+        if (!idx || *idx >= cands.size()) {
             return std::nullopt;
         }
-        const int idx = labels.indexOf(chosen);
-        if (idx < 0 || idx >= cands.size()) {
-            return std::nullopt;
-        }
-        return cands.at(idx).id;
+        return cands.at(*idx).id;
     };
 }
 
@@ -89,41 +138,13 @@ LibreKDE::CardChooser widgetCardChooser()
             labels << label;
         }
 
-        // Built by hand rather than via QInputDialog::getItem() because that
-        // helper answers with the selected TEXT, and this list can legitimately
-        // hold the same text twice: two identical readers ("SCM SCR3310" in
-        // both slots) holding cards whose type has not been read yet render
-        // byte-identical labels. Mapping text back through indexOf() would then
-        // always resolve to the FIRST of them and sign with the card the user
-        // did not point at — silently, since the label they clicked is exactly
-        // the label they get. The combo's INDEX is the selection; it is
-        // positional, so duplicate labels cannot alias.
-        QDialog dialog(nullptr);
-        dialog.setWindowTitle(i18nc("@title:window", "Choose a Card to Sign With"));
-        auto* layout = new QVBoxLayout(&dialog);
-        auto* prompt = new QLabel(i18nc("@label:listbox", "More than one card can sign. Choose one:"), &dialog);
-        // Reader names and card types are agent-supplied strings; a QLabel
-        // renders rich text by default, so pin it plain like every other place
-        // this repo draws card-supplied text.
-        prompt->setTextFormat(Qt::PlainText);
-        auto* combo = new QComboBox(&dialog);
-        combo->addItems(labels);
-        combo->setCurrentIndex(0);
-        auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-        QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-        QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-        layout->addWidget(prompt);
-        layout->addWidget(combo);
-        layout->addWidget(buttons);
-
-        if (dialog.exec() != QDialog::Accepted) {
+        const std::optional<int> idx =
+            chooseByIndex(i18nc("@title:window", "Choose a Card to Sign With"),
+                          i18nc("@label:listbox", "More than one card can sign. Choose one:"), labels);
+        if (!idx || *idx >= cands.size()) {
             return std::nullopt;
         }
-        const int idx = combo->currentIndex();
-        if (idx < 0 || idx >= cands.size()) {
-            return std::nullopt;
-        }
-        return cands.at(idx).cardId;
+        return cands.at(*idx).cardId;
     };
 }
 

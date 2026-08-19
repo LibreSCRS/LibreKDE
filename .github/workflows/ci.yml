@@ -76,7 +76,8 @@ jobs:
             ki18n kcoreaddons knotifications kconfig kio purpose \
             kirigami kdbusaddons \
             plasma-workspace libplasma \
-            gtest dbus
+            gtest dbus \
+            python
 
       - name: Generate a UTF-8 locale
         # The bare Arch container ships only the C / C.UTF-8 locales, under which
@@ -180,4 +181,7 @@ jobs:
         working-directory: LibreKDE
         env:
           QT_QPA_PLATFORM: offscreen
-        run: dbus-run-session -- ctest --test-dir build --output-on-failure
+        # --no-tests=error: without it ctest reports success when it finds no
+        # tests at all, so a configuration that registered none would pass this
+        # step green.
+        run: dbus-run-session -- ctest --test-dir build --output-on-failure --no-tests=error

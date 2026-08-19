@@ -56,6 +56,7 @@ makedepends=(
     'gtest'                 # BUILD_TESTING unit tests
     'qt6-tools'             # lrelease for ki18n .po -> .qm (ECMPoQmTools)
     'dbus'                  # dbus-run-session for the D-Bus client tests
+    'python'                # tools/check-catalogs.py, run as the CatalogReconcile test
     'librescrs-agent-client-qt' # find_package(LibreAgent 4.2 CONFIG COMPONENTS ClientQt)
                                 #   at configure time (cmake/FindOrUseLibreAgent.cmake)
 )
