@@ -68,9 +68,10 @@ set(_whole_model_pattern "identityFields")
 
 # _strip_comments: drop the `//` tail of a line so prose may keep naming the
 # things it warns about — a comment that says "NOT identityFields" is the
-# fence's ally, not a violation. Line comments only; QML block comments around
-# these identifiers do not occur in this tree and a false NEGATIVE from one
-# would still be caught the moment the code itself appeared on any line.
+# fence's ally, not a violation, and one such note exists in IdentityView.qml
+# today, so this is load-bearing rather than theoretical. Line comments only:
+# see the residuals noted beside the scans below for what that does and does
+# not cover.
 function(_scan_files _pattern _files _advice _strip_comments)
     foreach(_file IN LISTS _files)
         file(STRINGS "${_file}" _lines)
@@ -118,15 +119,39 @@ set(_group_ready_advice
 set(_whole_model_advice
     "touches identityFields from QML. The summary is a SUBSET of that list and is rendered alongside it, so every summarised row would print twice — views consume identitySummary and identityDetails only.")
 
+# --- 3. Positive control: prove the patterns still match ---------------------
+# The guards above prove the gate READ something; they cannot prove it can still
+# RECOGNISE anything. Comment-stripping in particular can only ever reduce
+# matches, so a mistyped pattern or an over-eager strip would report the tree
+# clean and pass. Scan a fixture of known violations first and require every
+# pattern to fire, then discard those hits before the real scan.
+set(_fixture "${CMAKE_CURRENT_LIST_DIR}/fence-fixtures/known-violations.qml.txt")
+if(NOT EXISTS "${_fixture}")
+    message(FATAL_ERROR "fence fixture ${_fixture} is missing — the gate cannot prove its patterns still match")
+endif()
+foreach(_probe "${_group_ready_pattern}" "${_whole_model_pattern}")
+    set(_violations "")
+    _scan_files("${_probe}" "${_fixture}" "fixture" TRUE)
+    if(NOT _violations)
+        message(FATAL_ERROR "identity-render fence: pattern '${_probe}' matched NOTHING in the known-violation "
+                            "fixture — the pattern is broken and this gate would pass on anything")
+    endif()
+endforeach()
+set(_violations "")
+
 _scan_files("${_group_ready_pattern}" "${_cxx_sources}" "${_group_ready_advice}" FALSE)
 _scan_files("${_group_ready_pattern}" "${_qml_sources}" "${_group_ready_advice}" TRUE)
 _scan_files("${_whole_model_pattern}" "${_qml_sources}" "${_whole_model_advice}" TRUE)
 
-# Known residual, stated rather than hidden: file(STRINGS) is line-based, so a
-# binding wrapped as `model: root.smartCard` / newline / `.identityFields`
-# defeats the whole-model scan's line regex. The bare-identifier pattern above
-# closes the realistic half (the identifier itself cannot be split), and the
-# groupReady patterns are single tokens for the same reason.
+# Two residuals, stated as measured rather than assumed. A binding wrapped as
+# `model: root.smartCard` / newline / `.identityFields` IS still caught: the
+# continuation line carries the bare identifier and matches on its own. What is
+# not caught is a `//` inside a string literal, which the stripper treats as the
+# start of a comment and so truncates the rest of that line. In the other
+# direction, a QML block comment naming one of these identifiers would be
+# reported as a violation — a false POSITIVE, not a negative — because the
+# stripper handles line comments only. Prose naming identityFields does occur in
+# this tree today, so the stripper is load-bearing.
 
 # --- verdict -----------------------------------------------------------------
 if(_violations)

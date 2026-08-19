@@ -1,0 +1,24 @@
+// Positive control for tools/identity-render-fence.cmake.
+//
+// Every line below is a REAL violation in one of the spellings the fence bans.
+// The fence scans this file first and fails if it does not flag all of them —
+// a gate whose patterns have stopped matching would otherwise report the tree
+// clean and pass on anything, which is the same failure the source-count
+// guards below it exist to prevent.
+//
+// The `.txt` extension keeps it out of the *.qml and *.cpp globs that scan the
+// real tree, so these lines can never be mistaken for shipped code.
+//
+// Adding a new banned spelling? Add a line here too, or the fence has no
+// evidence its new pattern matches anything.
+
+// -- groupReady, pointer-to-member form
+connect(op, &Client::AgentOperation::groupReady, this, &Thing::onGroup);
+// -- groupReady, QML handler form
+Connections { function onGroupReady(group) { rows = group } }
+// -- groupReady, string-based SIGNAL macro form
+connect(op, SIGNAL(groupReady(QString)), this, SLOT(onGroup(QString)));
+// -- whole-model, direct binding
+property var rows: smartCard.identityFields
+// -- whole-model, laundered through an intermediate
+readonly property var everything: root.smartCard.identityFields

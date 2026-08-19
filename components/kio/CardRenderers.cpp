@@ -110,18 +110,21 @@ QString primaryPurpose(quint32 keyUsageBits, const RenderLabels& labels)
 QString renderIdentityTxt(const QList<IdentityFieldView>& fields)
 {
     // Group by IDENTITY, not by adjacency. A run-length grouper (emit a header
-    // whenever the group differs from the previous row) is only correct while
-    // every group's rows happen to arrive contiguously — and nothing in the wire
-    // contract promises that: the agent's field groups are a map the client
-    // decodes, and the row order a plugin emits is its own business. Under any
-    // list that revisits a group, a run-length grouper prints that group's
-    // header twice and splits one group across two sections of a file users
-    // diff and script against.
+    // whenever the group differs from the previous row) splits a group across
+    // two sections, and prints its header twice, the moment a list revisits a
+    // group — in a file users diff and script against.
     //
-    // So: collect each group's rows on first sight of the group, keep the
-    // groups in first-appearance order (a stable, order-derived shape rather
-    // than an alphabetical one this repo would then have to defend), and emit
-    // each group exactly once.
+    // Today's only producer cannot hand us such a list: the wire type is
+    // `a{sa{s(sssv)}}`, which the client decodes into a QMap, so group keys are
+    // unique by the wire contract and the flattening walks them group by group.
+    // The rows therefore already arrive contiguous. This function is
+    // nevertheless a public one over a plain QList, and its callers are not
+    // bound by that wire shape; grouping by identity is what keeps the output
+    // stable if the client's flattening ever stops being map-derived.
+    //
+    // First-appearance order is therefore alphabetical order in practice, since
+    // a QMap iterates its keys sorted — this does not choose an order so much as
+    // preserve whatever order it is given, and emit each group exactly once.
     QStringList groupOrder;
     QHash<QString, QString> rowsByGroup;
     for (const IdentityFieldView& f : fields) {

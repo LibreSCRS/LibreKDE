@@ -171,9 +171,11 @@ TEST(CardRenderers, IdentityTxtGroupsAndLabels)
 // arrive in. The renderer used to emit a header every time the group changed
 // from the previous row (a run-length grouper), so a field list that revisits a
 // group — two rows of "personal", one "document", another "personal" — printed
-// `[personal]` TWICE and split one group across two sections of the file. The
-// row order the agent happens to use is not part of any contract this repo can
-// enforce, so the file's shape must not depend on it.
+// `[personal]` TWICE and split one group across two sections of the file.
+// Today's producer cannot deliver such a list (the wire type is a map, so group
+// keys are unique and the rows arrive contiguous), but this renderer is public
+// and takes a plain list, so its output shape must not depend on the order its
+// caller happens to walk in.
 TEST(CardRenderers, IdentityTxtEmitsOneHeaderPerGroupWhenGroupsInterleave)
 {
     QList<IdentityFieldView> fields{
