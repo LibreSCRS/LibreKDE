@@ -319,46 +319,51 @@ msgstr ""
 "картице."
 
 # --- SignFileAction.qml ---------------------------------------------------
-#: components/plasmoid/package/contents/ui/SignFileAction.qml:44
+#: components/plasmoid/package/contents/ui/SignFileAction.qml:129
 msgctxt "@action:button sign a document with the smart card"
 msgid "Sign a file…"
 msgstr "Потпиши фајл…"
 
-#: components/plasmoid/package/contents/ui/SignFileAction.qml:55
+#: components/plasmoid/package/contents/ui/SignFileAction.qml:142
 msgctxt "@info:whatsthis sign a file button"
 msgid "Choose a file and sign it with this card."
 msgstr "Изаберите фајл и потпишите га овом картицом."
 
-#: components/plasmoid/package/contents/ui/SignFileAction.qml:60
+#: components/plasmoid/package/contents/ui/SignFileAction.qml:147
 msgctxt "@title:window choose a file to sign"
 msgid "Choose a file to sign"
 msgstr "Изаберите фајл за потписивање"
 
-#: components/plasmoid/package/contents/ui/SignFileAction.qml:117
+#: components/plasmoid/package/contents/ui/SignFileAction.qml:66
 msgctxt ""
 "@info:status a file was signed with an implicitly picked certificate; %1 "
 "file name, %2 certificate name, %3 AdES conformance level such as B-T"
 msgid "Signed %1 with certificate %2 at %3"
 msgstr "Потписано: %1 сертификатом %2, ниво %3"
 
-#: components/plasmoid/package/contents/ui/SignFileAction.qml:122
+#: components/plasmoid/package/contents/ui/SignFileAction.qml:71
 msgctxt ""
 "@info:status a file was signed; %1 file name, %2 AdES conformance level such "
 "as B-T"
 msgid "Signed %1 at %2"
 msgstr "Потписано: %1, ниво %2"
 
-#: components/plasmoid/package/contents/ui/SignFileAction.qml:126
+#: components/plasmoid/package/contents/ui/SignFileAction.qml:75
 msgctxt ""
 "@info:status a file was signed with an implicitly picked certificate; %1 "
 "file name, %2 certificate name"
 msgid "Signed %1 with certificate %2"
 msgstr "Потписано: %1 сертификатом %2"
 
-#: components/plasmoid/package/contents/ui/SignFileAction.qml:130
+#: components/plasmoid/package/contents/ui/SignFileAction.qml:78
 msgctxt "@info:status a file was signed"
 msgid "Signed %1"
 msgstr "Потписано: %1"
+
+#: components/plasmoid/package/contents/ui/SignFileAction.qml:100
+msgctxt "@action:button dismiss the signing result message"
+msgid "Dismiss"
+msgstr "Одбаци"
 
 # --- UnknownCardState.qml -------------------------------------------------
 #: components/plasmoid/package/contents/ui/UnknownCardState.qml:19

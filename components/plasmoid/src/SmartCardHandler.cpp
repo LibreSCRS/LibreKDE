@@ -144,6 +144,7 @@ void SmartCardHandler::refresh()
         m_identityRead = false;
         setAgentInstalled(detectAgentInstalled());
         transitionTo(CardStateModel::State::AgentUnavailable);
+        publishSignSurfaces();
         return;
     }
 
@@ -169,6 +170,7 @@ void SmartCardHandler::refresh()
         setCardDetected(computeCardDetected());
         m_identityRead = false;
         transitionTo(CardStateModel::State::NoCard);
+        publishSignSurfaces();
         return;
     }
 
@@ -176,6 +178,9 @@ void SmartCardHandler::refresh()
     setReaderName(reader->name());
     bindCard(reader->card());
     classifyActiveCard();
+    // The displayed reader is an INPUT to the sign surfaces, so a re-target
+    // moves them even though no sign started or finished.
+    publishSignSurfaces();
 }
 
 void SmartCardHandler::updateReaderRosters()
@@ -209,6 +214,16 @@ void SmartCardHandler::updateReaderRosters()
         m_readersWithCards = withCards;
         Q_EMIT readersWithCardsChanged();
     }
+    // Forget departed readers, but never one still signing: a job outlives a
+    // re-target by design and has to survive to report its outcome.
+    for (auto it = m_signStates.begin(); it != m_signStates.end();) {
+        if (it->job == nullptr && !all.contains(it.key())) {
+            it = m_signStates.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
     // Recompute after the roster is settled, unconditionally: boundReaderPresent
     // can flip on a binding change even when the roster itself did not move.
     updateBoundReaderPresent();
@@ -524,10 +539,84 @@ void SmartCardHandler::warmCertificateCache()
     m_card->warmCertificates();
 }
 
+const SmartCardHandler::ReaderSignState* SmartCardHandler::activeSignState() const
+{
+    const auto it = m_signStates.constFind(m_readerName);
+    if (it == m_signStates.constEnd()) {
+        return nullptr;
+    }
+    // An entry speaks only for the card it was started on. A card swapped into
+    // the same reader is a different AgentCard, so it inherits nothing — and a
+    // removed card nulls both sides, which the card-less states never render.
+    return it->card == m_card ? &*it : nullptr;
+}
+
+bool SmartCardHandler::signingBusy() const
+{
+    const ReaderSignState* entry = activeSignState();
+    return entry != nullptr && entry->job != nullptr;
+}
+
+int SmartCardHandler::signPhase() const
+{
+    const ReaderSignState* entry = activeSignState();
+    return entry != nullptr ? entry->phase : static_cast<int>(Client::OperationPhase::Created);
+}
+
+QVariantMap SmartCardHandler::signResult() const
+{
+    const ReaderSignState* entry = activeSignState();
+    const SignOutcome outcome = entry != nullptr ? entry->outcome : SignOutcome::None;
+    QVariantMap out;
+    out.insert(QStringLiteral("outcome"), static_cast<int>(outcome));
+    out.insert(QStringLiteral("outputPath"), entry != nullptr ? entry->outputPath : QString());
+    out.insert(QStringLiteral("certLabel"), entry != nullptr ? entry->certLabel : QString());
+    out.insert(QStringLiteral("level"), entry != nullptr ? entry->level : QString());
+    out.insert(QStringLiteral("message"), entry != nullptr ? entry->message : QString());
+    return out;
+}
+
+void SmartCardHandler::dismissSignResult()
+{
+    const auto it = m_signStates.find(m_readerName);
+    if (it == m_signStates.end() || it->outcome == SignOutcome::None) {
+        return;
+    }
+    it->outcome = SignOutcome::None;
+    it->outputPath.clear();
+    it->certLabel.clear();
+    it->level.clear();
+    it->message.clear();
+    publishSignSurfaces();
+}
+
+void SmartCardHandler::publishSignSurfaces()
+{
+    const bool busy = signingBusy();
+    if (busy != m_publishedSigningBusy) {
+        m_publishedSigningBusy = busy;
+        Q_EMIT signingBusyChanged();
+    }
+    const int phase = signPhase();
+    if (phase != m_publishedSignPhase) {
+        m_publishedSignPhase = phase;
+        Q_EMIT signPhaseChanged();
+    }
+    const QVariantMap result = signResult();
+    if (result != m_publishedSignResult) {
+        m_publishedSignResult = result;
+        Q_EMIT signResultChanged();
+    }
+}
+
 void SmartCardHandler::signFile(const QString& fileUrl)
 {
-    if (m_signJob != nullptr) {
-        return; // a sign is already in flight
+    // Keyed by the reader, not by the widget: a second reader must be able to
+    // start its own sign while this one runs (the agent raises one credential
+    // prompt per operation and serialises per card, not per client).
+    const QString reader = m_readerName;
+    if (m_signStates.value(reader).job != nullptr) {
+        return; // this reader is already signing
     }
     // The QML FileDialog hands us a file:// URL; accept a plain path too.
     const QUrl url(fileUrl);
@@ -556,47 +645,69 @@ void SmartCardHandler::signFile(const QString& fileUrl)
     // which the plasmoid cannot see. A null/non-PKI card is handled by SignJob
     // itself (it fails cleanly with its own diagnostic). The agent raises its own
     // PIN prompter.
-    m_lastSignCertLabel.clear();
     LibreKDE::CertChooser pickFirstCert =
-        [this](const QList<Client::CertificateInfo>& cands) -> std::optional<QString> {
+        [this, reader](const QList<Client::CertificateInfo>& cands) -> std::optional<QString> {
         if (cands.isEmpty()) {
             return std::nullopt;
         }
         // Only reached for a MULTI-cert card (SignJob auto-picks a lone cert):
         // remember the picked cert's display name for the success message.
         const Client::CertificateInfo& picked = cands.first();
-        m_lastSignCertLabel = picked.subject.isEmpty() ? picked.id : picked.subject;
+        m_signStates[reader].certLabel = picked.subject.isEmpty() ? picked.id : picked.subject;
         return std::optional<QString>(picked.id);
     };
     LibreKDE::OverwriteConfirmer allowOverwrite = [](const QString&) { return true; };
 
+    // Parented to the handler, not the card: a sign the user started keeps
+    // running across a chip switch (only the identity read is re-targeted).
     auto* job = new LibreKDE::SignJob(m_card, inputPath, QString(), QString(), pickFirstCert, allowOverwrite, this);
-    m_signJob = job;
-    m_signingBusy = true;
-    Q_EMIT signingBusyChanged();
-    setOperationPhase(Client::OperationPhase::Created); // reset for the new sign
-    connect(job, &LibreKDE::SignJob::phaseChanged, this,
-            [this](Client::OperationPhase ph, double /*progress*/) { setOperationPhase(ph); });
+    ReaderSignState& entry = m_signStates[reader];
+    entry.job = job;
+    entry.card = m_card;
+    entry.phase = static_cast<int>(Client::OperationPhase::Created); // reset for the new sign
+    entry.certLabel.clear();
+    // A new sign supersedes this reader's previous outcome, so the banner never
+    // shows a stale success next to a running spinner.
+    entry.outcome = SignOutcome::None;
+    entry.outputPath.clear();
+    entry.level.clear();
+    entry.message.clear();
+    publishSignSurfaces();
 
-    connect(job, &LibreKDE::SignJob::succeeded, this, [this, job](const QString& outputPath) {
-        m_signJob = nullptr;
-        m_signingBusy = false;
-        Q_EMIT signingBusyChanged();
+    connect(job, &LibreKDE::SignJob::phaseChanged, this,
+            [this, reader](Client::OperationPhase ph, double /*progress*/) {
+                const auto it = m_signStates.find(reader);
+                if (it == m_signStates.end()) {
+                    return;
+                }
+                it->phase = static_cast<int>(ph);
+                publishSignSurfaces();
+            });
+
+    connect(job, &LibreKDE::SignJob::succeeded, this, [this, reader, job](const QString& outputPath) {
+        ReaderSignState& done = m_signStates[reader];
+        done.job = nullptr;
+        done.outcome = SignOutcome::Succeeded;
+        done.outputPath = outputPath;
+        // The level the agent REPORTS having produced, not one this client
+        // asked for — it does not ask.
+        done.level = job->signMeta().value(QStringLiteral("level")).toString();
+        done.message.clear();
+        publishSignSurfaces();
         qCInfo(LibreKDE::Plasmoid::Logging) << "signed file written to" << outputPath;
-        // certLabel is non-empty ONLY when the card carried several signing
-        // certs and the deterministic first was picked implicitly — the
-        // success message then names it; a lone auto-selected cert
-        // needs no callout.
-        Q_EMIT signSucceeded(outputPath, m_lastSignCertLabel,
-                             job->signMeta().value(QStringLiteral("level")).toString());
         job->deleteLater();
     });
-    connect(job, &LibreKDE::SignJob::failed, this, [this, job](const QString& message) {
-        m_signJob = nullptr;
-        m_signingBusy = false;
-        Q_EMIT signingBusyChanged();
-        setError(message);
-        Q_EMIT signFailed(message);
+    connect(job, &LibreKDE::SignJob::failed, this, [this, reader, job](const QString& message) {
+        // Deliberately NOT setError(): `errorMessage` is the widget's single
+        // card-state surface, so a sign failure routed through it would surface
+        // on another reader's failed-card page.
+        ReaderSignState& done = m_signStates[reader];
+        done.job = nullptr;
+        done.outcome = SignOutcome::Failed;
+        done.outputPath.clear();
+        done.level.clear();
+        done.message = message;
+        publishSignSurfaces();
         job->deleteLater();
     });
     job->start();

@@ -278,6 +278,15 @@ public:
         runOnThread(m_context, [this, &out]() { out = m_agent->lastSignInputBytes(); });
         return out;
     }
+    /// @brief How many Sign() calls the fake has served, across both card paths
+    ///        — the witness that a SECOND sign was issued rather than refused
+    ///        client-side (the lastSign* getters describe only one call).
+    [[nodiscard]] int signCallCount()
+    {
+        int out = 0;
+        runOnThread(m_context, [this, &out]() { out = m_agent->signCallCount(); });
+        return out;
+    }
 
     /// @brief The (reader, certId) the fake's Pkcs11_1.CertDer last received
     ///        (read off the server thread, where the FakeAgent lives).

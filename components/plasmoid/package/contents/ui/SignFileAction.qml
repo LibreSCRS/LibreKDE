@@ -13,49 +13,102 @@ import org.librescrs.smartcard
 // Purpose Share action uses). The agent raises its own PIN prompter. The
 // action is never-blank: a busy-disabled button while a sign is in flight, and an
 // inline result affordance (success confirmation / localized error) after.
+//
+// Every surface here is READER-SCOPED: signingBusy, signPhase and signResult all
+// answer for the card currently displayed, so a sign running on another reader
+// neither spins this card's spinner nor disables its button, and its outcome
+// never lands on this card's banner.
 ColumnLayout {
     id: signAction
 
     // This widget's own controller instance (per-widget state; see main.qml).
     required property SmartCard smartCard
 
+    // SmartCardHandler::SignOutcome, mirrored here as named constants the same
+    // way CardActionBar mirrors the card states — no C++/QML enum plumbing for
+    // a presentation-only value.
+    readonly property int outcomeNone: 0
+    readonly property int outcomeSucceeded: 1
+    readonly property int outcomeFailed: 2
+
+    readonly property var result: smartCard.signResult
+
     Layout.alignment: Qt.AlignHCenter
     Layout.fillWidth: true
     spacing: Kirigami.Units.smallSpacing
 
-    // Inline result affordance (never-blank / "wow"): a success
-    // confirmation naming the written artifact, or the agent's own localized
-    // error. It PERSISTS until the user dismisses it (close button) or a new
-    // sign clears it (Connections below) — the earlier 6 s auto-hide lost the
-    // confirmation too fast.
-    Kirigami.InlineMessage {
-        id: signResult
-        Layout.fillWidth: true
-        showCloseButton: true
+    // The banner's text, composed from the displayed reader's outcome.
+    // plainDisplay on both payloads: the filename is user/download-controlled
+    // and the error text is agent-derived, while InlineMessage's label renders
+    // AutoText (no textFormat knob) — a name like "<a href=…>doc</a>.pdf" must
+    // never become a styled link in the result banner.
+    readonly property string resultText: {
+        if (result.outcome === outcomeFailed)
+            return smartCard.plainDisplay(result.message)
+        if (result.outcome !== outcomeSucceeded)
+            return ""
+
+        const outputPath = result.outputPath
+        const shown = smartCard.plainDisplay(outputPath.substring(outputPath.lastIndexOf("/") + 1))
+        // certLabel is non-empty only when the card carried SEVERAL signing
+        // certs and the deterministic first was picked implicitly — name it
+        // so the choice is never silent (a real chooser comes later).
+        //
+        // The level is what the agent REPORTS having produced, not what was
+        // asked for — nothing here asks. It is shown uppercased, the way the
+        // AdES levels are written (B-T), and omitted entirely when the agent
+        // reported none rather than shown as a blank.
+        const certLabel = result.certLabel
+        const level = result.level
+        if (level.length > 0) {
+            return certLabel.length > 0
+                ? i18nc("@info:status a file was signed with an implicitly picked certificate; %1 file name, %2 certificate name, %3 AdES conformance level such as B-T",
+                        "Signed %1 with certificate %2 at %3",
+                        shown,
+                        smartCard.plainDisplay(certLabel),
+                        level.toUpperCase())
+                : i18nc("@info:status a file was signed; %1 file name, %2 AdES conformance level such as B-T",
+                        "Signed %1 at %2", shown, level.toUpperCase())
+        }
+        return certLabel.length > 0
+            ? i18nc("@info:status a file was signed with an implicitly picked certificate; %1 file name, %2 certificate name",
+                    "Signed %1 with certificate %2",
+                    shown,
+                    smartCard.plainDisplay(certLabel))
+            : i18nc("@info:status a file was signed", "Signed %1", shown)
     }
 
-    // A new sign clears the previous banner so success/error never stacks stale.
-    // This action now lives in the persistent CardActionBar (outside the state
-    // Loader), so — unlike on main where the host state was destroyed on swap —
-    // it also must clear the banner when the CARD changes, or a prior card's
-    // "Signed X" / error would reappear on the next card. state/readerName cover
-    // every swap (physical removal routes through NoCard → stateChanged; a
-    // multi-card reader-selection switch → readerNameChanged) and neither fires
-    // on popup open/close, so the "persist until dismissed" contract for the
-    // SAME card is kept.
-    Connections {
-        target: signAction.smartCard
-        function onSigningBusyChanged() {
-            if (signAction.smartCard.signingBusy)
-                signResult.visible = false
-        }
-        function onStateChanged() { signResult.visible = false }
-        function onReaderNameChanged() { signResult.visible = false }
+    // Inline result affordance (never-blank / "wow"): a success confirmation
+    // naming the written artifact, or the agent's own localized error. It
+    // PERSISTS until the user dismisses it or a new sign on THIS card
+    // supersedes it — including across a chip switch and a popup close, since
+    // the handler holds it per reader and this is a pure binding onto that.
+    //
+    // Dismissal goes through an action rather than `showCloseButton`: Kirigami's
+    // built-in close button writes `visible = false` on the message itself,
+    // which would destroy the binding below for good — the next result would
+    // then never appear.
+    Kirigami.InlineMessage {
+        Layout.fillWidth: true
+        visible: signAction.result.outcome !== signAction.outcomeNone
+        text: signAction.resultText
+        type: signAction.result.outcome === signAction.outcomeFailed
+              ? Kirigami.MessageType.Error : Kirigami.MessageType.Positive
+        actions: [
+            Kirigami.Action {
+                icon.name: "dialog-close"
+                text: i18nc("@action:button dismiss the signing result message", "Dismiss")
+                displayHint: Kirigami.DisplayHint.IconOnly
+                onTriggered: signAction.smartCard.dismissSignResult()
+            }
+        ]
     }
 
     // In-flight progress: a running spinner + phase-aware status line
     // so the popup is never a frozen disabled button. Covers the pre-PIN card
-    // read AND the post-PIN AdES work.
+    // read AND the post-PIN AdES work. signPhase, not operationPhase: the two
+    // can genuinely run at once now (a read on this card while another reader
+    // signs), so the sign spinner reads the sign's own phase.
     RowLayout {
         Layout.alignment: Qt.AlignHCenter
         spacing: Kirigami.Units.smallSpacing
@@ -66,7 +119,7 @@ ColumnLayout {
             Layout.preferredWidth: Kirigami.Units.iconSizes.small
         }
         PlasmaComponents.Label {
-            text: signAction.smartCard.operationPhaseLabel(signAction.smartCard.operationPhase)
+            text: signAction.smartCard.operationPhaseLabel(signAction.smartCard.signPhase)
             opacity: 0.8
         }
     }
@@ -77,7 +130,9 @@ ColumnLayout {
         // "document-sign" is a stock Breeze action icon (breeze-icons actions/*),
         // verified present, so the button always renders with an icon.
         icon.name: "document-sign"
-        // Never a dead affordance while a sign is in flight (never-blank).
+        // Never a dead affordance while THIS card's sign is in flight
+        // (never-blank). Another reader signing leaves this button live — that
+        // is the whole point of the reader-scoped flag.
         enabled: !signAction.smartCard.signingBusy
         onClicked: signFileDialog.open()
 
@@ -92,50 +147,5 @@ ColumnLayout {
         title: i18nc("@title:window choose a file to sign", "Choose a file to sign")
         fileMode: FileDialog.OpenFile
         onAccepted: signAction.smartCard.signFile(selectedFile)
-    }
-
-    // Surface the SmartCardHandler outcome in place — no silent success/failure.
-    // plainDisplay on both payloads: the filename is user/download-controlled and
-    // the error text is agent-derived, while InlineMessage's label renders
-    // AutoText (no textFormat knob) — a name like "<a href=…>doc</a>.pdf" must
-    // never become a styled link in the result banner.
-    Connections {
-        target: signAction.smartCard
-        function onSignSucceeded(outputPath, certLabel, level) {
-            var name = outputPath.substring(outputPath.lastIndexOf("/") + 1)
-            // certLabel is non-empty only when the card carried SEVERAL signing
-            // certs and the deterministic first was picked implicitly — name it
-            // so the choice is never silent (a real chooser comes later).
-            //
-            // The level is what the agent REPORTS having produced, not what was
-            // asked for — nothing here asks. It is shown uppercased, the way the
-            // AdES levels are written (B-T), and omitted entirely when the agent
-            // reported none rather than shown as a blank.
-            var shown = signAction.smartCard.plainDisplay(name)
-            if (level.length > 0) {
-                signResult.text = certLabel.length > 0
-                    ? i18nc("@info:status a file was signed with an implicitly picked certificate; %1 file name, %2 certificate name, %3 AdES conformance level such as B-T",
-                            "Signed %1 with certificate %2 at %3",
-                            shown,
-                            signAction.smartCard.plainDisplay(certLabel),
-                            level.toUpperCase())
-                    : i18nc("@info:status a file was signed; %1 file name, %2 AdES conformance level such as B-T",
-                            "Signed %1 at %2", shown, level.toUpperCase())
-            } else {
-                signResult.text = certLabel.length > 0
-                    ? i18nc("@info:status a file was signed with an implicitly picked certificate; %1 file name, %2 certificate name",
-                            "Signed %1 with certificate %2",
-                            shown,
-                            signAction.smartCard.plainDisplay(certLabel))
-                    : i18nc("@info:status a file was signed", "Signed %1", shown)
-            }
-            signResult.type = Kirigami.MessageType.Positive
-            signResult.visible = true
-        }
-        function onSignFailed(message) {
-            signResult.text = signAction.smartCard.plainDisplay(message)
-            signResult.type = Kirigami.MessageType.Error
-            signResult.visible = true
-        }
     }
 }

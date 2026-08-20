@@ -17,6 +17,7 @@
 #include <QStringList>
 #include <QUrl>
 #include <QVariantList>
+#include <QVariantMap>
 #include <QtQmlIntegration/qqmlintegration.h>
 
 #include <memory>
@@ -120,13 +121,37 @@ class SmartCardHandler : public QObject
     /// once; a view that renders the summary and `identityFields` shows every
     /// summarised field TWICE. Drives the expanded detail list.
     Q_PROPERTY(QVariantList identityDetails READ identityDetails NOTIFY identityChanged)
-    /// True while an agent Sign started by `signFile()` is in flight (drives the
-    /// "Sign a file…" button's busy/disabled state and a never-blank affordance).
+    /// True while an agent Sign started by `signFile()` is in flight ON THE
+    /// READER CURRENTLY DISPLAYED (drives the "Sign a file…" button's
+    /// busy/disabled state and a never-blank affordance). Reader-scoped, not
+    /// widget-scoped: the Auto-mode chooser shows one chip per reader holding a
+    /// card and therefore promises per-reader state, while a sign — unlike an
+    /// identity read, which `bindCard()` cancels on a re-target — deliberately
+    /// keeps running on the card it was started on. A widget-wide flag would
+    /// spin the other cards' spinners and, worse, disable their "Sign a file…"
+    /// too, making concurrent signing unreachable from this client.
     Q_PROPERTY(bool signingBusy READ signingBusy NOTIFY signingBusyChanged)
-    /// Current phase of the in-flight operation (read or sign) as an
-    /// OperationPhase int; drives the spinner status line. Reset to Created(0)
-    /// when a new user-initiated operation starts. Read and sign share this one
-    /// surface — a widget runs one op at a time and the agent serialises per reader.
+    /// Phase of the DISPLAYED reader's in-flight sign as an OperationPhase int;
+    /// drives the sign spinner's status line. Reset to Created(0) when that
+    /// reader starts a new sign. Reader-scoped for the same reason as
+    /// `signingBusy`; kept separate from `operationPhase` because the two can
+    /// now genuinely run at once (a read on the displayed card while another
+    /// reader signs).
+    Q_PROPERTY(int signPhase READ signPhase NOTIFY signPhaseChanged)
+    /// The DISPLAYED reader's LAST sign outcome, as
+    /// { "outcome": SignOutcome int, "outputPath", "certLabel", "level",
+    /// "message" } — the sign result banner's whole source. State, not an
+    /// event: a sign that finishes while another chip is displayed must not
+    /// paint its banner over a foreign card, and must still be there when the
+    /// user comes back to the card that signed. Empty-ish (outcome None) for a
+    /// reader that has not signed, whose result was dismissed, or whose card
+    /// has since been swapped.
+    Q_PROPERTY(QVariantMap signResult READ signResult NOTIFY signResultChanged)
+    /// Current phase of the in-flight identity READ as an OperationPhase int;
+    /// drives the read spinner's status line (IdentityView / PreAuthState).
+    /// Reset to Created(0) when a new read starts. A read belongs to the
+    /// displayed card and is cancelled when the chip moves, so one scalar is
+    /// the truth here; the sign's phase lives in `signPhase`.
     Q_PROPERTY(int operationPhase READ operationPhase NOTIFY operationPhaseChanged)
     /// The per-widget reader binding. Empty = "Auto" (follow the
     /// active card); a friendly reader Name pins the widget to that reader only.
@@ -156,6 +181,16 @@ class SmartCardHandler : public QObject
     /// no view, no read — identity/photo PII never loads for an unopened popup.
     Q_PROPERTY(bool viewActive READ viewActive WRITE setViewActive NOTIFY viewActiveChanged)
 public:
+    /// What a reader's last sign ended as — the `outcome` entry of
+    /// `signResult`. Mirrored as named constants in SignFileAction.qml, the
+    /// same way the card states are mirrored in CardActionBar.qml: no C++/QML
+    /// enum plumbing for a presentation-only value.
+    enum class SignOutcome {
+        None = 0,      ///< nothing to report
+        Succeeded = 1, ///< an artifact was written
+        Failed = 2     ///< the agent (or this client) refused
+    };
+
     /// @brief QML-instantiation ctor: co-owns the process-wide
     ///        `sharedAgentClient()`, so every widget (and the config dialog)
     ///        reuses ONE agent connection + ObjectManager discovery.
@@ -228,10 +263,19 @@ public:
     {
         return m_identityDetails;
     }
-    [[nodiscard]] bool signingBusy() const
-    {
-        return m_signingBusy;
-    }
+    /// @brief Whether the DISPLAYED reader's card has a sign in flight.
+    ///        Defined out-of-line: reads the per-reader sign store.
+    [[nodiscard]] bool signingBusy() const;
+    /// @brief The DISPLAYED reader's sign phase (OperationPhase int), or
+    ///        Created(0) when it is not signing.
+    [[nodiscard]] int signPhase() const;
+    /// @brief The DISPLAYED reader's last sign outcome (see the `signResult`
+    ///        property). Never null: a reader with nothing to report answers
+    ///        with `outcome` = None.
+    [[nodiscard]] QVariantMap signResult() const;
+    /// @brief Dismiss the DISPLAYED reader's sign result (the banner's close
+    ///        button). Reader-scoped: another card's result is untouched.
+    Q_INVOKABLE void dismissSignResult();
     [[nodiscard]] int operationPhase() const
     {
         return m_operationPhase;
@@ -455,17 +499,9 @@ Q_SIGNALS:
     void identityChanged();
     void busyChanged();
     void signingBusyChanged();
+    void signPhaseChanged();
+    void signResultChanged();
     void operationPhaseChanged();
-    /// @param certLabel display name of the implicitly picked signing cert —
-    ///        non-empty ONLY when the card carried several signing certs (the
-    ///        deterministic first-cert pick must not stay silent); empty for
-    ///        the common lone-cert auto-selection.
-    /// @param level the AdES conformance level the agent actually produced
-    ///        (`b-b`/`b-t`/`b-lt`/`b-lta`), which is not necessarily one this
-    ///        client asked for — it does not ask. Empty if the agent reported
-    ///        no metadata, in which case it is simply not shown.
-    void signSucceeded(const QString& outputPath, const QString& certLabel, const QString& level);
-    void signFailed(const QString& message);
     void boundReaderNameChanged();
     void boundReaderPresentChanged();
     void availableReaderNamesChanged();
@@ -473,6 +509,23 @@ Q_SIGNALS:
     void viewActiveChanged();
 
 private:
+    /// One reader's sign state. Keyed in `m_signStates` by the RAW PC/SC reader
+    /// name — the same key `boundReaderName`, `selectReader()` and
+    /// `readersWithCards` already bind on. The card the sign was started on is
+    /// held too, so a swapped card never inherits the previous card's spinner:
+    /// an entry only speaks for the card it belongs to.
+    struct ReaderSignState
+    {
+        QPointer<LibreKDE::SignJob> job;                  ///< live sign, else null
+        QPointer<LibreSCRS::AgentClient::AgentCard> card; ///< the card it runs on
+        int phase = 0;                                    ///< OperationPhase::Created
+        QString certLabel;                                ///< implicit multi-cert pick
+        SignOutcome outcome = SignOutcome::None;          ///< last terminal, until dismissed
+        QString outputPath;                               ///< artifact written (Succeeded)
+        QString level;                                    ///< AdES level the agent reported
+        QString message;                                  ///< localized diagnostic (Failed)
+    };
+
     void wireClient();
     /// Re-pick the active reader/card from the client and re-classify.
     void refresh();
@@ -539,8 +592,18 @@ private:
     [[nodiscard]] static QString locateLibreCelik();
 
     void setBusy(bool busy);
-    /// Store + notify the current operation phase (no-op if unchanged).
+    /// Store + notify the current identity-read phase (no-op if unchanged).
     void setOperationPhase(LibreSCRS::AgentClient::OperationPhase phase);
+
+    /// The displayed reader's sign entry, or nullptr when it has none — or when
+    /// the entry belongs to a DIFFERENT card than the one bound now (a swapped
+    /// card must not inherit the previous card's sign surfaces).
+    [[nodiscard]] const ReaderSignState* activeSignState() const;
+    /// Recompute the reader-scoped sign surfaces and emit only what actually
+    /// changed. Called from every site that can move them: a sign starting,
+    /// its phase advancing, its terminal, and every re-target (`refresh()`),
+    /// since the displayed reader itself is an input.
+    void publishSignSurfaces();
 
     /// @brief Allocate a process-unique photo slot (monotonic counter).
     [[nodiscard]] static quint64 nextPhotoSlot();
@@ -552,10 +615,16 @@ private:
     QPointer<LibreSCRS::AgentClient::AgentCard> m_card;
     QPointer<LibreSCRS::AgentClient::AgentOperation> m_identityOp;
     QPointer<LibreSCRS::AgentClient::AgentOperation> m_photoOp;
-    QPointer<LibreKDE::SignJob> m_signJob;
-    QString m_lastSignCertLabel; // set by the multi-cert pick; cleared per signFile()
-    bool m_signingBusy = false;
-    int m_operationPhase = 0; // OperationPhase::Created
+    /// Live sign state per reader. Entries are minted by `signFile()` and pruned
+    /// by `updateReaderRosters()` once their reader leaves the roster and no job
+    /// is left running on it.
+    QHash<QString, ReaderSignState> m_signStates;
+    /// Last published values of the reader-scoped sign surfaces, so
+    /// `publishSignSurfaces()` fires each change signal only on a real flip.
+    bool m_publishedSigningBusy = false;
+    int m_publishedSignPhase = 0;
+    QVariantMap m_publishedSignResult;
+    int m_operationPhase = 0; // OperationPhase::Created (the identity READ's phase)
     bool m_identityRead = false;
     /// Cached "Manage credentials…" gate (see updatePinManagementAvailable()).
     bool m_pinManagementAvailable = false;

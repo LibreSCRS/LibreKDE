@@ -1184,9 +1184,15 @@ FakeManagedObjects FakeAgent::managedObjects() const
 
 void FakeAgent::captureSign(const QString& certId, const QByteArray& inputBytes, const QVariantMap& options)
 {
+    ++m_signCallCount;
     m_lastSignCertId = certId;
     m_lastSignInputBytes = inputBytes;
     m_lastSignOptions = options;
+}
+
+int FakeAgent::signCallCount() const
+{
+    return m_signCallCount;
 }
 
 QString FakeAgent::lastSignCertId() const

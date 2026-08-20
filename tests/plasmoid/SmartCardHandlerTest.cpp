@@ -1819,9 +1819,9 @@ TEST(SmartCardHandler, SignFileDrivesWireSign)
 }
 
 // A multi-signing-cert card signs with the deterministic FIRST cert — but the
-// implicit pick must never stay silent: signSucceeded carries the picked
-// cert's display name (subjectCn) so the success banner can say which cert
-// signed. A lone auto-selected cert (SignJob never invokes the chooser)
+// implicit pick must never stay silent: the reader's sign result carries the
+// picked cert's display name (subjectCn) so the success banner can say which
+// cert signed. A lone auto-selected cert (SignJob never invokes the chooser)
 // carries an EMPTY label — no callout for the unambiguous common case.
 TEST(SmartCardHandler, SignSuccessNamesImplicitlyPickedCertOnlyForMultiCert)
 {
@@ -1835,7 +1835,6 @@ TEST(SmartCardHandler, SignSuccessNamesImplicitlyPickedCertOnlyForMultiCert)
         auto handler = makeHandler(h);
         ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PkiOnly); }));
 
-        QSignalSpy spy(handler.get(), &SmartCardHandler::signSucceeded);
         QTemporaryDir dir;
         const QString input = dir.filePath(QStringLiteral("doc.pdf"));
         QFile f(input);
@@ -1843,9 +1842,12 @@ TEST(SmartCardHandler, SignSuccessNamesImplicitlyPickedCertOnlyForMultiCert)
         f.write("%PDF-1.4\nmulticert\n");
         f.close();
         handler->signFile(QUrl::fromLocalFile(input).toString());
-        ASSERT_TRUE(waitFor([&]() { return spy.count() == 1; }));
+        ASSERT_TRUE(waitFor([&]() {
+            return handler->signResult().value(QStringLiteral("outcome")).toInt() ==
+                   static_cast<int>(SmartCardHandler::SignOutcome::Succeeded);
+        }));
         EXPECT_EQ(h.lastSignCertId(), QStringLiteral("cert-a"));
-        EXPECT_EQ(spy.first().at(1).toString(), QStringLiteral("Alpha"))
+        EXPECT_EQ(handler->signResult().value(QStringLiteral("certLabel")).toString(), QStringLiteral("Alpha"))
             << "the implicit first-cert pick must be surfaced by name";
     }
 
@@ -1858,7 +1860,6 @@ TEST(SmartCardHandler, SignSuccessNamesImplicitlyPickedCertOnlyForMultiCert)
         auto handler = makeHandler(h);
         ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PkiOnly); }));
 
-        QSignalSpy spy(handler.get(), &SmartCardHandler::signSucceeded);
         QTemporaryDir dir;
         const QString input = dir.filePath(QStringLiteral("doc.pdf"));
         QFile f(input);
@@ -1866,8 +1867,12 @@ TEST(SmartCardHandler, SignSuccessNamesImplicitlyPickedCertOnlyForMultiCert)
         f.write("%PDF-1.4\nlonecert\n");
         f.close();
         handler->signFile(QUrl::fromLocalFile(input).toString());
-        ASSERT_TRUE(waitFor([&]() { return spy.count() == 1; }));
-        EXPECT_TRUE(spy.first().at(1).toString().isEmpty()) << "a lone auto-selected cert needs no callout";
+        ASSERT_TRUE(waitFor([&]() {
+            return handler->signResult().value(QStringLiteral("outcome")).toInt() ==
+                   static_cast<int>(SmartCardHandler::SignOutcome::Succeeded);
+        }));
+        EXPECT_TRUE(handler->signResult().value(QStringLiteral("certLabel")).toString().isEmpty())
+            << "a lone auto-selected cert needs no callout";
     }
 }
 
@@ -1875,7 +1880,7 @@ TEST(SmartCardHandler, SignSuccessNamesImplicitlyPickedCertOnlyForMultiCert)
 // one this client asked for — it does not ask. Scripted to a level the request
 // could not have produced by accident, so the assertion proves the value came
 // from the agent's own metadata.
-TEST(SmartCardHandler, SignSucceededCarriesTheResolvedLevel)
+TEST(SmartCardHandler, SignResultCarriesTheResolvedLevel)
 {
     FakeAgent::Config cfg;
     cfg.capabilities = Client::Cap::Pki;
@@ -1888,7 +1893,6 @@ TEST(SmartCardHandler, SignSucceededCarriesTheResolvedLevel)
     auto handler = makeHandler(h);
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PkiOnly); }));
 
-    QSignalSpy spy(handler.get(), &SmartCardHandler::signSucceeded);
     QTemporaryDir dir;
     const QString input = dir.filePath(QStringLiteral("doc.pdf"));
     QFile f(input);
@@ -1896,10 +1900,192 @@ TEST(SmartCardHandler, SignSucceededCarriesTheResolvedLevel)
     f.write("%PDF-1.4\nlevel\n");
     f.close();
     handler->signFile(QUrl::fromLocalFile(input).toString());
-    ASSERT_TRUE(waitFor([&]() { return spy.count() == 1; }));
-    EXPECT_EQ(spy.first().at(2).toString(), QStringLiteral("b-lt"));
+    ASSERT_TRUE(waitFor([&]() {
+        return handler->signResult().value(QStringLiteral("outcome")).toInt() ==
+               static_cast<int>(SmartCardHandler::SignOutcome::Succeeded);
+    }));
+    EXPECT_EQ(handler->signResult().value(QStringLiteral("level")).toString(), QStringLiteral("b-lt"));
     // And nothing on the way out asked for it.
     EXPECT_FALSE(h.lastSignOptions().contains(QStringLiteral("level")));
+}
+
+// --- Sign state is per READER, not per widget -------------------------------
+//
+// In Auto mode the widget renders a master-detail chooser over every reader
+// holding a card (MultiCardState.qml), so the chips PROMISE per-reader state.
+// A sign, unlike an identity read, is deliberately NOT cancelled when the chip
+// moves (bindCard cancels the read op only) — it keeps running on the card it
+// was started on. Its UI surfaces must therefore be scoped to the reader that
+// is actually signing, or the spinner and the disabled "Sign a file…" button
+// land on whatever card happens to be displayed.
+
+namespace {
+
+// Build two readers, each holding a signing-capable card, and leave the handler
+// in Auto mode. Returns with reader/0 "Fake" selected (the deterministic first).
+void arrangeTwoSigningCards(Harness& h, SmartCardHandler& handler)
+{
+    ASSERT_TRUE(waitFor([&]() { return handler.state() == static_cast<int>(State::PkiOnly); }));
+    h.emitReaderArrivesEmpty();
+    waitFor([]() { return false; }, 50);
+    h.emitArrivedReaderCardAdded(Client::Cap::Pki);
+    waitFor([]() { return false; }, 50);
+    h.emitArrivedReaderHasCard();
+    ASSERT_TRUE(waitFor([&]() { return handler.readersWithCards().size() == 2; }));
+    ASSERT_EQ(handler.readerName(), QStringLiteral("Fake"));
+}
+
+// Write @p contents to a fresh file in @p dir and return its file:// URL.
+QString signableFile(const QTemporaryDir& dir, const QString& name, const QByteArray& contents)
+{
+    const QString path = dir.filePath(name);
+    QFile f(path);
+    EXPECT_TRUE(f.open(QIODevice::WriteOnly));
+    f.write(contents);
+    f.close();
+    return QUrl::fromLocalFile(path).toString();
+}
+
+} // namespace
+
+// The spinner and the busy-disabled button follow the SIGNING reader. Start a
+// sign on "Fake", move the master-detail pick to "Fake2" while it is still in
+// flight: the second card is idle and must say so — its "Sign a file…" stays
+// live. Coming back to "Fake" shows the running sign again.
+TEST(SmartCardHandler, SigningBusyFollowsTheSigningReaderAcrossAChipSwitch)
+{
+    FakeAgent::Config cfg;
+    cfg.capabilities = Client::Cap::Pki;
+    cfg.certScript = {{QStringLiteral("cert-sign"), true, QStringLiteral("Signer")}};
+    // Long enough that the sign is unambiguously still in flight while the
+    // assertions below run (the flow is two ops: certs, then Sign).
+    cfg.operationDelayMs = 1000;
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+
+    auto handler = makeHandler(h);
+    arrangeTwoSigningCards(h, *handler);
+
+    QTemporaryDir dir;
+    handler->signFile(signableFile(dir, QStringLiteral("alpha.pdf"), QByteArray("%PDF-1.4\nalpha\n")));
+    ASSERT_TRUE(handler->signingBusy()) << "the sign starts on the displayed reader";
+
+    handler->selectReader(QStringLiteral("Fake2"));
+    ASSERT_EQ(handler->readerName(), QStringLiteral("Fake2"));
+    EXPECT_FALSE(handler->signingBusy())
+        << "the second card is not signing — its spinner must stay dark and its Sign button live";
+
+    handler->selectReader(QStringLiteral("Fake"));
+    ASSERT_EQ(handler->readerName(), QStringLiteral("Fake"));
+    EXPECT_TRUE(handler->signingBusy()) << "the signing reader still shows its own in-flight sign";
+}
+
+// The half that is not cosmetic: with one global sign slot the widget refuses to
+// start a second sign on ANY reader while one is in flight, so the concurrent
+// credential prompts the agent supports cannot be raised from this client at
+// all. Two readers must be able to sign at the same time — assert the agent
+// really received BOTH Sign calls, not that a job object was merely created.
+TEST(SmartCardHandler, ASecondReaderCanSignWhileTheFirstSignIsInFlight)
+{
+    FakeAgent::Config cfg;
+    cfg.capabilities = Client::Cap::Pki;
+    cfg.certScript = {{QStringLiteral("cert-sign"), true, QStringLiteral("Signer")}};
+    cfg.operationDelayMs = 1000;
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+
+    auto handler = makeHandler(h);
+    arrangeTwoSigningCards(h, *handler);
+
+    QTemporaryDir dir;
+    handler->signFile(signableFile(dir, QStringLiteral("alpha.pdf"), QByteArray("%PDF-1.4\nalpha\n")));
+    ASSERT_TRUE(handler->signingBusy());
+
+    handler->selectReader(QStringLiteral("Fake2"));
+    handler->signFile(signableFile(dir, QStringLiteral("beta.pdf"), QByteArray("%PDF-1.4\nbeta\n")));
+    EXPECT_TRUE(handler->signingBusy()) << "the second reader's own sign is in flight";
+
+    // Both reached the wire: the count is the only witness that the second sign
+    // was issued rather than refused client-side (lastSign* describes one call).
+    ASSERT_TRUE(waitFor([&]() { return h.signCallCount() == 2; }))
+        << "a sign in flight on one reader must not block a sign on another";
+
+    // …and they overlap: the first reader's sign is still running now.
+    handler->selectReader(QStringLiteral("Fake"));
+    EXPECT_TRUE(handler->signingBusy()) << "both signs are in flight at the same moment";
+}
+
+// The result banner is STATE, not an event. A sign that finishes while another
+// chip is displayed must not paint its outcome over a foreign card — and the
+// card that actually signed must still be able to show it when the user comes
+// back. Completion is observed off the artifact on disk, so the assertion does
+// not depend on which signal the handler happens to emit.
+TEST(SmartCardHandler, SignResultBelongsToTheReaderThatSigned)
+{
+    FakeAgent::Config cfg;
+    cfg.capabilities = Client::Cap::Pki;
+    cfg.certScript = {{QStringLiteral("cert-sign"), true, QStringLiteral("Signer")}};
+    cfg.signMeta = QVariantMap{{QStringLiteral("level"), QStringLiteral("b-lt")}};
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+
+    auto handler = makeHandler(h);
+    arrangeTwoSigningCards(h, *handler);
+
+    QTemporaryDir dir;
+    handler->signFile(signableFile(dir, QStringLiteral("alpha.pdf"), QByteArray("%PDF-1.4\nalpha\n")));
+
+    // Move to the other card and let the first reader's sign finish there.
+    handler->selectReader(QStringLiteral("Fake2"));
+    ASSERT_TRUE(waitFor([&]() { return QFile::exists(dir.filePath(QStringLiteral("alpha-signed.pdf"))); }))
+        << "the sign must keep running on the card it was started on after a chip switch";
+
+    EXPECT_EQ(handler->signResult().value(QStringLiteral("outcome")).toInt(),
+              static_cast<int>(SmartCardHandler::SignOutcome::None))
+        << "the displayed card never signed — another reader's outcome must not land on it";
+
+    handler->selectReader(QStringLiteral("Fake"));
+    ASSERT_TRUE(waitFor([&]() {
+        return handler->signResult().value(QStringLiteral("outcome")).toInt() ==
+               static_cast<int>(SmartCardHandler::SignOutcome::Succeeded);
+    })) << "coming back to the card that signed must still show its result";
+    const QVariantMap res = handler->signResult();
+    EXPECT_TRUE(res.value(QStringLiteral("outputPath")).toString().endsWith(QStringLiteral("alpha-signed.pdf")));
+    EXPECT_EQ(res.value(QStringLiteral("level")).toString(), QStringLiteral("b-lt"));
+
+    // The close button is reader-scoped too.
+    handler->dismissSignResult();
+    EXPECT_EQ(handler->signResult().value(QStringLiteral("outcome")).toInt(),
+              static_cast<int>(SmartCardHandler::SignOutcome::None));
+}
+
+// A result belongs to the CARD, not merely to the reader's name: swap the card
+// in the same slot and the previous card's "Signed …" must not greet the new
+// one. (The QML used to clear the banner on stateChanged/readerNameChanged;
+// with the outcome held per reader, the card identity is what settles it.)
+TEST(SmartCardHandler, ASwappedCardDoesNotInheritThePreviousCardsSignResult)
+{
+    FakeAgent::Config cfg;
+    cfg.capabilities = Client::Cap::Pki;
+    cfg.certScript = {{QStringLiteral("cert-sign"), true, QStringLiteral("Signer")}};
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+
+    auto handler = makeHandler(h);
+    ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PkiOnly); }));
+
+    QTemporaryDir dir;
+    handler->signFile(signableFile(dir, QStringLiteral("alpha.pdf"), QByteArray("%PDF-1.4\nalpha\n")));
+    ASSERT_TRUE(waitFor([&]() {
+        return handler->signResult().value(QStringLiteral("outcome")).toInt() ==
+               static_cast<int>(SmartCardHandler::SignOutcome::Succeeded);
+    }));
+
+    // Same reader, different card.
+    h.setCardPresent(false);
+    ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::NoCard); }));
+    h.setCardPresent(true);
+    ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PkiOnly); }));
+
+    EXPECT_EQ(handler->signResult().value(QStringLiteral("outcome")).toInt(),
+              static_cast<int>(SmartCardHandler::SignOutcome::None))
+        << "a freshly inserted card has signed nothing";
 }
 
 // Spec test (b): the plasmoid "Sign a file…" and the Purpose path produce a

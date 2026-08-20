@@ -567,6 +567,12 @@ public:
     [[nodiscard]] QVariantMap lastSignOptions() const;
     [[nodiscard]] QByteArray lastSignInputBytes() const;
 
+    /// @brief How many Card1.Sign calls have reached the fake so far, across
+    ///        BOTH card paths. The `lastSign*` getters only ever describe the
+    ///        most recent call, so a test asserting that a SECOND sign was
+    ///        actually issued (rather than refused client-side) needs the count.
+    [[nodiscard]] int signCallCount() const;
+
     /// @brief Record + read the (reader, certId) the last Pkcs11_1.CertDer call
     ///        carried, so a test can assert the client addressed the right card.
     void captureCertDer(const QString& reader, const QString& certId);
@@ -704,6 +710,7 @@ private:
     ReaderAdaptor* m_reader2Adaptor = nullptr;
     CardAdaptor* m_card2Adaptor = nullptr;
 
+    int m_signCallCount = 0;
     QString m_lastSignCertId;
     QVariantMap m_lastSignOptions;
     QByteArray m_lastSignInputBytes;
