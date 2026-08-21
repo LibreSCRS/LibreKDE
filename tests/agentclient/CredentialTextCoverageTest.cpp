@@ -64,6 +64,7 @@ constexpr std::optional<Kind> expectedKindFor(CredentialOutcome o) noexcept
     case CredentialOutcome::Unsupported:
     case CredentialOutcome::KeyActivationFailed:
     case CredentialOutcome::CardRemoved:
+    case CredentialOutcome::EntryExpired:
         return Kind::Error;
     }
     return std::nullopt; // not an enumerated value (probes past the end)
@@ -85,7 +86,7 @@ constexpr std::uint32_t kOutcomeCount = enumeratedCount();
 
 // Anchor on the LAST enumerator so an append/reorder that leaves the switch
 // stale trips here too, in addition to -Werror=switch.
-static_assert(kOutcomeCount == static_cast<std::uint32_t>(CredentialOutcome::CardRemoved) + 1u,
+static_assert(kOutcomeCount == static_cast<std::uint32_t>(CredentialOutcome::EntryExpired) + 1u,
               "classification switch out of step with the CredentialOutcome tail; move this anchor to the new last "
               "enumerator and classify the new value in expectedKindFor() in the same change");
 

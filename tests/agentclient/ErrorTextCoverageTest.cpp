@@ -85,6 +85,7 @@ constexpr std::optional<Kind> expectedKindFor(ErrorCode code) noexcept
     case ErrorCode::RateLimited:
     case ErrorCode::EngineUnavailable:
     case ErrorCode::InvalidDocument:
+    case ErrorCode::EntryExpired:
         return Kind::Localized;
     case ErrorCode::SigningEngineError:
         // The catch-all engine code defers to the agent's message when present
@@ -118,7 +119,7 @@ constexpr std::uint32_t kClassifiedCount = classifiedCount();
 //     derived count outgrew the anchor.
 // So neither check is redundant with the other, and the pair is what remains of
 // the growth gate in this repo now that the taxonomy is not declared here.
-static_assert(kClassifiedCount == static_cast<std::uint32_t>(ErrorCode::InvalidDocument) + 1u,
+static_assert(kClassifiedCount == static_cast<std::uint32_t>(ErrorCode::EntryExpired) + 1u,
               "classification switch out of step with the ErrorCode tail; move this anchor to the new last "
               "enumerator and classify the new code in expectedKindFor() in the same change");
 

@@ -756,6 +756,10 @@ msgstr ""
 "Услуга за потписивање није исправно подешена — њен безбедносни модул није "
 "могуће учитати. Проверите инсталацију."
 
+#: shared/agentclient/CredentialText.cpp shared/agentclient/ErrorText.cpp
+msgid "The entry window closed before a code was entered. Try again."
+msgstr "Прозор за унос се затворио пре него што је шифра унета. Покушајте поново."
+
 #: shared/agentclient/ErrorText.cpp
 msgid ""
 "The document you tried to sign is invalid or could not be read. Check the "

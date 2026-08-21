@@ -82,6 +82,8 @@ QString outcomeMessage(CredentialOutcome o, CredentialKind presented, std::optio
         return ki18nd("librekde", "This action isn't available on this card.").toString();
     case CredentialOutcome::CardRemoved:
         return ki18nd("librekde", "The card was removed before the operation finished.").toString();
+    case CredentialOutcome::EntryExpired:
+        return ki18nd("librekde", "The entry window closed before a code was entered. Try again.").toString();
     case CredentialOutcome::PluginError:
         return ki18nd("librekde", "The card reported an error.").toString();
     case CredentialOutcome::Unspecified:

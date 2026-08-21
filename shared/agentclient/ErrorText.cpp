@@ -162,6 +162,8 @@ using LibreSCRS::AgentClient::ErrorCode;
     case ErrorCode::InvalidDocument:
         return ki18nd("librekde", "The document you tried to sign is invalid or could not be read. Check the file.")
             .toString();
+    case ErrorCode::EntryExpired:
+        return ki18nd("librekde", "The entry window closed before a code was entered. Try again.").toString();
     case ErrorCode::EngineUnavailable:
         return ki18nd("librekde",
                       "The signing service is not set up correctly — its security module could not be loaded. "
