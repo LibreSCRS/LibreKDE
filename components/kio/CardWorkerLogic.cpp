@@ -41,6 +41,10 @@ RenderLabels workerRenderLabels()
         i18nc("X.509 key usage", "CRL Signing"),       i18nc("X.509 key usage", "Encipher Only"),
         i18nc("X.509 key usage", "Decipher Only"),
     };
+    // A purpose is what the certificate is FOR, not what the key may do — hence
+    // its own context, distinct from the X.509 key usage bit of the same name.
+    l.purposeSigning = i18nc("certificate purpose", "Digital Signature");
+    l.purposeAuthentication = i18nc("certificate purpose", "Authentication");
     l.trustNotEvaluated = i18nc("certificate trust status", "not yet evaluated");
     l.qualifiedUnknown = i18nc("certificate qualified status", "unknown");
 

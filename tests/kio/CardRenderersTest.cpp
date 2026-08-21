@@ -108,8 +108,28 @@ TEST(CardRenderers, KeyUsageDecodesMultipleBits)
     const QStringList purposes = keyUsagePurposes(mask);
     EXPECT_TRUE(purposes.contains(QStringLiteral("Digital Signature")));
     EXPECT_TRUE(purposes.contains(QStringLiteral("Certificate Signing")));
-    EXPECT_EQ(primaryPurpose(mask), QStringLiteral("Digital Signature"));
+    // digitalSignature WITHOUT nonRepudiation is an authentication certificate,
+    // whatever else is set alongside it.
+    EXPECT_EQ(primaryPurpose(mask), QStringLiteral("Authentication"));
     EXPECT_TRUE(primaryPurpose(0u).isEmpty());
+}
+
+// The reported defect, pinned: an eID AUTHENTICATION certificate carries
+// digitalSignature + keyEncipherment and no nonRepudiation, and used to be
+// listed in card:/ as the folder "Digital Signature (…)" — the name of the
+// certificate the holder signs documents with. A signing certificate is the one
+// bearing nonRepudiation (contentCommitment), and it keeps that name.
+TEST(CardRenderers, AuthenticationCertIsNotNamedAfterTheSigningOne)
+{
+    const quint32 authentication = (1u << 0) | (1u << 2); // digitalSignature + keyEncipherment
+    EXPECT_EQ(primaryPurpose(authentication), QStringLiteral("Authentication"));
+
+    const quint32 signing = (1u << 0) | (1u << 1); // digitalSignature + nonRepudiation
+    EXPECT_EQ(primaryPurpose(signing), QStringLiteral("Digital Signature"));
+
+    // The full KeyUsage render is unchanged: it names every set bit, in order.
+    EXPECT_EQ(keyUsagePurposes(authentication),
+              (QStringList{QStringLiteral("Digital Signature"), QStringLiteral("Key Encipherment")}));
 }
 
 // Wire-convention pin: the agent emits keyUsageBits = 1u<<ordinal (source:
@@ -121,10 +141,10 @@ TEST(CardRenderers, KeyUsageDecodesMultipleBits)
 // (which would read 1u<<0 == 0x01 as encipherOnly, ordinal 7).
 TEST(CardRenderers, KeyUsageDecodesAgentOrdinalEncoding)
 {
-    // digitalSignature = ordinal 0 on the wire.
-    EXPECT_EQ(primaryPurpose(1u << 0), QStringLiteral("Digital Signature"));
-    // nonRepudiation = ordinal 1.
-    EXPECT_EQ(primaryPurpose(1u << 1), QStringLiteral("Non-Repudiation"));
+    // digitalSignature = ordinal 0 on the wire -> authentication, not signing.
+    EXPECT_EQ(primaryPurpose(1u << 0), QStringLiteral("Authentication"));
+    // nonRepudiation = ordinal 1 -> the signing certificate.
+    EXPECT_EQ(primaryPurpose(1u << 1), QStringLiteral("Digital Signature"));
     // keyCertSign = ordinal 5.
     EXPECT_EQ(primaryPurpose(1u << 5), QStringLiteral("Certificate Signing"));
     // decipherOnly = ordinal 8 (the multi-byte ordinal, value 0x100).

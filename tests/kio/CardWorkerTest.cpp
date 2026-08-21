@@ -87,6 +87,12 @@ CardPresence presence(const QString& reader, const QString& path, std::uint32_t 
     return CardPresence{reader, path, caps, preAuth};
 }
 
+// A SIGNING certificate's KeyUsage: digitalSignature + nonRepudiation (ordinals
+// 0 and 1, agent wire 1u<<ordinal). nonRepudiation is the half that makes it a
+// signing certificate — digitalSignature alone is an authentication key, and is
+// named as one.
+constexpr quint32 kSigningKeyUsage = 0x03u;
+
 LibreSCRS::AgentClient::CertificateInfo signingCert(const QString& id, const QString& subject, quint32 ku)
 {
     LibreSCRS::AgentClient::CertificateInfo c;
@@ -153,7 +159,7 @@ TEST(CardWorker, ListPkiResolvesCertFoldersByPurpose)
     CertListResult certs;
     certs.status = ReadStatus::Ok;
     certs.certs << signingCert(QStringLiteral("aabbccdd1122"), QStringLiteral("Pera"),
-                               0x01u); // digitalSignature (ordinal 0, agent wire 1u<<0)
+                               kSigningKeyUsage);
     src.setCertificates(certs);
 
     TestableCardWorker w(src);
@@ -171,7 +177,7 @@ TEST(CardWorker, GetCertInfoTxtRenders)
         {presence(QStringLiteral("G"), QStringLiteral("/card/0"), Client::Cap::Pki, QStringLiteral("None"))}};
     CertListResult certs;
     certs.status = ReadStatus::Ok;
-    certs.certs << signingCert(QStringLiteral("deadbeefcafe"), QStringLiteral("Mika"), 0x01u);
+    certs.certs << signingCert(QStringLiteral("deadbeefcafe"), QStringLiteral("Mika"), kSigningKeyUsage);
     src.setCertificates(certs);
 
     TestableCardWorker w(src);
@@ -201,7 +207,7 @@ TEST(CardWorker, CertFolderNameIsStableUrlSegmentAndResolvesByCertId)
         {presence(QStringLiteral("G"), QStringLiteral("/card/0"), Client::Cap::Pki, QStringLiteral("None"))}};
     CertListResult certs;
     certs.status = ReadStatus::Ok;
-    certs.certs << signingCert(QStringLiteral("aabbccdd11223344"), QStringLiteral("Pera"), 0x01u);
+    certs.certs << signingCert(QStringLiteral("aabbccdd11223344"), QStringLiteral("Pera"), kSigningKeyUsage);
     src.setCertificates(certs);
 
     TestableCardWorker w(src);
@@ -233,8 +239,8 @@ TEST(CardWorker, CertFoldersSharingPurposeAndPrefixGetDistinctResolvableFolders)
     CertListResult certs;
     certs.status = ReadStatus::Ok;
     // Same purpose (digitalSignature) AND same first 8 hex "aabbccdd".
-    certs.certs << signingCert(QStringLiteral("aabbccdd00000001"), QStringLiteral("First"), 0x01u);
-    certs.certs << signingCert(QStringLiteral("aabbccdd00000002"), QStringLiteral("Second"), 0x01u);
+    certs.certs << signingCert(QStringLiteral("aabbccdd00000001"), QStringLiteral("First"), kSigningKeyUsage);
+    certs.certs << signingCert(QStringLiteral("aabbccdd00000002"), QStringLiteral("Second"), kSigningKeyUsage);
     src.setCertificates(certs);
 
     TestableCardWorker w(src);
@@ -266,7 +272,7 @@ TEST(CardWorker, CertInfoTxtGetReadsCertListExactlyOnce)
         {presence(QStringLiteral("G"), QStringLiteral("/card/0"), Client::Cap::Pki, QStringLiteral("None"))}};
     CertListResult certs;
     certs.status = ReadStatus::Ok;
-    certs.certs << signingCert(QStringLiteral("deadbeefcafe"), QStringLiteral("Mika"), 0x01u);
+    certs.certs << signingCert(QStringLiteral("deadbeefcafe"), QStringLiteral("Mika"), kSigningKeyUsage);
     src.setCertificates(certs);
 
     TestableCardWorker w(src);
@@ -289,7 +295,7 @@ TEST(CardWorker, CertDerPemListedStatMimedAndServed)
         {presence(QStringLiteral("G"), QStringLiteral("/card/0"), Client::Cap::Pki, QStringLiteral("None"))}};
     CertListResult certs;
     certs.status = ReadStatus::Ok;
-    certs.certs << signingCert(QStringLiteral("0011223344"), QStringLiteral("X"), 0x01u);
+    certs.certs << signingCert(QStringLiteral("0011223344"), QStringLiteral("X"), kSigningKeyUsage);
     src.setCertificates(certs);
 
     // Scripted DER the agent's CertDer would return (arbitrary bytes; the worker

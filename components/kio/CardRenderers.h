@@ -24,6 +24,10 @@ struct RenderLabels
     // KeyUsage purpose names (X.509 ordinals 0..8), for the "Purpose:" line and
     // the cert-folder name. Index = bit ordinal.
     QStringList keyUsageNames; ///< 9 entries; empty falls back to built-in English.
+    // Certificate PURPOSE names. A purpose is not a KeyUsage bit name: the bits
+    // say what the key may do, the purpose says what the certificate is FOR.
+    QString purposeSigning;        ///< "Digital Signature" (nonRepudiation present)
+    QString purposeAuthentication; ///< "Authentication" (digitalSignature without it)
     QString trustNotEvaluated; ///< e.g. "not yet evaluated".
     QString qualifiedUnknown;  ///< e.g. "unknown".
 
@@ -61,8 +65,15 @@ struct RenderLabels
 ///        i, matching the agent wire); ordinal i maps to keyUsageNames[i].
 [[nodiscard]] QStringList keyUsagePurposes(quint32 keyUsageBits, const RenderLabels& labels = defaultRenderLabels());
 
-/// @brief A single short purpose label for the cert FOLDER name (first set bit;
-///        empty when no usable purpose bit is set → caller falls back to certId).
+/// @brief A single short purpose label for the cert FOLDER name; empty when no
+///        usable purpose bit is set → caller falls back to certId.
+///
+/// NOT the first set bit. `nonRepudiation` (contentCommitment) is what marks a
+/// signing certificate, and `digitalSignature` is set on AUTHENTICATION
+/// certificates too (TLS client, challenge-response) — so first-bit-wins named
+/// every eID authentication certificate "Digital Signature". `nonRepudiation`
+/// therefore wins when present; `digitalSignature` without it is
+/// authentication; anything else falls back to its KeyUsage bit name.
 [[nodiscard]] QString primaryPurpose(quint32 keyUsageBits, const RenderLabels& labels = defaultRenderLabels());
 
 /// @brief Render the demographic identity field list as a human-readable text.

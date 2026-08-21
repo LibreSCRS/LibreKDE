@@ -63,6 +63,16 @@ msgid "Decipher Only"
 msgstr "Само дешифровање"
 
 #: components/kio/CardWorkerLogic.cpp:44
+msgctxt "certificate purpose"
+msgid "Digital Signature"
+msgstr "Дигитални потпис"
+
+#: components/kio/CardWorkerLogic.cpp:45
+msgctxt "certificate purpose"
+msgid "Authentication"
+msgstr "Аутентификација"
+
+#: components/kio/CardWorkerLogic.cpp:44
 msgctxt "certificate trust status"
 msgid "not yet evaluated"
 msgstr "још није оцењено"

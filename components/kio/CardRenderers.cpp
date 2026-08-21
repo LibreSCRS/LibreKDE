@@ -36,6 +36,15 @@ const char* const kKeyUsageEnglish[kKeyUsageCount] = {
 // is ordinal-indexed (bit i == 1u<<i == X.509 KeyUsage ordinal i), so the test is
 // a direct shift — correct for all ordinals 0-8 including the multi-byte
 // ordinal-8 decipherOnly (1u<<8 == 0x100).
+// The two ordinals that decide a certificate's PURPOSE, as opposed to merely
+// naming a permitted operation.
+constexpr int kUsageDigitalSignature = 0;
+constexpr int kUsageNonRepudiation = 1;
+
+// English fallbacks for the purposes above (the worker localizes via RenderLabels).
+constexpr const char* kPurposeSigningEnglish = "Digital Signature";
+constexpr const char* kPurposeAuthenticationEnglish = "Authentication";
+
 bool keyUsageBitSet(quint32 mask, int ordinal)
 {
     return (mask & (1u << static_cast<unsigned>(ordinal))) != 0u;
@@ -61,6 +70,8 @@ RenderLabels defaultRenderLabels()
     for (int i = 0; i < kKeyUsageCount; ++i) {
         l.keyUsageNames << QString::fromUtf8(kKeyUsageEnglish[i]);
     }
+    l.purposeSigning = QString::fromUtf8(kPurposeSigningEnglish);
+    l.purposeAuthentication = QString::fromUtf8(kPurposeAuthenticationEnglish);
     l.trustNotEvaluated = QStringLiteral("not yet evaluated");
     l.qualifiedUnknown = QStringLiteral("unknown");
 
@@ -99,7 +110,19 @@ QStringList keyUsagePurposes(quint32 keyUsageBits, const RenderLabels& labels)
 
 QString primaryPurpose(quint32 keyUsageBits, const RenderLabels& labels)
 {
-    for (int i = 0; i < kKeyUsageCount; ++i) {
+    // nonRepudiation is the signing certificate's mark; digitalSignature alone
+    // is authentication (see the header). Taking the first set bit named every
+    // authentication certificate "Digital Signature".
+    if (keyUsageBitSet(keyUsageBits, kUsageNonRepudiation)) {
+        return labels.purposeSigning.isEmpty() ? QString::fromUtf8(kPurposeSigningEnglish) : labels.purposeSigning;
+    }
+    if (keyUsageBitSet(keyUsageBits, kUsageDigitalSignature)) {
+        return labels.purposeAuthentication.isEmpty() ? QString::fromUtf8(kPurposeAuthenticationEnglish)
+                                                      : labels.purposeAuthentication;
+    }
+    // Neither purpose bit: the remaining ordinals name themselves (a CA's
+    // Certificate Signing, an encipherment-only key).
+    for (int i = kUsageNonRepudiation + 1; i < kKeyUsageCount; ++i) {
         if (keyUsageBitSet(keyUsageBits, i)) {
             return usageName(i, labels);
         }
