@@ -158,8 +158,7 @@ TEST(CardWorker, ListPkiResolvesCertFoldersByPurpose)
         {presence(QStringLiteral("Gemalto"), QStringLiteral("/card/0"), Client::Cap::Pki, QStringLiteral("None"))}};
     CertListResult certs;
     certs.status = ReadStatus::Ok;
-    certs.certs << signingCert(QStringLiteral("aabbccdd1122"), QStringLiteral("Pera"),
-                               kSigningKeyUsage);
+    certs.certs << signingCert(QStringLiteral("aabbccdd1122"), QStringLiteral("Pera"), kSigningKeyUsage);
     src.setCertificates(certs);
 
     TestableCardWorker w(src);

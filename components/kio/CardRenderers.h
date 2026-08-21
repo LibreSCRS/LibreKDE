@@ -28,8 +28,8 @@ struct RenderLabels
     // say what the key may do, the purpose says what the certificate is FOR.
     QString purposeSigning;        ///< "Digital Signature" (nonRepudiation present)
     QString purposeAuthentication; ///< "Authentication" (digitalSignature without it)
-    QString trustNotEvaluated; ///< e.g. "not yet evaluated".
-    QString qualifiedUnknown;  ///< e.g. "unknown".
+    QString trustNotEvaluated;     ///< e.g. "not yet evaluated".
+    QString qualifiedUnknown;      ///< e.g. "unknown".
 
     // info.txt body line labels — translatable (acronyms PKI/eMRTD are NOT).
     // The info.txt BODY is a display payload, not a URL key, so it is safe to
