@@ -331,6 +331,12 @@ QStringList fieldOrderForGroup(const QString& groupKey)
             QStringLiteral("address_date"),
         };
     }
+    // The annex's verdict pair reads integrity-then-authenticity, matching the
+    // desktop client's pane; the key-sorted wire would put authenticity first.
+    // Fields outside the pair keep delivery order, after the pinned two.
+    if (groupKey.startsWith(QLatin1String("annex.")) && groupKey.endsWith(QLatin1String(".security"))) {
+        return {QStringLiteral("annex_integrity"), QStringLiteral("annex_authenticity")};
+    }
     return {};
 }
 

@@ -347,7 +347,9 @@ TEST(IdentityGroupLabel, AnnexHasAReadingOrderAndOtherGroupsDoNot)
     EXPECT_EQ(annex.size(), 15);
     EXPECT_EQ(annex.at(1), QStringLiteral("street")) << "the street leads the address";
     EXPECT_TRUE(LibreKDE::fieldOrderForGroup(QStringLiteral("personal")).isEmpty());
-    EXPECT_TRUE(LibreKDE::fieldOrderForGroup(QStringLiteral("annex.rs.security")).isEmpty());
+    const QStringList security = LibreKDE::fieldOrderForGroup(QStringLiteral("annex.rs.security"));
+    EXPECT_EQ(security, (QStringList{QStringLiteral("annex_integrity"), QStringLiteral("annex_authenticity")}))
+        << "integrity leads the verdict pair, matching the desktop client";
 }
 
 int main(int argc, char** argv)
