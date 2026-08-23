@@ -141,6 +141,10 @@ TEST(IdentityValue, AddressDateThatIsNotADateReadsAsUnknown)
     // The value read off a live card, which must survive untouched.
     EXPECT_EQ(localizedFieldValue(makeValueRow(QStringLiteral("field.address_date"), QStringLiteral("01.11.2019"))),
               QStringLiteral("01.11.2019"));
+    // The annex reader ships the card's raw ddMMyyyy digits; the display
+    // normalises them to dd.MM.yyyy (06.08.2016), not "Unknown".
+    EXPECT_EQ(localizedFieldValue(makeValueRow(QStringLiteral("field.address_date"), QStringLiteral("06082016"))),
+              QStringLiteral("06.08.2016"));
     // Date-SHAPED but impossible: rejected because the value is parsed as a
     // date rather than pattern-matched.
     EXPECT_EQ(localizedFieldValue(makeValueRow(QStringLiteral("field.address_date"), QStringLiteral("32.13.2020"))),

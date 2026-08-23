@@ -272,12 +272,22 @@ QString localizedFieldValue(const LibreSCRS::AgentClient::IdentityRow& row)
         }
     }
 
-    // The identity plugins render a real date as dd.MM.yyyy and pass anything
-    // they cannot read through untouched, so a value that will not parse as
-    // that date is the card's placeholder rather than a date. Parsing rather
-    // than shape-matching also rejects an impossible day or month.
-    if (row.labelKey == QLatin1String("field.address_date") && !row.value.isEmpty() &&
-        !QDate::fromString(row.value, QStringLiteral("dd.MM.yyyy")).isValid()) {
+    // The address-change date reaches display in one of two shapes: the eMRTD
+    // plugins render a real date as dd.MM.yyyy, while the annex reader ships the
+    // card's raw ddMMyyyy digits (e.g. "06082016") untouched — the middleware
+    // never reformats signed card bytes, so the presentation layer is where the
+    // date becomes readable. Accept the formatted shape as-is; normalise the
+    // raw shape to dd.MM.yyyy; treat anything that parses as neither (an
+    // impossible day/month, or a placeholder like "00001") as the card's
+    // no-date marker. Parsing rather than pattern-matching rejects impossible
+    // dates.
+    if (row.labelKey == QLatin1String("field.address_date") && !row.value.isEmpty()) {
+        if (QDate::fromString(row.value, QStringLiteral("dd.MM.yyyy")).isValid()) {
+            return row.value;
+        }
+        if (const QDate d = QDate::fromString(row.value, QStringLiteral("ddMMyyyy")); d.isValid()) {
+            return d.toString(QStringLiteral("dd.MM.yyyy"));
+        }
         return ki18ndc("librekde", "@item:intable identity field value (card carries no date)", "Unknown").toString();
     }
     return row.value;
