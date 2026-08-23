@@ -19,6 +19,8 @@
 #include "CardSelection.h" // LibreKDE::Signing::chooseSigningCard — the resolution the Purpose plugin calls
 #include "SignJob.h"
 #include "SmartCardHandler.h"
+
+#include "IdentityRows.h"
 #include "TestBus.h"
 
 #include <QBuffer>
@@ -2468,4 +2470,187 @@ TEST(SmartCardHandler, CardPhotoUrlAddressesOwnStoreSlot)
     const QString imageId = url.mid(prefix.size());
     EXPECT_EQ(LibreKDE::Plasmoid::CardPhotoProvider::slotFromImageId(imageId), handler->photoSlot());
     EXPECT_FALSE(handler->photoStore()->image(handler->photoSlot()).isNull());
+}
+
+// ---- group headings -------------------------------------------------------
+//
+// The popup used to render every detail row in one flat list. That is fine for
+// name and address rows and wrong for a verdict: a card can report the travel
+// document's passive authentication (against a known issuer) and an annex's
+// weaker integrity-only result (no trust anchor exists for an annex yet) in the
+// same read. Side by side with nothing naming what either covers, a reader
+// credits the annex with a check nobody ran.
+//
+// Headings are computed here rather than in the delegate so this rule is
+// testable at all: QML in the plasmoid package is lint-checked, never
+// instantiated.
+
+TEST(SmartCardHandlerHeadings, GroupHeadingsMarkOnlyTheFirstRowOfEachGroup)
+{
+    // THREE groups, and the assertions target the MIDDLE one: with two, "head
+    // the first" and "head the last" both pass by accident.
+    const QVariantList details = {
+        summaryRow("personal", "surname", "A"),
+        summaryRow("personal", "given_names", "B"),
+        summaryRow("annex.rs.personal", "street", "C"),
+        summaryRow("annex.rs.personal", "place", "D"),
+        summaryRow("annex.rs.security", "annex_integrity", "PASSED"),
+    };
+    const QVariantList out = SmartCardHandler::applyGroupHeadings(details);
+    ASSERT_EQ(out.size(), details.size()) << "heading pass must not add or drop rows";
+
+    QStringList headings;
+    for (const QVariant& entry : out) {
+        headings << entry.toMap().value(QStringLiteral("groupHeading")).toString();
+    }
+    // Exactly one non-empty heading per group, on its first row.
+    EXPECT_FALSE(headings.at(0).isEmpty());
+    EXPECT_TRUE(headings.at(1).isEmpty());
+    EXPECT_FALSE(headings.at(2).isEmpty()) << "the middle group lost its heading";
+    EXPECT_TRUE(headings.at(3).isEmpty());
+    EXPECT_FALSE(headings.at(4).isEmpty());
+    // And the middle one says what it is, rather than merely being non-empty.
+    EXPECT_EQ(headings.at(2), LibreKDE::localizedGroupLabel(QStringLiteral("annex.rs.personal")));
+}
+
+// Invariant 2 of the identity-render contract: group by KEY, never by
+// adjacency. A model that revisits a group must not print its heading twice.
+TEST(SmartCardHandlerHeadings, ARevisitedGroupIsHeadedOnceAndKeptTogether)
+{
+    const QVariantList details = {
+        summaryRow("personal", "surname", "A"),
+        summaryRow("annex.rs.personal", "street", "B"),
+        summaryRow("personal", "given_names", "C"), // the group comes back
+    };
+    const QVariantList out = SmartCardHandler::applyGroupHeadings(details);
+    ASSERT_EQ(out.size(), 3);
+
+    int headed = 0;
+    for (const QVariant& entry : out) {
+        if (!entry.toMap().value(QStringLiteral("groupHeading")).toString().isEmpty()) {
+            ++headed;
+        }
+    }
+    EXPECT_EQ(headed, 2) << "one heading per GROUP, not per run";
+
+    // Regrouped so each group's rows are contiguous, in first-appearance order —
+    // the same output shape renderIdentityTxt chose, and for the same reason: a
+    // row printed under a heading it does not belong to is worse than a reorder.
+    QStringList groups;
+    for (const QVariant& entry : out) {
+        groups << entry.toMap().value(QStringLiteral("groupKey")).toString();
+    }
+    EXPECT_EQ(groups, (QStringList{QStringLiteral("personal"), QStringLiteral("personal"),
+                                   QStringLiteral("annex.rs.personal")}));
+}
+
+// A group this build has no name for is not given an invented one: an empty
+// heading means "no heading", and the rows still render.
+TEST(SmartCardHandlerHeadings, UnknownGroupCarriesNoHeading)
+{
+    const QVariantList details = {summaryRow("no_such_group", "whatever", "V")};
+    const QVariantList out = SmartCardHandler::applyGroupHeadings(details);
+    ASSERT_EQ(out.size(), 1);
+    EXPECT_TRUE(out.first().toMap().value(QStringLiteral("groupHeading")).toString().isEmpty());
+    EXPECT_EQ(out.first().toMap().value(QStringLiteral("value")).toString(), QStringLiteral("V"));
+}
+
+// The summary is a curated subset taken from the full model, so it can carry
+// off a group's FIRST row. The heading has to survive that and move to the row
+// which actually remains — computing headings before the subtraction leaves the
+// group headless in the only list that renders it.
+TEST(SmartCardHandlerHeadings, GroupHeadingSurvivesASummarisedFirstRow)
+{
+    // `surname` is a curated key, so the summary lifts it out of the personal
+    // group — which is that group's FIRST row. `given_names` is curated too but
+    // the annex rows are not, so the model keeps enough behind for a details
+    // list. (An all-uncurated model is not usable here: the curation falls back
+    // to the leading rows when nothing matches, and the details come out empty.)
+    const QVariantList fields = {
+        summaryRow("personal", "surname", "SPECIMENSURNAME"),
+        summaryRow("personal", "sex", "F"),
+        summaryRow("annex.rs.personal", "street", "STREET"),
+    };
+    const QVariantList summary = SmartCardHandler::curateIdentitySummary(fields);
+    ASSERT_FALSE(summary.isEmpty());
+    const QVariantList details =
+        SmartCardHandler::applyGroupHeadings(SmartCardHandler::curateIdentityDetails(fields, summary));
+    ASSERT_FALSE(details.isEmpty()) << "nothing left to head";
+
+    // The personal group lost the row it opened with; the one still on screen
+    // has to carry the heading. Computing headings BEFORE the subtraction
+    // leaves this group headless in the only list that renders it.
+    bool personalIsHeaded = false;
+    for (const QVariant& entry : details) {
+        const QVariantMap row = entry.toMap();
+        if (row.value(QStringLiteral("groupKey")).toString() != QStringLiteral("personal")) {
+            continue;
+        }
+        if (!row.value(QStringLiteral("groupHeading")).toString().isEmpty()) {
+            personalIsHeaded = true;
+        }
+        break; // only the group's first surviving row may carry it
+    }
+    EXPECT_TRUE(personalIsHeaded) << "the surviving first row of the group lost its heading";
+}
+
+// ---- reading order --------------------------------------------------------
+
+// The wire delivers a group's fields sorted by KEY, so an address arrives with
+// its street last and its apartment third. Built here in exactly that
+// alphabetical order on purpose: built in address order the case would pass
+// with no implementation at all.
+TEST(SmartCardHandlerOrder, AnnexFieldsReadInAddressOrder)
+{
+    const QVariantList details = {
+        summaryRow("annex.rs.personal", "address_date", "D"),
+        summaryRow("annex.rs.personal", "apartment_number", "12"),
+        summaryRow("annex.rs.personal", "house_number", "118"),
+        summaryRow("annex.rs.personal", "street", "BULEVAR"),
+    };
+    const QVariantList out = SmartCardHandler::applyFieldOrder(details);
+    QStringList keys;
+    for (const QVariant& e : out) {
+        keys << e.toMap().value(QStringLiteral("fieldKey")).toString();
+    }
+    // street is the discriminating target: last alphabetically, first here.
+    EXPECT_EQ(keys, (QStringList{QStringLiteral("street"), QStringLiteral("house_number"),
+                                 QStringLiteral("apartment_number"), QStringLiteral("address_date")}));
+}
+
+// Rows of other groups must not move, and must not be dragged between groups.
+TEST(SmartCardHandlerOrder, OtherGroupsKeepTheirDeliveryOrder)
+{
+    const QVariantList details = {
+        summaryRow("personal", "surname", "S"),         summaryRow("annex.rs.personal", "address_date", "D"),
+        summaryRow("document", "document_number", "N"), summaryRow("annex.rs.personal", "street", "BULEVAR"),
+        summaryRow("personal", "given_names", "G"),
+    };
+    const QVariantList out = SmartCardHandler::applyFieldOrder(details);
+    ASSERT_EQ(out.size(), details.size());
+
+    QStringList groups;
+    for (const QVariant& e : out) {
+        groups << e.toMap().value(QStringLiteral("groupKey")).toString();
+    }
+    // The group at each position is unchanged: only WITHIN-group permutation.
+    EXPECT_EQ(groups,
+              (QStringList{QStringLiteral("personal"), QStringLiteral("annex.rs.personal"), QStringLiteral("document"),
+                           QStringLiteral("annex.rs.personal"), QStringLiteral("personal")}));
+    // And the annex's two rows swapped, street first.
+    EXPECT_EQ(out.at(1).toMap().value(QStringLiteral("fieldKey")).toString(), QStringLiteral("street"));
+    EXPECT_EQ(out.at(3).toMap().value(QStringLiteral("fieldKey")).toString(), QStringLiteral("address_date"));
+}
+
+// A key the order does not name keeps its position after the named ones rather
+// than jumping to the front.
+TEST(SmartCardHandlerOrder, UnnamedKeysFollowTheNamedOnes)
+{
+    const QVariantList details = {
+        summaryRow("annex.rs.personal", "zz_unknown", "Z"),
+        summaryRow("annex.rs.personal", "street", "BULEVAR"),
+    };
+    const QVariantList out = SmartCardHandler::applyFieldOrder(details);
+    EXPECT_EQ(out.at(0).toMap().value(QStringLiteral("fieldKey")).toString(), QStringLiteral("street"));
+    EXPECT_EQ(out.at(1).toMap().value(QStringLiteral("fieldKey")).toString(), QStringLiteral("zz_unknown"));
 }

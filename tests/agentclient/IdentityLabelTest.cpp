@@ -27,6 +27,8 @@
 using LibreKDE::isHiddenIdentityRow;
 using LibreKDE::localizedFieldLabel;
 using LibreKDE::localizedFieldValue;
+using LibreKDE::localizedGroupLabel;
+using LibreKDE::mappedGroupKeys;
 using LibreKDE::mappedLabelKeys;
 using LibreSCRS::AgentClient::IdentityRow;
 
@@ -98,7 +100,7 @@ TEST(IdentityLabel, CardTypeAndAddressDateResolveToSerbian)
 TEST(IdentityLabel, MappedKeyCoverageIsPinned)
 {
     const QStringList keys = mappedLabelKeys();
-    EXPECT_EQ(keys.size(), 68);
+    EXPECT_EQ(keys.size(), 72);
     EXPECT_TRUE(keys.contains(QStringLiteral("field.card_type")));
     EXPECT_TRUE(keys.contains(QStringLiteral("field.address_date")));
     // Hidden rows are filtered, never labelled.
@@ -155,6 +157,193 @@ TEST(IdentityValue, OtherFieldsPassThroughUntouched)
     EXPECT_EQ(localizedFieldValue(makeValueRow(QStringLiteral("field.date_of_birth"), QStringLiteral("00001"))),
               QStringLiteral("00001"));
     KLocalizedString::clearLanguages();
+}
+
+// The four keys the annex needs and the table did not have. Each names its
+// exact Serbian string: a presence check would pass on a mis-wired entry.
+TEST(IdentityLabel, AnnexKeysResolveToSerbian)
+{
+    KLocalizedString::setLanguages({QStringLiteral("sr")});
+    EXPECT_EQ(localizedFieldLabel(makeRow(QStringLiteral("field.address_label"), QStringLiteral("Address"),
+                                          QStringLiteral("address_label"))),
+              QString::fromUtf8("Адреса"));
+    EXPECT_EQ(localizedFieldLabel(makeRow(QStringLiteral("field.document_serial"), QStringLiteral("Document Number"),
+                                          QStringLiteral("document_serial"))),
+              QString::fromUtf8("Број документа"));
+    EXPECT_EQ(localizedFieldLabel(makeRow(QStringLiteral("field.annex_integrity"), QStringLiteral("Data Integrity"),
+                                          QStringLiteral("annex_integrity"))),
+              QString::fromUtf8("Интегритет података"));
+    EXPECT_EQ(localizedFieldLabel(makeRow(QStringLiteral("field.annex_authenticity"),
+                                          QStringLiteral("Data Authenticity"), QStringLiteral("annex_authenticity"))),
+              QString::fromUtf8("Аутентичност података"));
+    KLocalizedString::clearLanguages();
+}
+
+// document_serial is NOT folded into document_serial_number. That key is the
+// eID plugin's and is one of the curated summary keys, so aliasing would
+// promote an annex row into the popup headline; the labels differ besides.
+TEST(IdentityLabel, AnnexDocumentSerialIsNotTheEidSerialNumber)
+{
+    KLocalizedString::setLanguages({QStringLiteral("sr")});
+    const QString annex = localizedFieldLabel(
+        makeRow(QStringLiteral("field.document_serial"), QString(), QStringLiteral("document_serial")));
+    const QString eid = localizedFieldLabel(
+        makeRow(QStringLiteral("field.document_serial_number"), QString(), QStringLiteral("document_serial_number")));
+    EXPECT_NE(annex, eid);
+    KLocalizedString::clearLanguages();
+}
+
+// The verdict rows are the only statement of how far the annex's guarantee
+// reaches. Unlike the three raw *_verification traces, they must NOT be hidden.
+TEST(IdentityRowFilter, AnnexVerdictRowsAreNotHidden)
+{
+    for (const QString& key : {QStringLiteral("field.annex_integrity"), QStringLiteral("field.annex_authenticity")}) {
+        EXPECT_FALSE(isHiddenIdentityRow(makeRow(key, key, key))) << qPrintable(key);
+    }
+}
+
+// ---- group headings --------------------------------------------------------
+
+TEST(IdentityGroupLabel, KnownGroupResolvesToSerbian)
+{
+    KLocalizedString::setLanguages({QStringLiteral("sr")});
+    EXPECT_EQ(localizedGroupLabel(QStringLiteral("personal")), QString::fromUtf8("Лични подаци"));
+    EXPECT_EQ(localizedGroupLabel(QStringLiteral("security_status")),
+              QString::fromUtf8("Провера података путне исправе"));
+    KLocalizedString::clearLanguages();
+}
+
+// The id in the middle comes from the reader, so matching is on the prefix.
+// Two different ids must resolve to the SAME heading, or the next annex shows
+// up headless exactly as this one did.
+TEST(IdentityGroupLabel, AnnexGroupsMatchOnPrefixNotOnId)
+{
+    KLocalizedString::setLanguages({QStringLiteral("sr")});
+    const QString rs = localizedGroupLabel(QStringLiteral("annex.rs.personal"));
+    const QString zz = localizedGroupLabel(QStringLiteral("annex.zz.personal"));
+    EXPECT_FALSE(rs.isEmpty());
+    EXPECT_EQ(rs, zz);
+    EXPECT_EQ(rs, QString::fromUtf8("Додатни лични подаци"));
+
+    // The annex block must NOT read as the passport-supplementary one. A card
+    // ships BOTH, and while they shared a heading the popup showed two
+    // identically named blocks — the reader could not tell which fields came
+    // from the passport data groups and which from the signed annex.
+    EXPECT_NE(rs, localizedGroupLabel(QStringLiteral("additional")))
+        << "annex and DG11 sections share a heading: " << qPrintable(rs);
+
+    const QString verdict = localizedGroupLabel(QStringLiteral("annex.rs.security"));
+    EXPECT_EQ(verdict, QString::fromUtf8("Провера додатних података"));
+    EXPECT_NE(verdict, rs) << "the verdict heading must not read as the data's";
+    KLocalizedString::clearLanguages();
+}
+
+// Empty means "render no heading", never "render an empty heading" — and never
+// the raw key, which would put a machine identifier on screen as a title.
+TEST(IdentityGroupLabel, UnknownGroupResolvesToEmpty)
+{
+    EXPECT_TRUE(localizedGroupLabel(QStringLiteral("no_such_group")).isEmpty());
+    EXPECT_TRUE(localizedGroupLabel(QStringLiteral("annex.rs.unknown_suffix")).isEmpty());
+    EXPECT_TRUE(localizedGroupLabel(QString()).isEmpty());
+}
+
+TEST(IdentityGroupLabel, MappedGroupKeyCoverageIsPinned)
+{
+    const QStringList keys = mappedGroupKeys();
+    EXPECT_EQ(keys.size(), 9);
+    EXPECT_TRUE(keys.contains(QStringLiteral("security_status")));
+    EXPECT_TRUE(keys.contains(QStringLiteral("annex.<id>.personal")));
+    EXPECT_TRUE(keys.contains(QStringLiteral("annex.<id>.security")));
+}
+
+// One heading per group, and no two groups sharing one. The collision this
+// pins was found on a live card, not here: the annex block and the
+// passport-supplementary block both read "Additional Data", and a Serbian
+// identity card carries both.
+TEST(IdentityGroupLabel, NoTwoGroupsShareAHeading)
+{
+    KLocalizedString::setLanguages({QStringLiteral("sr")});
+    QStringList headings;
+    for (const QString& key : mappedGroupKeys()) {
+        // The two annex entries are spelled with a placeholder id in the pinned
+        // list; resolve them through a real key.
+        QString probe = key;
+        probe.replace(QStringLiteral("<id>"), QStringLiteral("rs"));
+        const QString heading = localizedGroupLabel(probe);
+        EXPECT_FALSE(heading.isEmpty()) << "unmapped: " << qPrintable(probe);
+        headings << heading;
+    }
+    QStringList unique = headings;
+    unique.removeDuplicates();
+    EXPECT_EQ(headings.size(), unique.size()) << "two groups share a heading: " << qPrintable(headings.join(u" | "));
+    KLocalizedString::clearLanguages();
+}
+
+// The popup was printing the wire's own tokens at a reader: "PASSED",
+// "NOT_PERFORMED". Those are machine vocabulary sitting beside Cyrillic labels.
+TEST(IdentityValue, VerdictTokensRenderAsSentences)
+{
+    KLocalizedString::setLanguages({QStringLiteral("sr")});
+    IdentityRow row;
+    row.groupKey = QStringLiteral("security_status");
+    row.value = QStringLiteral("PASSED");
+    EXPECT_EQ(localizedFieldValue(row), QString::fromUtf8("Успешно"));
+
+    row.value = QStringLiteral("NOT_PERFORMED");
+    EXPECT_EQ(localizedFieldValue(row), QString::fromUtf8("Није извршено"));
+
+    row.groupKey = QStringLiteral("annex.rs.security");
+    row.value = QStringLiteral("PASSED");
+    EXPECT_EQ(localizedFieldValue(row), QString::fromUtf8("Успешно"));
+    KLocalizedString::clearLanguages();
+}
+
+// A verdict may carry a parenthetical the plugin authored. It is the only
+// specific record of WHY, no catalog can hold it, and it must survive.
+TEST(IdentityValue, VerdictDetailSurvivesTranslation)
+{
+    KLocalizedString::setLanguages({QStringLiteral("sr")});
+    IdentityRow row;
+    row.groupKey = QStringLiteral("security_status");
+    row.value = QStringLiteral("NOT_PERFORMED (No CSCA trust store configured)");
+    const QString out = localizedFieldValue(row);
+    EXPECT_TRUE(out.startsWith(QString::fromUtf8("Није извршено"))) << qPrintable(out);
+    EXPECT_TRUE(out.contains(QStringLiteral("(No CSCA trust store configured)"))) << qPrintable(out);
+    KLocalizedString::clearLanguages();
+}
+
+// Scoped to verdict groups: a personal field whose value happens to read
+// "PASSED" is card data and must not be rewritten into a verdict.
+TEST(IdentityValue, OnlyVerdictGroupsGetTheStatusVocabulary)
+{
+    KLocalizedString::setLanguages({QStringLiteral("sr")});
+    IdentityRow row;
+    row.groupKey = QStringLiteral("personal");
+    row.value = QStringLiteral("PASSED");
+    EXPECT_EQ(localizedFieldValue(row), QStringLiteral("PASSED"));
+    KLocalizedString::clearLanguages();
+}
+
+// The wire is append-only: a token this build has never heard of passes through
+// verbatim rather than being erased into "unknown".
+TEST(IdentityValue, UnknownVerdictTokenPassesThrough)
+{
+    KLocalizedString::setLanguages({QStringLiteral("sr")});
+    IdentityRow row;
+    row.groupKey = QStringLiteral("security_status");
+    row.value = QStringLiteral("SOMETHING_NEW");
+    EXPECT_EQ(localizedFieldValue(row), QStringLiteral("SOMETHING_NEW"));
+    KLocalizedString::clearLanguages();
+}
+
+// The annex's fields have a reading order; other groups keep delivery order.
+TEST(IdentityGroupLabel, AnnexHasAReadingOrderAndOtherGroupsDoNot)
+{
+    const QStringList annex = LibreKDE::fieldOrderForGroup(QStringLiteral("annex.rs.personal"));
+    EXPECT_EQ(annex.size(), 15);
+    EXPECT_EQ(annex.at(1), QStringLiteral("street")) << "the street leads the address";
+    EXPECT_TRUE(LibreKDE::fieldOrderForGroup(QStringLiteral("personal")).isEmpty());
+    EXPECT_TRUE(LibreKDE::fieldOrderForGroup(QStringLiteral("annex.rs.security")).isEmpty());
 }
 
 int main(int argc, char** argv)

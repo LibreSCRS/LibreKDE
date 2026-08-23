@@ -1061,3 +1061,75 @@ msgstr "Биће вам затражен ПУК у безбедном упиту
 msgctxt "@action:button proceed to unblock a PIN with its PUK"
 msgid "Continue"
 msgstr "Настави"
+
+msgctxt "@item:intable identity field (the address as one line)"
+msgid "Address"
+msgstr "Адреса"
+
+msgctxt "@item:intable identity field (annex document number)"
+msgid "Document Number"
+msgstr "Број документа"
+
+msgctxt "@item:intable identity field (annex)"
+msgid "Data Integrity"
+msgstr "Интегритет података"
+
+msgctxt "@item:intable identity field (annex)"
+msgid "Data Authenticity"
+msgstr "Аутентичност података"
+
+msgctxt "@title:group identity fields"
+msgid "Personal Data"
+msgstr "Лични подаци"
+
+msgctxt "@title:group identity fields"
+msgid "Document"
+msgstr "Документ"
+
+msgctxt "@title:group identity fields"
+msgid "Issuing Information"
+msgstr "Подаци о издавању"
+
+msgctxt "@title:group identity fields"
+msgid "Additional Data"
+msgstr "Додатни подаци"
+
+msgctxt "@title:group identity fields"
+msgid "National Data"
+msgstr "Национални подаци"
+
+msgctxt "@title:group identity fields"
+msgid "Contacts"
+msgstr "Контакти"
+
+msgctxt "@title:group identity fields"
+msgid "Travel Document Verification"
+msgstr "Провера података путне исправе"
+
+msgctxt "@title:group identity fields"
+msgid "Additional Data Verification"
+msgstr "Провера додатних података"
+
+msgctxt "@title:group identity fields"
+msgid "Additional Personal Data"
+msgstr "Додатни лични подаци"
+
+msgctxt "@item:intable security check outcome"
+msgid "Passed"
+msgstr "Успешно"
+
+msgctxt "@item:intable security check outcome"
+msgid "Failed"
+msgstr "Неуспешно"
+
+msgctxt "@item:intable security check outcome"
+msgid "Not performed"
+msgstr "Није извршено"
+
+msgctxt "@item:intable security check outcome"
+msgid "Not supported"
+msgstr "Није подржано"
+
+msgctxt "@item:intable security check outcome"
+msgid "Skipped"
+msgstr "Прескочено"

@@ -133,17 +133,55 @@ ColumnLayout {
                     // summary above is already showing, so binding it here
                     // renders each of them a second time.
                     model: identityView.smartCard.identityDetails
-                    delegate: RowLayout {
+                    delegate: ColumnLayout {
+                        id: detailRow
                         required property var modelData
+                        Layout.fillWidth: true
+                        spacing: Kirigami.Units.smallSpacing
+
+                        // The heading of the group this row opens. The model
+                        // stamps it on the FIRST row of each group and leaves it
+                        // empty on the rest, so this delegate never has to look
+                        // at its neighbours — which it could not do reliably
+                        // anyway, and which is where "print the heading twice"
+                        // comes from.
+                        //
+                        // It is what ties a verdict to the data it covers: this
+                        // card reports the travel document's passive
+                        // authentication and an annex's integrity-only result in
+                        // one read, and unheaded they read as one guarantee.
+                        // Kirigami.Heading, as every other section header in
+                        // this package: it takes its size and weight from the
+                        // theme's heading scale. Hand-setting font.pointSize
+                        // from Kirigami.Theme.smallFont would read back -1 on a
+                        // theme defined in pixelSize, warn, and be ignored —
+                        // leaving the heading at body size.
+                        Kirigami.Heading {
+                            level: 5
+                            visible: detailRow.modelData.groupHeading !== undefined
+                                     && detailRow.modelData.groupHeading !== ""
+                            Layout.fillWidth: true
+                            Layout.topMargin: Kirigami.Units.smallSpacing
+                            text: detailRow.modelData.groupHeading ?? ""
+                            // Group headings come from this host's own catalog,
+                            // never the card — but PlainText throughout the
+                            // package is the uniform hardening rule.
+                            textFormat: Text.PlainText
+                            opacity: 0.7
+                            Accessible.role: Accessible.Heading
+                            Accessible.name: text
+                        }
+
+                        RowLayout {
                         Layout.fillWidth: true
                         PlasmaComponents.Label {
                             // Raw card/agent bytes — PlainText, as in the summary rows.
-                            text: modelData.label
+                            text: detailRow.modelData.label
                             textFormat: Text.PlainText
                             opacity: 0.7
                         }
                         PlasmaComponents.Label {
-                            text: modelData.value
+                            text: detailRow.modelData.value
                             textFormat: Text.PlainText
                             Layout.fillWidth: true
                             horizontalAlignment: Text.AlignRight
@@ -151,7 +189,7 @@ ColumnLayout {
                         }
                         PlasmaComponents.ToolButton {
                             icon.name: "edit-copy"
-                            onClicked: identityView.smartCard.copyField(modelData.value)
+                            onClicked: identityView.smartCard.copyField(detailRow.modelData.value)
                             // Attached ToolTips never show by themselves: visible
                             // (+ the standard delay) must be driven explicitly.
                             PlasmaComponents.ToolTip.text: i18nc("@info:tooltip copy this field to the clipboard", "Copy to clipboard")
@@ -159,6 +197,7 @@ ColumnLayout {
                             PlasmaComponents.ToolTip.delay: Kirigami.Units.toolTipDelay
                             Accessible.role: Accessible.Button
                             Accessible.name: i18nc("@info:tooltip copy this field to the clipboard", "Copy to clipboard")
+                        }
                         }
                     }
                 }

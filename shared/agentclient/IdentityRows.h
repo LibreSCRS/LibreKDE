@@ -82,6 +82,34 @@ namespace LibreKDE {
 /// cards legitimately carry.
 [[nodiscard]] QString localizedFieldValue(const LibreSCRS::AgentClient::IdentityRow& row);
 
+/// @brief Resolve a GROUP's display heading, localized; empty when this build
+///        has no name for the group.
+///
+/// A heading is what ties a verdict to the data it describes. A card can report
+/// the travel document's passive authentication (checked against a known
+/// issuer) and an annex's integrity-only result (no trust anchor exists for an
+/// annex yet) in the same read; rendered as adjacent rows of one flat list they
+/// read as a single guarantee, and the annex gets credited with a check nobody
+/// ran.
+///
+/// Empty means "render no heading", NOT "render an empty one": an unknown group
+/// still shows its rows. Annex groups are matched on the `annex.` PREFIX, since
+/// their keys carry an id in the middle that comes from the reader.
+[[nodiscard]] QString localizedGroupLabel(const QString& groupKey);
+
+/// @brief Every group key the heading table maps, so a test can pin the set.
+[[nodiscard]] QStringList mappedGroupKeys();
+
+/// @brief Reading order for a group's fields, or empty to keep delivery order.
+///
+/// Delivery order is NOT a display order. Identity crosses the wire as
+/// map-of-maps, so fields arrive sorted by KEY — which for a group whose
+/// substance is an address puts the street last and the apartment third.
+///
+/// A key outside the returned list keeps its relative position AFTER every
+/// listed one, the same rule the group staging applies.
+[[nodiscard]] QStringList fieldOrderForGroup(const QString& groupKey);
+
 /// @brief Every `labelKey` the table maps, so a test can pin the set's size.
 [[nodiscard]] QStringList mappedLabelKeys();
 

@@ -1156,8 +1156,80 @@ void SmartCardHandler::rebuildIdentityModel(const QList<Client::FieldGroup>& gro
 
     m_identityFields = flat;
     m_identitySummary = curateIdentitySummary(flat);
-    m_identityDetails = curateIdentityDetails(flat, m_identitySummary);
+    m_identityDetails = applyGroupHeadings(applyFieldOrder(curateIdentityDetails(flat, m_identitySummary)));
     Q_EMIT identityChanged();
+}
+
+QVariantList SmartCardHandler::applyFieldOrder(QVariantList details)
+{
+    // Permute WITHIN each group and write the rows back into the slots that
+    // group already occupied, so cross-group layout is untouched and the
+    // heading pass still sees the list it expects.
+    //
+    // Deliberately not one std::stable_sort over the whole list with a
+    // comparator that calls rows of different groups equivalent: equivalence
+    // has to be transitive, and two rows of one group separated by a row of
+    // another would break that — undefined behaviour, not merely a bad order.
+    QHash<QString, QList<qsizetype>> slotsByGroup;
+    for (qsizetype i = 0; i < details.size(); ++i) {
+        slotsByGroup[details.at(i).toMap().value(QStringLiteral("groupKey")).toString()].append(i);
+    }
+
+    for (auto it = slotsByGroup.cbegin(); it != slotsByGroup.cend(); ++it) {
+        const QStringList order = LibreKDE::fieldOrderForGroup(it.key());
+        if (order.isEmpty()) {
+            continue; // no declared reading order: delivery order stands
+        }
+        const QList<qsizetype>& slots = it.value();
+        QVariantList rows;
+        rows.reserve(slots.size());
+        for (const qsizetype slot : slots) {
+            rows.append(details.at(slot));
+        }
+        const auto rank = [&order](const QVariant& entry) {
+            const qsizetype at = order.indexOf(entry.toMap().value(QStringLiteral("fieldKey")).toString());
+            return at < 0 ? order.size() : at; // unnamed keys keep their order, after the named ones
+        };
+        std::stable_sort(rows.begin(), rows.end(),
+                         [&rank](const QVariant& a, const QVariant& b) { return rank(a) < rank(b); });
+        for (qsizetype i = 0; i < slots.size(); ++i) {
+            details[slots.at(i)] = rows.at(i);
+        }
+    }
+    return details;
+}
+
+QVariantList SmartCardHandler::applyGroupHeadings(QVariantList details)
+{
+    // Group by IDENTITY, not by adjacency — the same rule renderIdentityTxt
+    // follows, and for the same reason: a run-length pass prints a group's
+    // heading twice the moment a list revisits that group, and leaves the
+    // revisited rows sitting under a heading they do not belong to.
+    QStringList groupOrder;
+    QHash<QString, QVariantList> rowsByGroup;
+    for (const QVariant& entry : std::as_const(details)) {
+        const QString key = entry.toMap().value(QStringLiteral("groupKey")).toString();
+        if (!rowsByGroup.contains(key)) {
+            groupOrder << key;
+        }
+        rowsByGroup[key].append(entry);
+    }
+
+    QVariantList out;
+    out.reserve(details.size());
+    for (const QString& key : std::as_const(groupOrder)) {
+        // Resolved per call, never cached: the heading has to follow a runtime
+        // language change like every other string on this surface.
+        const QString heading = LibreKDE::localizedGroupLabel(key);
+        bool first = true;
+        for (const QVariant& entry : std::as_const(rowsByGroup[key])) {
+            QVariantMap row = entry.toMap();
+            row.insert(QStringLiteral("groupHeading"), first ? heading : QString());
+            out.append(row);
+            first = false;
+        }
+    }
+    return out;
 }
 
 QVariantList SmartCardHandler::curateIdentityDetails(const QVariantList& fields, const QVariantList& summary)

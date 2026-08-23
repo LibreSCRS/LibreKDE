@@ -89,6 +89,8 @@ const QHash<QString, KLocalizedString>& labelTable()
         {QStringLiteral("field.telephone"), ki18ndc("librekde", "@item:intable identity field", "Telephone")},
         {QStringLiteral("field.address_date"),
          ki18ndc("librekde", "@item:intable identity field (when the address last changed)", "Address Date")},
+        {QStringLiteral("field.address_label"),
+         ki18ndc("librekde", "@item:intable identity field (the address as one line)", "Address")},
 
         // --- Document -------------------------------------------------------
         {QStringLiteral("field.document_number"),
@@ -97,6 +99,12 @@ const QHash<QString, KLocalizedString>& labelTable()
         {QStringLiteral("field.document_type"), ki18ndc("librekde", "@item:intable identity field", "Document Type")},
         {QStringLiteral("field.document_serial_number"),
          ki18ndc("librekde", "@item:intable identity field", "Serial Number")},
+        // NOT an alias of document_serial_number, though the two look alike.
+        // That key is the eID plugin's and is one of the curated SUMMARY keys,
+        // so folding this one into it would promote an annex row into the
+        // popup's headline; and the two carry different labels besides.
+        {QStringLiteral("field.document_serial"),
+         ki18ndc("librekde", "@item:intable identity field (annex document number)", "Document Number")},
         {QStringLiteral("field.doc_reg_no"),
          ki18ndc("librekde", "@item:intable identity field", "Registration Number")},
         {QStringLiteral("field.issuing_state"), ki18ndc("librekde", "@item:intable identity field", "Issuing State")},
@@ -133,6 +141,17 @@ const QHash<QString, KLocalizedString>& labelTable()
         {QStringLiteral("field.overall_genuineness"),
          ki18ndc("librekde", "@item:intable identity field", "Chip Genuineness")},
 
+        // --- annex verification ---------------------------------------------
+        // Deliberately NOT added to isHiddenIdentityRow, unlike the three
+        // *_verification rows. Those are raw traces of a machine check; these
+        // two are the only statement of how far the annex's guarantee reaches,
+        // and hiding them would show personal detail with nothing said about
+        // what was actually proven.
+        {QStringLiteral("field.annex_integrity"),
+         ki18ndc("librekde", "@item:intable identity field (annex)", "Data Integrity")},
+        {QStringLiteral("field.annex_authenticity"),
+         ki18ndc("librekde", "@item:intable identity field (annex)", "Data Authenticity")},
+
         // --- Card metadata --------------------------------------------------
         {QStringLiteral("field.card_type"),
          ki18ndc("librekde", "@item:intable identity field (card generation)", "Card Type")},
@@ -143,6 +162,45 @@ const QHash<QString, KLocalizedString>& labelTable()
         {QStringLiteral("field.manufacturer"), ki18ndc("librekde", "@item:intable identity field", "Manufacturer")},
     };
     return *table;
+}
+
+// Frozen groupKey -> translatable heading, same domain and same resolution
+// timing as labelTable(). Only groups a heading actually helps: the summary
+// above the expander is a curated cross-group extract and carries none.
+const QHash<QString, KLocalizedString>& groupLabelTable()
+{
+    static const auto* const table = new QHash<QString, KLocalizedString>{
+        {QStringLiteral("personal"), ki18ndc("librekde", "@title:group identity fields", "Personal Data")},
+        {QStringLiteral("document"), ki18ndc("librekde", "@title:group identity fields", "Document")},
+        {QStringLiteral("document_extra"), ki18ndc("librekde", "@title:group identity fields", "Issuing Information")},
+        {QStringLiteral("additional"), ki18ndc("librekde", "@title:group identity fields", "Additional Data")},
+        {QStringLiteral("national"), ki18ndc("librekde", "@title:group identity fields", "National Data")},
+        {QStringLiteral("contacts"), ki18ndc("librekde", "@title:group identity fields", "Contacts")},
+        {QStringLiteral("security_status"),
+         ki18ndc("librekde", "@title:group identity fields", "Travel Document Verification")},
+    };
+    return *table;
+}
+
+/// Headings for the two annex groups, matched on prefix rather than on a full
+/// key: the id between `annex.` and the suffix comes from the reader, and this
+/// issuer has already moved its applet identifier once.
+QString annexGroupHeading(const QString& groupKey)
+{
+    if (!groupKey.startsWith(QLatin1String("annex."))) {
+        return {};
+    }
+    if (groupKey.endsWith(QLatin1String(".personal"))) {
+        // NOT "Additional Data": the eMRTD DG11 group already carries that
+        // heading, and an identity card ships BOTH — so the popup showed two
+        // identically named blocks and a reader could not tell which fields
+        // came from the passport data groups and which from the signed annex.
+        return ki18ndc("librekde", "@title:group identity fields", "Additional Personal Data").toString();
+    }
+    if (groupKey.endsWith(QLatin1String(".security"))) {
+        return ki18ndc("librekde", "@title:group identity fields", "Additional Data Verification").toString();
+    }
+    return {};
 }
 
 } // namespace
@@ -165,8 +223,55 @@ bool isHiddenIdentityRow(const LibreSCRS::AgentClient::IdentityRow& row)
            row.labelKey == QLatin1String("field.variable_verification");
 }
 
+namespace {
+
+/// Groups whose VALUES are the wire's closed status vocabulary rather than card
+/// data. Scoped deliberately: a personal field whose value happened to read
+/// "PASSED" must not be rewritten into a verdict.
+bool isVerdictGroup(const QString& groupKey)
+{
+    return groupKey == QLatin1String("security_status") ||
+           (groupKey.startsWith(QLatin1String("annex.")) && groupKey.endsWith(QLatin1String(".security")));
+}
+
+/// The status token at the head of @p value, localized; empty when @p value does
+/// not start with one this build names.
+///
+/// A verdict may carry a parenthetical the plugin authored — "NOT_PERFORMED (No
+/// CSCA trust store configured)". The token is translated and the remainder is
+/// kept verbatim: it is the only specific record of WHY, and no catalog can
+/// hold it.
+QString localizedStatusToken(const QString& value)
+{
+    static const QHash<QString, KLocalizedString> tokens{
+        {QStringLiteral("PASSED"), ki18ndc("librekde", "@item:intable security check outcome", "Passed")},
+        {QStringLiteral("FAILED"), ki18ndc("librekde", "@item:intable security check outcome", "Failed")},
+        {QStringLiteral("NOT_PERFORMED"), ki18ndc("librekde", "@item:intable security check outcome", "Not performed")},
+        {QStringLiteral("NOT_SUPPORTED"), ki18ndc("librekde", "@item:intable security check outcome", "Not supported")},
+        {QStringLiteral("SKIPPED"), ki18ndc("librekde", "@item:intable security check outcome", "Skipped")},
+    };
+    const qsizetype split = value.indexOf(u' ');
+    const QString head = split < 0 ? value : value.left(split);
+    const auto it = tokens.constFind(head);
+    if (it == tokens.constEnd()) {
+        // Wire-frozen append-only: a token this build has never heard of passes
+        // through verbatim rather than becoming "unknown", which would erase a
+        // verdict a newer agent is reporting correctly.
+        return {};
+    }
+    return split < 0 ? it->toString() : it->toString() + value.mid(split);
+}
+
+} // namespace
+
 QString localizedFieldValue(const LibreSCRS::AgentClient::IdentityRow& row)
 {
+    if (isVerdictGroup(row.groupKey)) {
+        if (const QString named = localizedStatusToken(row.value); !named.isEmpty()) {
+            return named;
+        }
+    }
+
     // The identity plugins render a real date as dd.MM.yyyy and pass anything
     // they cannot read through untouched, so a value that will not parse as
     // that date is the card's placeholder rather than a date. Parsing rather
@@ -176,6 +281,47 @@ QString localizedFieldValue(const LibreSCRS::AgentClient::IdentityRow& row)
         return ki18ndc("librekde", "@item:intable identity field value (card carries no date)", "Unknown").toString();
     }
     return row.value;
+}
+
+QString localizedGroupLabel(const QString& groupKey)
+{
+    if (const QString annex = annexGroupHeading(groupKey); !annex.isEmpty()) {
+        return annex;
+    }
+    if (const auto it = groupLabelTable().constFind(groupKey); it != groupLabelTable().constEnd()) {
+        return it->toString();
+    }
+    // Empty means "no heading". Inventing one from the raw key would put a
+    // machine identifier on screen as if it were a title.
+    return {};
+}
+
+QStringList mappedGroupKeys()
+{
+    QStringList keys = groupLabelTable().keys();
+    // The annex pair is prefix-matched rather than tabulated; name the two
+    // canonical spellings so the pin covers them too.
+    keys << QStringLiteral("annex.<id>.personal") << QStringLiteral("annex.<id>.security");
+    return keys;
+}
+
+QStringList fieldOrderForGroup(const QString& groupKey)
+{
+    // The annex's substance is an address, and the wire delivers it sorted by
+    // key. Same order the desktop client reads it in.
+    if (groupKey.startsWith(QLatin1String("annex.")) && groupKey.endsWith(QLatin1String(".personal"))) {
+        return {
+            QStringLiteral("address_label"),     QStringLiteral("street"),
+            QStringLiteral("house_number"),      QStringLiteral("house_letter"),
+            QStringLiteral("entrance"),          QStringLiteral("floor"),
+            QStringLiteral("apartment_number"),  QStringLiteral("place"),
+            QStringLiteral("community"),         QStringLiteral("state"),
+            QStringLiteral("parent_given_name"), QStringLiteral("community_of_birth"),
+            QStringLiteral("state_of_birth"),    QStringLiteral("document_serial"),
+            QStringLiteral("address_date"),
+        };
+    }
+    return {};
 }
 
 QStringList mappedLabelKeys()

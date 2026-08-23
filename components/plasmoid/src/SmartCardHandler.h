@@ -414,6 +414,37 @@ public:
     /// did not take.
     [[nodiscard]] static QVariantList curateIdentityDetails(const QVariantList& fields, const QVariantList& summary);
 
+    /// @brief Put each group's rows into their reading order.
+    ///
+    /// Delivery order is not a display order: identity crosses the wire as
+    /// map-of-maps, so fields arrive sorted by key and an address comes out with
+    /// its street last. Groups with no declared order keep delivery order, and a
+    /// key outside a declared order keeps its relative position after the listed
+    /// ones.
+    ///
+    /// Separate from the heading pass so each answers one question, and each can
+    /// be driven on its own from a test.
+    [[nodiscard]] static QVariantList applyFieldOrder(QVariantList details);
+
+    /// @brief Stamp each row with the heading of the group it belongs to.
+    ///
+    /// A heading is what ties a verdict to the data it describes: a card can
+    /// report the travel document's passive authentication and an annex's
+    /// weaker integrity-only result in one read, and as adjacent rows of a flat
+    /// list they read as one guarantee.
+    ///
+    /// Groups by KEY, not by adjacency, per the identity-render contract: rows
+    /// are regrouped so each group is contiguous, in first-appearance order (the
+    /// shape `renderIdentityTxt` chose, for the same reason), and only the first
+    /// row of each group carries a non-empty `groupHeading`. A group this build
+    /// cannot name carries an empty one, which means "no heading" — its rows
+    /// still render.
+    ///
+    /// Call it AFTER `curateIdentityDetails`: the curated summary can take a
+    /// group's first row away, and a heading computed before the subtraction
+    /// leaves that group headless in the only list that renders it.
+    [[nodiscard]] static QVariantList applyGroupHeadings(QVariantList details);
+
     /// @brief The shared photo store the QML `CardPhotoProvider` reads from.
     ///        Co-owned (shared_ptr) so the provider can outlive this handler.
     [[nodiscard]] std::shared_ptr<CardPhotoStore> photoStore() const
