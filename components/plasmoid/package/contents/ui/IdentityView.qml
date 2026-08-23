@@ -157,17 +157,22 @@ ColumnLayout {
                         // theme defined in pixelSize, warn, and be ignored —
                         // leaving the heading at body size.
                         Kirigami.Heading {
-                            level: 5
+                            // Full opacity and a large top margin, unlike the
+                            // 0.7 field labels below: dimmed at label opacity
+                            // the heading read as just another row.
+                            level: 4
                             visible: detailRow.modelData.groupHeading !== undefined
                                      && detailRow.modelData.groupHeading !== ""
                             Layout.fillWidth: true
-                            Layout.topMargin: Kirigami.Units.smallSpacing
+                            Layout.topMargin: Kirigami.Units.largeSpacing
                             text: detailRow.modelData.groupHeading ?? ""
                             // Group headings come from this host's own catalog,
                             // never the card — but PlainText throughout the
                             // package is the uniform hardening rule.
                             textFormat: Text.PlainText
-                            opacity: 0.7
+                            // Wrap instead of forcing the popup wider on a
+                            // long heading at the narrow plasmoid width.
+                            wrapMode: Text.WordWrap
                             Accessible.role: Accessible.Heading
                             Accessible.name: text
                         }
