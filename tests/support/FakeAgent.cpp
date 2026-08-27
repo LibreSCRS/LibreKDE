@@ -1551,3 +1551,16 @@ QList<QByteArray> adaptorReferenceOutParameterTypes()
 } // namespace LibreKDETest
 
 #include "FakeAgent.moc"
+
+void LibreKDETest::FakeAgent::remintCardPathsSwapped()
+{
+    Q_ASSERT(m_cardObject != nullptr && m_card2Object != nullptr);
+    m_connection.unregisterObject(m_cardPath);
+    m_connection.unregisterObject(m_card2Path);
+    std::swap(m_cardPath, m_card2Path);
+    m_connection.registerObject(m_cardPath, m_cardObject);
+    m_connection.registerObject(m_card2Path, m_card2Object);
+    // Each reader keeps ITS card object; only the path that names it moved.
+    m_readerAdaptor->setCard(QDBusObjectPath(m_cardPath));
+    m_reader2Adaptor->setCard(QDBusObjectPath(m_card2Path));
+}

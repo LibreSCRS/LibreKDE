@@ -8,6 +8,8 @@
 #include <LibreSCRS/AgentClient/AgentCapabilities.h>
 #include <LibreSCRS/AgentClient/AgentReader.h>
 
+#include <algorithm>
+
 namespace Client = LibreSCRS::AgentClient;
 
 namespace LibreKDE::Signing {
@@ -65,6 +67,20 @@ SigningCardSelection chooseSigningCard(Client::AgentClient& client, const LibreK
         // null card WITHOUT `cancelled`: the user did not decline, so this is
         // not a cancellation, and signing some other card instead would sign
         // with one they did not pick.
+        return {nullptr, false};
+    }
+    // The id alone is not enough: it is an object path minted from a
+    // PER-PROCESS counter, so an agent restart while the dialog was up
+    // re-mints ids from zero and the chosen id can resolve a LIVE card in a
+    // different reader. The reader name in `choices` is what the person
+    // actually picked by; a mismatch means the id no longer names their
+    // choice — refuse, same as above, rather than sign with an identity they
+    // did not pick.
+    const auto choiceIt = std::find_if(choices.cbegin(), choices.cend(),
+                                       [&](const LibreKDE::CardChoice& c) { return c.cardId == *chosen; });
+    Client::AgentReader* liveReader = client.reader(card->readerId());
+    const QString liveReaderName = liveReader != nullptr ? liveReader->name() : QString();
+    if (choiceIt == choices.cend() || liveReaderName != choiceIt->readerName) {
         return {nullptr, false};
     }
     return {card, false};

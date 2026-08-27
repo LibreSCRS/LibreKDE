@@ -172,6 +172,16 @@ public:
         runOnThread(m_context, [this, present]() { m_agent->setCardPresent(present); });
     }
 
+    /// @brief Re-register the card objects with their two paths SWAPPED —
+    ///        the id shape an agent restart's fresh per-process counter can
+    ///        produce, where a kept id resolves a live card in the OTHER
+    ///        reader. Call between `unregisterService()` and
+    ///        `registerService()`; the vanish/reappear carries the news.
+    void remintCardPathsSwapped()
+    {
+        runOnThread(m_context, [this]() { m_agent->remintCardPathsSwapped(); });
+    }
+
     /// @brief Register a Card1 (visible to GetManagedObjects) and flip the reader
     ///        to HasCard, but DON'T announce the Card1 — the deferred-publish /
     ///        dropped-InterfacesAdded window.
@@ -368,6 +378,24 @@ public:
                 m_server->unregisterService(m_service);
             }
         });
+    }
+
+    /// @brief Re-claim every name `unregisterService()` released — the
+    ///        inverse, for a test that models the agent RESTARTING (vanish,
+    ///        re-mint, reappear) on a live QDBusServiceWatcher rather than
+    ///        only vanishing. Ported from the LibreAgent client fakes.
+    void registerService()
+    {
+        bool named = false;
+        runOnThread(m_context, [this, &named]() {
+            if (m_server) {
+                named = m_server->registerService(m_service);
+                if (m_claimsWellKnown) {
+                    named = m_server->registerService(wellKnownAgentService()) && named;
+                }
+            }
+        });
+        EXPECT_TRUE(named) << "could not re-claim the agent bus name(s)";
     }
 
     /// @brief Mutate the FakeAgent Config on its own thread (synchronous). Affects

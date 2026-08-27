@@ -303,3 +303,49 @@ TEST(CardSelection, AnUnknownChosenIdSelectsNothing)
     EXPECT_EQ(selection.card, nullptr);
     EXPECT_FALSE(selection.cancelled) << "the user did not decline; the chooser answered nonsense";
 }
+
+// An agent restart while the dialog is open re-mints object-path ids from a
+// fresh per-process counter, so the id the user chose can come back ALIVE —
+// naming a card in a different reader. The reader name in the choice list is
+// what the person actually picked by ("the one on the left"); resolving the
+// id alone would sign with an identity they did not pick.
+TEST(CardSelection, AnAgentRestartRemintingIdsAcrossReadersSelectsNothing)
+{
+    FakeAgent::Config cfg;
+    cfg.capabilities = Client::Cap::Pki;
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+
+    auto client = makeClient(h);
+    ASSERT_TRUE(waitFor([&]() { return client->readers().size() == 1; }));
+    addSecondReaderWithCard(h, *client, Client::Cap::Pki);
+
+    Client::AgentCard* second = client->readers().at(1)->card();
+    ASSERT_NE(second, nullptr);
+    const QString chosenId = second->id();
+
+    int calls = 0;
+    const LibreKDE::CardChooser chooser = [&](const QList<LibreKDE::CardChoice>& cands) -> std::optional<QString> {
+        ++calls;
+        EXPECT_EQ(cands.size(), 2);
+        // The restart, under the open dialog: vanish, re-mint so each reader's
+        // card now carries the OTHER card's path, reappear, re-discover. The
+        // chosen id resolves a live card again — in the other reader.
+        h.unregisterService();
+        EXPECT_TRUE(waitFor([&]() { return client->readers().isEmpty(); }))
+            << "the vanish never cleared the registry, so this test would not be exercising a restart at all";
+        h.remintCardPathsSwapped();
+        h.registerService();
+        client->refreshDiscovery();
+        EXPECT_TRUE(waitFor([&]() { return client->readers().size() == 2 && client->card(chosenId) != nullptr; }))
+            << "the re-minted id never came back alive, so the wrong-reader resolution cannot be exercised";
+        return chosenId;
+    };
+
+    const SigningCardSelection selection = chooseSigningCard(*client, chooser);
+
+    EXPECT_EQ(calls, 1);
+    EXPECT_EQ(selection.card, nullptr)
+        << "the chosen id now names a live card in a DIFFERENT reader; signing with it would use an "
+           "identity the user did not pick";
+    EXPECT_FALSE(selection.cancelled) << "the user did not decline; the id stopped meaning what they chose";
+}

@@ -670,6 +670,15 @@ public:
     QString emitArrivedReaderCardAdded(uint capabilities, const QString& preReadAuth = QStringLiteral("None"));
     void emitArrivedReaderHasCard();
 
+    /// @brief Model an agent restart's re-minted per-process ids: re-register
+    ///        the two card objects with their paths SWAPPED, so the path each
+    ///        id names now resolves a live card in the OTHER reader — exactly
+    ///        what a fresh id counter can do to a client that kept an id
+    ///        across the restart. Both cards must exist. No signals are
+    ///        emitted (the surrounding vanish/reappear carries the news);
+    ///        `GetManagedObjects` tells the swapped truth afterwards.
+    void remintCardPathsSwapped();
+
 private:
     void exportTree();
 
