@@ -34,7 +34,9 @@ target_link_libraries(SignJobTest PRIVATE
 )
 target_compile_features(SignJobTest PRIVATE cxx_std_23)
 add_test(NAME SignJobTest COMMAND dbus-run-session -- $<TARGET_FILE:SignJobTest>)
-set_tests_properties(SignJobTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
+# A wedged test under dbus-run-session must fail in minutes, not consume the
+# runner's whole wall: every bus-backed test here carries an explicit timeout.
+set_tests_properties(SignJobTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en" TIMEOUT 120)
 
 # Which card signs, against the FakeAgent with one and with two signing-capable
 # cards. Drives the injected chooser seam directly (a recording fake), so the
@@ -54,4 +56,4 @@ target_link_libraries(CardSelectionTest PRIVATE
 )
 target_compile_features(CardSelectionTest PRIVATE cxx_std_23)
 add_test(NAME CardSelectionTest COMMAND dbus-run-session -- $<TARGET_FILE:CardSelectionTest>)
-set_tests_properties(CardSelectionTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
+set_tests_properties(CardSelectionTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en" TIMEOUT 120)

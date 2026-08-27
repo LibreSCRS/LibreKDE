@@ -44,7 +44,9 @@ target_link_libraries(AgentCardDataSourceTest PRIVATE
 )
 target_compile_features(AgentCardDataSourceTest PRIVATE cxx_std_23)
 add_test(NAME AgentCardDataSourceTest COMMAND dbus-run-session -- $<TARGET_FILE:AgentCardDataSourceTest>)
-set_tests_properties(AgentCardDataSourceTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
+# A wedged test under dbus-run-session must fail in minutes, not consume the
+# runner's whole wall.
+set_tests_properties(AgentCardDataSourceTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en" TIMEOUT 120)
 
 # Worker-logic test: subclasses CardWorkerLogic (decoupled from the
 # not-standalone-constructible KIO::WorkerBase) and runs it against the in-memory

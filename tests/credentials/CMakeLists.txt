@@ -45,8 +45,11 @@ target_link_libraries(CredentialControllerTest PRIVATE
 )
 target_compile_features(CredentialControllerTest PRIVATE cxx_std_23)
 add_test(NAME CredentialControllerTest COMMAND dbus-run-session -- $<TARGET_FILE:CredentialControllerTest>)
+# A wedged test under dbus-run-session must fail in minutes, not consume the
+# runner's whole wall: every bus-backed test here carries an explicit timeout.
 set_tests_properties(CredentialControllerTest PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en"
+    TIMEOUT 120
 )
 
 # Capstone E2E — the full credential-lifecycle flow (list → manage → result →
@@ -65,6 +68,7 @@ target_compile_features(CredentialsE2ETest PRIVATE cxx_std_23)
 add_test(NAME CredentialsE2E COMMAND dbus-run-session -- $<TARGET_FILE:CredentialsE2ETest>)
 set_tests_properties(CredentialsE2E PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en"
+    TIMEOUT 120
 )
 
 # Credential guidance/state resolver — proves the two frozen guidance keys the

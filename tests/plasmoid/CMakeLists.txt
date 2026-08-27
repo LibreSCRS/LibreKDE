@@ -62,6 +62,9 @@ target_link_libraries(SmartCardHandlerTest
 )
 target_compile_features(SmartCardHandlerTest PRIVATE cxx_std_23)
 add_test(NAME SmartCardHandlerTest COMMAND dbus-run-session -- $<TARGET_FILE:SmartCardHandlerTest>)
+# A wedged test under dbus-run-session must fail in minutes, not consume the
+# runner's whole wall.
 set_tests_properties(SmartCardHandlerTest PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en"
+    TIMEOUT 120
 )
