@@ -254,7 +254,8 @@ TEST(IdentityGroupLabel, UnknownGroupResolvesToEmpty)
 TEST(IdentityGroupLabel, MappedGroupKeyCoverageIsPinned)
 {
     const QStringList keys = mappedGroupKeys();
-    EXPECT_EQ(keys.size(), 9);
+    EXPECT_EQ(keys.size(), 10);
+    EXPECT_TRUE(keys.contains(QStringLiteral("presence")));
     EXPECT_TRUE(keys.contains(QStringLiteral("security_status")));
     EXPECT_TRUE(keys.contains(QStringLiteral("annex.<id>.personal")));
     EXPECT_TRUE(keys.contains(QStringLiteral("annex.<id>.security")));
@@ -337,6 +338,63 @@ TEST(IdentityValue, UnknownVerdictTokenPassesThrough)
     row.groupKey = QStringLiteral("security_status");
     row.value = QStringLiteral("SOMETHING_NEW");
     EXPECT_EQ(localizedFieldValue(row), QStringLiteral("SOMETHING_NEW"));
+    KLocalizedString::clearLanguages();
+}
+
+// The presence group's auth_method value is the eMRTD plugin's English prose
+// ("Chip Authentication", "None (plain read)") sitting beside Cyrillic labels
+// — a closed five-token set, localized by KEY scope so data_groups (a machine
+// list riding the same group) stays verbatim.
+TEST(IdentityValue, AuthMethodTokensRenderLocalized)
+{
+    KLocalizedString::setLanguages({QStringLiteral("sr")});
+    IdentityRow row;
+    row.groupKey = QStringLiteral("presence");
+    row.labelKey = QStringLiteral("field.auth_method");
+    row.value = QStringLiteral("Chip Authentication");
+    EXPECT_EQ(localizedFieldValue(row), QString::fromUtf8("Аутентификација чипа"));
+
+    row.value = QStringLiteral("None (plain read)");
+    EXPECT_EQ(localizedFieldValue(row), QString::fromUtf8("Без заштите (отворено читање)"));
+
+    // The protocol names stay themselves in Serbian; the catalog entries exist
+    // so a language CAN adapt them, not because they must change.
+    row.value = QStringLiteral("PACE (CAN)");
+    EXPECT_EQ(localizedFieldValue(row), QStringLiteral("PACE (CAN)"));
+    KLocalizedString::clearLanguages();
+}
+
+// Append-only wire: a method this build has never heard of passes through
+// verbatim rather than being erased.
+TEST(IdentityValue, UnknownAuthMethodPassesThrough)
+{
+    KLocalizedString::setLanguages({QStringLiteral("sr")});
+    IdentityRow row;
+    row.labelKey = QStringLiteral("field.auth_method");
+    row.value = QStringLiteral("Terminal Authentication");
+    EXPECT_EQ(localizedFieldValue(row), QStringLiteral("Terminal Authentication"));
+    KLocalizedString::clearLanguages();
+}
+
+// data_groups rides the same presence group and must stay the machine list it
+// is — the value dictionary is keyed by labelKey, not by group.
+TEST(IdentityValue, DataGroupsListStaysVerbatim)
+{
+    KLocalizedString::setLanguages({QStringLiteral("sr")});
+    IdentityRow row;
+    row.groupKey = QStringLiteral("presence");
+    row.labelKey = QStringLiteral("field.data_groups");
+    row.value = QStringLiteral("DG1, DG2, DG14");
+    EXPECT_EQ(localizedFieldValue(row), QStringLiteral("DG1, DG2, DG14"));
+    KLocalizedString::clearLanguages();
+}
+
+// The presence group renders with no heading here while the desktop client
+// titles the same wire "Authentication" — one vocabulary, two renderings.
+TEST(IdentityGroupLabel, PresenceHasTheDesktopClientsHeading)
+{
+    KLocalizedString::setLanguages({QStringLiteral("sr")});
+    EXPECT_EQ(localizedGroupLabel(QStringLiteral("presence")), QString::fromUtf8("Аутентификација"));
     KLocalizedString::clearLanguages();
 }
 

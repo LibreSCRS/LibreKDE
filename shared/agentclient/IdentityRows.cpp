@@ -178,6 +178,9 @@ const QHash<QString, KLocalizedString>& groupLabelTable()
         {QStringLiteral("contacts"), ki18ndc("librekde", "@title:group identity fields", "Contacts")},
         {QStringLiteral("security_status"),
          ki18ndc("librekde", "@title:group identity fields", "Travel Document Verification")},
+        // The desktop client titles the same wire group "Authentication";
+        // one vocabulary, one heading.
+        {QStringLiteral("presence"), ki18ndc("librekde", "@title:group identity fields", "Authentication")},
     };
     return *table;
 }
@@ -262,6 +265,27 @@ QString localizedStatusToken(const QString& value)
     return split < 0 ? it->toString() : it->toString() + value.mid(split);
 }
 
+/// The access-control methods the eMRTD plugin names in the presence group,
+/// localized by KEY scope (field.auth_method) — never by widening the
+/// verdict-group dictionary, which would drag data_groups (a machine list
+/// riding the same group) along with it. The protocol names stay themselves
+/// in Serbian; the entries exist so a language CAN adapt them. Empty when the
+/// value is not one this build names: append-only wire, verbatim passthrough.
+QString localizedAuthMethod(const QString& value)
+{
+    static const QHash<QString, KLocalizedString> methods{
+        {QStringLiteral("BAC"), ki18ndc("librekde", "@item:intable eMRTD access-control method", "BAC")},
+        {QStringLiteral("PACE (CAN)"), ki18ndc("librekde", "@item:intable eMRTD access-control method", "PACE (CAN)")},
+        {QStringLiteral("PACE (MRZ)"), ki18ndc("librekde", "@item:intable eMRTD access-control method", "PACE (MRZ)")},
+        {QStringLiteral("Chip Authentication"),
+         ki18ndc("librekde", "@item:intable eMRTD access-control method", "Chip Authentication")},
+        {QStringLiteral("None (plain read)"),
+         ki18ndc("librekde", "@item:intable eMRTD access-control method", "None (plain read)")},
+    };
+    const auto it = methods.constFind(value);
+    return it == methods.constEnd() ? QString() : it->toString();
+}
+
 } // namespace
 
 QString localizedFieldValue(const LibreSCRS::AgentClient::IdentityRow& row)
@@ -281,6 +305,15 @@ QString localizedFieldValue(const LibreSCRS::AgentClient::IdentityRow& row)
     // impossible day/month, or a placeholder like "00001") as the card's
     // no-date marker. Parsing rather than pattern-matching rejects impossible
     // dates.
+    // The auth_method value is English prose from a closed five-token set;
+    // key-scoped so data_groups in the same group stays the machine list it is.
+    if (row.labelKey == QLatin1String("field.auth_method") && !row.value.isEmpty()) {
+        if (const QString named = localizedAuthMethod(row.value); !named.isEmpty()) {
+            return named;
+        }
+        return row.value;
+    }
+
     if (row.labelKey == QLatin1String("field.address_date") && !row.value.isEmpty()) {
         if (QDate::fromString(row.value, QStringLiteral("dd.MM.yyyy")).isValid()) {
             return row.value;

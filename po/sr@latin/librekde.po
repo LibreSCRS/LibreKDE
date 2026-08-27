@@ -1133,3 +1133,27 @@ msgstr "Nije podržano"
 msgctxt "@item:intable security check outcome"
 msgid "Skipped"
 msgstr "Preskočeno"
+
+msgctxt "@title:group identity fields"
+msgid "Authentication"
+msgstr "Autentifikacija"
+
+msgctxt "@item:intable eMRTD access-control method"
+msgid "BAC"
+msgstr "BAC"
+
+msgctxt "@item:intable eMRTD access-control method"
+msgid "PACE (CAN)"
+msgstr "PACE (CAN)"
+
+msgctxt "@item:intable eMRTD access-control method"
+msgid "PACE (MRZ)"
+msgstr "PACE (MRZ)"
+
+msgctxt "@item:intable eMRTD access-control method"
+msgid "Chip Authentication"
+msgstr "Autentifikacija čipa"
+
+msgctxt "@item:intable eMRTD access-control method"
+msgid "None (plain read)"
+msgstr "Bez zaštite (otvoreno čitanje)"
