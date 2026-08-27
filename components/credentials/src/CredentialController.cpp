@@ -170,6 +170,17 @@ void CredentialController::classify()
     }
     // Manageable: fetch the credential list (once per bound card) and let its
     // result drive Loading → Ready/Empty.
+    //
+    // DELIBERATE: this runs with no user gesture beyond opening the window,
+    // and on a pre-read-gated card (CAN) the listing itself raises the CAN
+    // prompt. Accepted, with the reason on record: this window IS the
+    // credential manager — opening it is the request for its content, unlike
+    // an identity viewer firing side verbs — and the ctor defers the first
+    // refresh so an explicit --reader binding always lands before the
+    // first-reader-with-card fallback can aim the prompt at the wrong card.
+    // If the prompt-on-open ever needs to go, the gate belongs HERE, keyed on
+    // the card's pre-read method, with an explicit "load" affordance in the
+    // window.
     startListCredentials();
 }
 

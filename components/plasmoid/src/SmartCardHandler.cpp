@@ -528,6 +528,15 @@ void SmartCardHandler::warmCertificateCache()
     if (m_card == nullptr) {
         return;
     }
+    // A warm is an OPTIMIZATION, and an optimization must never cost a
+    // credential prompt: on a pre-read-gated card (CAN) the agent-side cert
+    // read would raise the prompt this handler deliberately never triggers on
+    // its own — the same policy the identity path applies. The PKI folder
+    // pays its own cold read there, WITH the prompt, at the moment the user
+    // actually opens it.
+    if (preReadUnlockRequired(m_card->preReadAuth())) {
+        return;
+    }
     // Best-effort background warm: deliberately NO setBusy / NO state transition /
     // NO error surfacing — the identity view is unaffected and a failed warm just
     // leaves the file-manager PKI folder to pay its own cold read. The entry call
