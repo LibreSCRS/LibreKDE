@@ -351,7 +351,9 @@ QStringList mappedGroupKeys()
 QStringList fieldOrderForGroup(const QString& groupKey)
 {
     // The annex's substance is an address, and the wire delivers it sorted by
-    // key. Same order the desktop client reads it in.
+    // key. Same order the desktop client reads it in — byte-identical twin in
+    // LibreCelik, plugins/emrtd/emrtdwidget.cpp (annexFieldOrder()); each
+    // repository pins its copy with a test, change both together.
     if (groupKey.startsWith(QLatin1String("annex.")) && groupKey.endsWith(QLatin1String(".personal"))) {
         return {
             QStringLiteral("address_label"),     QStringLiteral("street"),

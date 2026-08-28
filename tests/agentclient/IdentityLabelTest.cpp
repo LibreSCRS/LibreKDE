@@ -399,11 +399,23 @@ TEST(IdentityGroupLabel, PresenceHasTheDesktopClientsHeading)
 }
 
 // The annex's fields have a reading order; other groups keep delivery order.
+// The full list is asserted, not sampled: it must stay byte-identical to the
+// desktop client's copy (LibreCelik, plugins/emrtd/emrtdwidget.cpp,
+// annexFieldOrder()), and no shared library links the two repositories, so
+// each pins its own copy — change both together.
 TEST(IdentityGroupLabel, AnnexHasAReadingOrderAndOtherGroupsDoNot)
 {
-    const QStringList annex = LibreKDE::fieldOrderForGroup(QStringLiteral("annex.rs.personal"));
-    EXPECT_EQ(annex.size(), 15);
-    EXPECT_EQ(annex.at(1), QStringLiteral("street")) << "the street leads the address";
+    const QStringList expected{
+        QStringLiteral("address_label"),     QStringLiteral("street"),
+        QStringLiteral("house_number"),      QStringLiteral("house_letter"),
+        QStringLiteral("entrance"),          QStringLiteral("floor"),
+        QStringLiteral("apartment_number"),  QStringLiteral("place"),
+        QStringLiteral("community"),         QStringLiteral("state"),
+        QStringLiteral("parent_given_name"), QStringLiteral("community_of_birth"),
+        QStringLiteral("state_of_birth"),    QStringLiteral("document_serial"),
+        QStringLiteral("address_date"),
+    };
+    EXPECT_EQ(LibreKDE::fieldOrderForGroup(QStringLiteral("annex.rs.personal")), expected);
     EXPECT_TRUE(LibreKDE::fieldOrderForGroup(QStringLiteral("personal")).isEmpty());
     const QStringList security = LibreKDE::fieldOrderForGroup(QStringLiteral("annex.rs.security"));
     EXPECT_EQ(security, (QStringList{QStringLiteral("annex_integrity"), QStringLiteral("annex_authenticity")}))
