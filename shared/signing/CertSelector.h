@@ -6,6 +6,7 @@
 
 #include <QList>
 #include <QString>
+
 #include <functional>
 #include <optional>
 

@@ -142,6 +142,88 @@ def describe(key):
     return "[%s] %s" % (context, text) if context is not None else text
 
 
+def refs_of(entry):
+    """The SET of individual `#:` source-location references on `entry`.
+
+    A stale or missing reference does not cost a translator anything -- the
+    string still translates -- but it does cost the NEXT person who trusts
+    the comment to find the call site. `msgfmt --check` and the msgid-set
+    diff above cannot see this: both are blind to a comment that simply
+    points at the wrong line, or at no line at all.
+
+    A single `#: ` comment line can carry more than one `file:line` token
+    separated by whitespace, and the SAME reference set reflows across a
+    different number of comment lines depending on who last touched the
+    file -- msgmerge, Lokalize, Poedit, Weblate, and different gettext
+    versions all wrap differently. Comparing raw comment LINES would flag
+    that reflow as drift; split each line on whitespace and compare the
+    reference set instead.
+    """
+    refs = set()
+    for comment in entry["comments"]:
+        if comment.startswith("#:"):
+            refs.update(comment[2:].split())
+    return refs
+
+
+def obsolete_msgids(path):
+    """A human-readable name for every `#~`-obsoleted entry in `path`.
+
+    The actual check is simpler than this parsing: "any `#~` line at all is
+    a finding," decided by the caller from a plain substring scan. This is
+    only for naming which entry it was, best-effort -- a `#~ msgid "..."`
+    line names itself; anything else obsoleted (a stray `#~ msgctxt` or
+    `#~ msgstr` without its own msgid on the same line, which real gettext
+    tools do not produce but a hand-edit could) falls back to the raw line
+    so the finding is never silently unnamed.
+    """
+    found = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line.startswith("#~"):
+            continue
+        content = line[2:].strip()
+        if content.startswith("msgid"):
+            try:
+                found.append(unquote(content))
+            except ValueError:
+                found.append(content)
+        elif content.startswith("msgid_plural") or content.startswith("msgstr"):
+            continue  # named by the msgid line already reported alongside it
+        else:
+            found.append(line)
+    return found
+
+
+def report_msgid_bugs_to(path):
+    """The catalog header's `Report-Msgid-Bugs-To:` value, or "" if blank/absent."""
+    header = parse_po_header(path)
+    match = re.search(r"Report-Msgid-Bugs-To:\s*(.*?)\n", header)
+    return match.group(1).strip() if match else ""
+
+
+def parse_po_header(path):
+    """The concatenated msgstr of the header entry (empty msgid, no msgctxt)."""
+    header = ""
+    in_header = False
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line:
+            if in_header:
+                break
+            continue
+        if line.startswith("#"):
+            continue
+        if line.startswith("msgid "):
+            in_header = unquote(line) == ""
+            continue
+        if not in_header:
+            continue
+        if line.startswith("msgstr ") or line.startswith('"'):
+            header += unquote(line)
+    return header
+
+
 def scan_entry_points(root):
     """i18n-looking entry points used in the sources, mapped to their files."""
     found = {}
@@ -157,10 +239,27 @@ def scan_entry_points(root):
     return found
 
 
+def existing_bugs_address(po_root):
+    """The `Report-Msgid-Bugs-To` value the shipped catalogs already carry.
+
+    Every catalog carries the same address today; read it from whichever one
+    exists rather than hardcoding it a second time here. If none carry a
+    value (or none exist yet), extraction proceeds without the flag and the
+    header-empty check below catches the gap on the catalog side instead.
+    """
+    for path in sorted(po_root.rglob("*.po")):
+        value = report_msgid_bugs_to(path)
+        if value:
+            return value
+    return ""
+
+
 def extract_pots(root, podir):
     """Run Messages.sh with the environment KDE's scripty would give it."""
+    bugs_address = existing_bugs_address(root / "po")
     xgettext = " ".join(
         ["xgettext", "--from-code=UTF-8", "-C", "--kde", "-ci18n"]
+        + (["--msgid-bugs-address=" + bugs_address] if bugs_address else [])
         + ["-k" + spec for spec in KEYWORD_SPECS]
     )
     env = dict(os.environ, XGETTEXT=xgettext, podir=str(podir))
@@ -202,7 +301,8 @@ def main():
         languages = sorted(path.name for path in po_root.iterdir() if path.is_dir())
         for pot in pots:
             domain = pot.stem
-            source_keys = {entry["key"] for entry in parse_po(pot)}
+            source_entries = {entry["key"]: entry for entry in parse_po(pot)}
+            source_keys = set(source_entries)
             per_language = {}
 
             for language in languages:
@@ -222,7 +322,8 @@ def main():
                                     % (language, domain, check.stderr.rstrip()))
 
                 entries = parse_po(catalog)
-                catalog_keys = {entry["key"] for entry in entries}
+                catalog_entries = {entry["key"]: entry for entry in entries}
+                catalog_keys = set(catalog_entries)
                 exempt = {entry["key"] for entry in entries
                           if any(c.startswith("# no-extract:") for c in entry["comments"])}
                 per_language[language] = catalog_keys
@@ -233,6 +334,42 @@ def main():
                 for key in sorted(catalog_keys - source_keys - exempt, key=repr):
                     problems.append("%s/%s.po: entry has no call site left in the "
                                     "sources: %s" % (language, domain, describe(key)))
+                # Every key present on both sides has a real call site today,
+                # so its `#:` comment has one right answer. Compare it, not
+                # just the msgid set: a reference can drift line-by-line
+                # (the source moved) or go missing outright (never carried
+                # over from an earlier hand-edit) without the checks above
+                # noticing either way.
+                for key in sorted(source_keys & catalog_keys, key=repr):
+                    source_refs = refs_of(source_entries[key])
+                    catalog_refs = refs_of(catalog_entries[key])
+                    if catalog_refs != source_refs:
+                        problems.append(
+                            "%s/%s.po: stale source reference for %s (catalog: %s; "
+                            "sources: %s)"
+                            % (language, domain, describe(key),
+                               ", ".join(sorted(catalog_refs)) or "none",
+                               ", ".join(sorted(source_refs)) or "none"))
+
+                # `parse_po` deliberately skips `#~` lines (they are not live
+                # entries), which is exactly why an obsoleted entry is invisible
+                # to every check above: its key just vanishes from `catalog_keys`
+                # as if it had never existed, msgid set and reference set alike.
+                # msgmerge marks an entry obsolete whenever ITS OWN regeneration
+                # cannot find a source key for it -- which is precisely what
+                # happens to a `# no-extract:` entry, since by definition no
+                # extractor can find one. A shipped catalog carrying `#~` is
+                # always a mistake here: either a real translation got dropped
+                # (msgmerge did not know about the no-extract convention), or
+                # dead weight was committed instead of deleted.
+                for obsolete in obsolete_msgids(catalog):
+                    problems.append("%s/%s.po: obsolete entry `#~` in a shipped "
+                                    "catalog: %s" % (language, domain, obsolete))
+
+                bugs_to = report_msgid_bugs_to(catalog)
+                if not bugs_to:
+                    problems.append("%s/%s.po: Report-Msgid-Bugs-To header is "
+                                    "empty" % (language, domain))
                 if args.verbose:
                     print("%-8s %-40s %3d entries (%d exempt)"
                           % (language, domain, len(catalog_keys), len(exempt)))

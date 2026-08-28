@@ -6,6 +6,7 @@
 #include <Purpose/PluginBase>
 
 #include <QObject>
+
 #include <memory>
 
 /// @file

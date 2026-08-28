@@ -1416,6 +1416,54 @@ TEST(SmartCardHandlerSummary, FallsBackWhenNoCuratedKeyMatches)
     EXPECT_EQ(summary.first().toMap().value(QStringLiteral("value")).toString(), QStringLiteral("RFZO"));
 }
 
+// The curated branch (above) can never repeat an identity into `summary`: it
+// walks a fixed, distinct key list and takes at most one row per key. The
+// "never empty" FALLBACK a few lines below `curateIdentitySummary` walks
+// `fields` in raw delivery order instead, so it needs its OWN guard against
+// repeating an identity — without one, a fallback summary that happened to
+// copy two rows sharing a (groupKey, fieldKey) would render the second one
+// twice: once verbatim in the summary it was copied into, once again in
+// `details` (identity-based subtraction can only erase ONE claim per
+// identity, so the second row is never removed from `fields`). This is the
+// fallback counterpart of `SummaryAndDetailsPartitionTheFields` above; on the
+// shipped path the wire cannot deliver a repeated identity in the first
+// place (identity crosses it as a map of maps), so this exercises the
+// function directly rather than a scenario a real card can produce.
+TEST(SmartCardHandlerSummary, SummaryAndDetailsPartitionTheFallbackRows)
+{
+    const QVariantList fields = {
+        summaryRow("subject", "note", "first"),
+        summaryRow("subject", "note", "second"),
+        summaryRow("subject", "colour", "blue"),
+    };
+    const QVariantList summary = SmartCardHandler::curateIdentitySummary(fields);
+    const QVariantList details = SmartCardHandler::curateIdentityDetails(fields, summary);
+
+    ASSERT_EQ(summary.size() + details.size(), fields.size())
+        << "summary " << summary.size() << " + details " << details.size() << " != fields " << fields.size()
+        << " -- a fallback row rendered twice";
+
+    const auto identityOf = [](const QVariant& entry) {
+        const QVariantMap row = entry.toMap();
+        return row.value(QStringLiteral("groupKey")).toString() + QLatin1Char('/') +
+               row.value(QStringLiteral("fieldKey")).toString();
+    };
+    QStringList seen;
+    for (const QVariant& entry : summary) {
+        seen << identityOf(entry);
+    }
+    for (const QVariant& entry : details) {
+        seen << identityOf(entry);
+    }
+    QStringList expected;
+    for (const QVariant& entry : fields) {
+        expected << identityOf(entry);
+    }
+    seen.sort();
+    expected.sort();
+    EXPECT_EQ(seen, expected);
+}
+
 // The curated identifying keys are picked in preferred order, ahead of both the
 // fallback and non-identifying rows. Uses the REAL RS-eID field keys (surname /
 // expiry_date), NOT the guessed generic ones — issuing_authority is not an

@@ -45,7 +45,13 @@ add_subdirectory(agentclient)
 if(LIBREKDE_BUILD_PLASMOID)
     add_subdirectory(plasmoid)
 endif()
-if(LIBREKDE_BUILD_PURPOSE)
+# tests/purpose exercises librekde-signing (SignJob, CardSelection, the
+# MIME/format map), not the Purpose plugin target itself — the same library
+# shared/CMakeLists.txt builds for EITHER surface that can sign. Gating these
+# tests on LIBREKDE_BUILD_PURPOSE alone meant a plasmoid-only configuration
+# built and shipped librekde-signing with its only test suite silently
+# skipped. Match shared/CMakeLists.txt's own condition for the library.
+if(LIBREKDE_BUILD_PLASMOID OR LIBREKDE_BUILD_PURPOSE)
     add_subdirectory(purpose)
 endif()
 if(LIBREKDE_BUILD_KIO)

@@ -1241,6 +1241,19 @@ QVariantList SmartCardHandler::applyGroupHeadings(QVariantList details)
     return out;
 }
 
+namespace {
+/// A field row's identity for the summary/details split: which group it
+/// belongs to and which field within that group. Two rows can share
+/// rendered text without sharing this (an X.509 key-usage row and a
+/// certificate-purpose row can both read "Digital Signature").
+using FieldIdentity = std::pair<QString, QString>;
+
+FieldIdentity identityOf(const QVariantMap& row)
+{
+    return {row.value(QStringLiteral("groupKey")).toString(), row.value(QStringLiteral("fieldKey")).toString()};
+}
+} // namespace
+
 QVariantList SmartCardHandler::curateIdentityDetails(const QVariantList& fields, const QVariantList& summary)
 {
     // The popup renders the summary AND, once expanded, this list. They must
@@ -1252,11 +1265,18 @@ QVariantList SmartCardHandler::curateIdentityDetails(const QVariantList& fields,
     // its rendered text. `curateIdentitySummary` takes at most ONE row per
     // curated key, so a key emitted under two groups must keep the copy the
     // summary did not take; text matching would drop both.
-    const auto identityOf = [](const QVariantMap& row) {
-        return std::pair<QString, QString>{row.value(QStringLiteral("groupKey")).toString(),
-                                           row.value(QStringLiteral("fieldKey")).toString()};
-    };
-    QSet<std::pair<QString, QString>> summarised;
+    //
+    // Neither `fields` nor `summary` can repeat an identity, on the path
+    // this is actually built from: identity crosses the wire as a map of
+    // maps (IdentityFieldGroupWire = QMap<QString, IdentityFieldWire>,
+    // LibreAgent/client/qt/src/dbus/Marshal.h), so `fields` can no more
+    // hold two rows for the same (groupKey, fieldKey) than a QMap can hold
+    // two values under one key, and `curateIdentitySummary` is itself
+    // deduplicated (both its curated-key branch and its fallback) so it
+    // never manufactures a duplicate `fields` does not have. A QSet is
+    // therefore exactly the right structure for `summarised` below: there
+    // is nothing here that ever needs to count past one.
+    QSet<FieldIdentity> summarised;
     summarised.reserve(summary.size());
     for (const QVariant& entry : summary) {
         summarised.insert(identityOf(entry.toMap()));
@@ -1265,9 +1285,8 @@ QVariantList SmartCardHandler::curateIdentityDetails(const QVariantList& fields,
     QVariantList details;
     details.reserve(fields.size());
     for (const QVariant& entry : fields) {
-        // Erase on first match: a summary row stands for exactly one source
-        // row, so a model that repeats one (groupKey, fieldKey) keeps the
-        // repeats visible instead of silently swallowing them all.
+        // Erase on first match, not "assert exactly one": belt-and-suspenders
+        // for the same reason as above, not a case today's data can reach.
         if (summarised.remove(identityOf(entry.toMap()))) {
             continue;
         }
@@ -1364,10 +1383,25 @@ QVariantList SmartCardHandler::curateIdentitySummary(const QVariantList& fields)
     }
     // Never empty: a card whose keys are outside the curated set still gets a
     // summary (the first few rows), so the headline is always populated.
+    //
+    // Deduplicated by identity, same as the curated branch above: this walks
+    // `fields` in raw delivery order rather than by a fixed key list, so
+    // nothing here guarantees a repeat couldn't reach it the way the
+    // curated branch's fixed, distinct key list does. `curateIdentityDetails`
+    // relies on `summary` never repeating an identity (a QSet, not a
+    // multiset — see its own comment); this keeps that true regardless of
+    // how `fields` was built, rather than resting the guarantee entirely on
+    // the wire shape upstream.
     if (summary.isEmpty()) {
         constexpr int kFallbackRows = 4;
+        QSet<FieldIdentity> seen;
         for (const QVariant& entry : std::as_const(fields)) {
-            summary.append(toSummaryRow(entry.toMap()));
+            const QVariantMap row = entry.toMap();
+            if (seen.contains(identityOf(row))) {
+                continue;
+            }
+            seen.insert(identityOf(row));
+            summary.append(toSummaryRow(row));
             if (summary.size() >= kFallbackRows) {
                 break;
             }

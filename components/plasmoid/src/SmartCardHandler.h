@@ -395,7 +395,10 @@ public:
     /// Pure, testable: curate the identifying summary rows from a flattened
     /// identity model (each entry a QVariantMap { groupKey, fieldKey, label,
     /// value }). Picks curated identifying keys in a fixed preferred order;
-    /// falls back to the first rows so the result is NEVER empty.
+    /// falls back to the first rows so the result is NEVER empty. Both the
+    /// curated pass and the fallback are deduplicated by (groupKey,
+    /// fieldKey): `curateIdentityDetails` depends on this result never
+    /// repeating an identity.
     ///
     /// DG1-primary rule: the machine-verified MRZ name components (surname /
     /// family_name / given_name / given_names) lead the summary; a
