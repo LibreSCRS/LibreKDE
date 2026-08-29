@@ -91,6 +91,16 @@ else()
     message(WARNING "msgfmt not found — IdentityLabelTest (Serbian catalog resolution) is skipped")
 endif()
 
+# Pins foldSecurityCheckFields against both security-check shapes a plugin may
+# ship: the joined shape (one field per check) and the structured shape
+# (several check_<N>_<suffix> fields), which must fold into one readable row
+# per check rather than one row per wire field.
+add_executable(IdentityRowFoldingTest IdentityRowFoldingTest.cpp)
+target_link_libraries(IdentityRowFoldingTest PRIVATE GTest::gtest_main librekde-agentclient KF6::I18n)
+target_compile_features(IdentityRowFoldingTest PRIVATE cxx_std_23)
+add_test(NAME IdentityRowFoldingTest COMMAND IdentityRowFoldingTest)
+set_tests_properties(IdentityRowFoldingTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
+
 # Total-coverage guard: walks every value of the client library's ErrorCode and
 # demands a deliberate ErrorText outcome per code (localized copy vs agent
 # fallback). Compiled with -Werror=switch, so rebuilding against a client

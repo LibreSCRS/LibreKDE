@@ -271,7 +271,11 @@ IdentityResult AgentCardDataSource::readIdentity(const QString& cardId)
         return result;
     }
 
-    for (const Client::IdentityRow& row : Client::flattenIdentityFields(op->identityResult())) {
+    // Fold a security check's several `check_<N>_<suffix>` wire fields into
+    // one row (tolerant of the joined shape too) BEFORE the per-row loop,
+    // since it changes row count — same rule the plasmoid applies.
+    for (const Client::IdentityRow& row :
+         foldSecurityCheckFields(Client::flattenIdentityFields(op->identityResult()))) {
         if (isHiddenIdentityRow(row)) {
             continue;
         }

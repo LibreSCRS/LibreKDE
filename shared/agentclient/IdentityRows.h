@@ -4,6 +4,7 @@
 
 #include <LibreSCRS/AgentClient/IdentityRows.h>
 
+#include <QList>
 #include <QString>
 #include <QStringList>
 
@@ -50,6 +51,29 @@
 ///    appear under two groups, and text matching would drop both copies.
 
 namespace LibreKDE {
+
+/// @brief Fold a security check's several `check_<N>_<suffix>` fields into one
+///        row per check, tolerant of the joined shape a plugin may still be
+///        shipping (one field whose KEY is the check id itself, value
+///        `"STATUS (detail)"`).
+///
+/// Scoped to verdict groups (the same set `localizedFieldValue` treats as the
+/// closed status vocabulary): a `personal` field that happens to be keyed
+/// `check_3_status` is never folded. Every other row — including the joined
+/// shape — passes through UNCHANGED, so this is safe to call on a full,
+/// mixed-group row list; a check's several rows collapse into the position
+/// its FIRST field occupied, and every other row keeps its own position.
+///
+/// The folded row's label comes from `check_N_label`, falling back to
+/// `check_N_id`; its value from `check_N_status`, with `check_N_detail`
+/// appended in parentheses only when present — the joined shape's own
+/// `"STATUS (detail)"` spelling, so `localizedFieldValue` needs no change to
+/// translate either shape. Every other suffix (`category`, `error`, and
+/// `reason` once a later change adds it) is read and DROPPED, not rendered as
+/// an unknown row — until this file is taught that suffix's vocabulary, an
+/// unrecognised one must disappear rather than surface as a raw row.
+[[nodiscard]] QList<LibreSCRS::AgentClient::IdentityRow>
+foldSecurityCheckFields(const QList<LibreSCRS::AgentClient::IdentityRow>& rows);
 
 /// @brief Resolve an identity field's display label, localized.
 ///

@@ -8,6 +8,8 @@
 #include <QDate>
 #include <QHash>
 
+#include <optional>
+
 namespace LibreKDE {
 
 namespace {
@@ -237,6 +239,48 @@ bool isVerdictGroup(const QString& groupKey)
            (groupKey.startsWith(QLatin1String("annex.")) && groupKey.endsWith(QLatin1String(".security")));
 }
 
+/// One `check_<N>_<suffix>` field key, split into its check index and suffix.
+struct CheckFieldKey
+{
+    QString index;  ///< The `N`, kept as text — it is never arithmetic, only a grouping key.
+    QString suffix; ///< `id` / `category` / `status` / `label` / `detail` / `error` / ...
+};
+
+/// Splits @p fieldKey as `check_<N>_<suffix>`; empty when it is not that shape
+/// (no digits after `check_`, or nothing after them) — the joined shape, whose
+/// field key IS the check id, never matches this.
+std::optional<CheckFieldKey> parseCheckFieldKey(const QString& fieldKey)
+{
+    static const QString prefix = QStringLiteral("check_");
+    if (!fieldKey.startsWith(prefix)) {
+        return std::nullopt;
+    }
+    qsizetype i = prefix.size();
+    while (i < fieldKey.size() && fieldKey.at(i).isDigit()) {
+        ++i;
+    }
+    if (i == prefix.size() || i >= fieldKey.size() || fieldKey.at(i) != QLatin1Char('_')) {
+        return std::nullopt;
+    }
+    CheckFieldKey parsed;
+    parsed.index = fieldKey.mid(prefix.size(), i - prefix.size());
+    parsed.suffix = fieldKey.mid(i + 1);
+    if (parsed.suffix.isEmpty()) {
+        return std::nullopt;
+    }
+    return parsed;
+}
+
+/// The structured fields collected so far for one check, plus where its folded
+/// row belongs in the output (the position its FIRST field occupied).
+struct FoldedCheck
+{
+    QString groupKey;
+    QString index;
+    qsizetype slot = -1;
+    QHash<QString, QString> fieldsBySuffix;
+};
+
 /// The status token at the head of @p value, localized; empty when @p value does
 /// not start with one this build names.
 ///
@@ -287,6 +331,60 @@ QString localizedAuthMethod(const QString& value)
 }
 
 } // namespace
+
+QList<LibreSCRS::AgentClient::IdentityRow>
+foldSecurityCheckFields(const QList<LibreSCRS::AgentClient::IdentityRow>& rows)
+{
+    using LibreSCRS::AgentClient::IdentityRow;
+
+    QList<IdentityRow> out;
+    out.reserve(rows.size());
+
+    // Keyed on (groupKey, N) so two verdict groups riding the same flattened
+    // list (e.g. security_status and an annex's own .security group) never
+    // fold each other's checks together.
+    QHash<QString, FoldedCheck> checks;
+
+    for (const IdentityRow& row : rows) {
+        if (!isVerdictGroup(row.groupKey)) {
+            out.append(row);
+            continue;
+        }
+        const std::optional<CheckFieldKey> parsed = parseCheckFieldKey(row.fieldKey);
+        if (!parsed) {
+            // The joined shape: the field key IS the check id. Unchanged.
+            out.append(row);
+            continue;
+        }
+        const QString key = row.groupKey + QLatin1Char('\x1e') + parsed->index;
+        FoldedCheck& check = checks[key];
+        if (check.slot < 0) {
+            check.groupKey = row.groupKey;
+            check.index = parsed->index;
+            check.slot = out.size();
+            out.append(IdentityRow{}); // placeholder, filled in below
+        }
+        check.fieldsBySuffix.insert(parsed->suffix, row.value);
+    }
+
+    for (auto it = checks.cbegin(); it != checks.cend(); ++it) {
+        const FoldedCheck& check = it.value();
+        IdentityRow folded;
+        folded.groupKey = check.groupKey;
+        folded.fieldKey = check.fieldsBySuffix.value(QStringLiteral("id"), QStringLiteral("check_") + check.index);
+        folded.labelFallback = check.fieldsBySuffix.value(QStringLiteral("label"), folded.fieldKey);
+        QString value = check.fieldsBySuffix.value(QStringLiteral("status"));
+        if (const QString detail = check.fieldsBySuffix.value(QStringLiteral("detail")); !detail.isEmpty()) {
+            value += QStringLiteral(" (") + detail + QLatin1Char(')');
+        }
+        folded.value = value;
+        // Every other suffix collected above (category, error, and reason once
+        // a later change adds it) is read no further here: dropped, not
+        // rendered, until this file is taught its vocabulary.
+        out[check.slot] = folded;
+    }
+    return out;
+}
 
 QString localizedFieldValue(const LibreSCRS::AgentClient::IdentityRow& row)
 {

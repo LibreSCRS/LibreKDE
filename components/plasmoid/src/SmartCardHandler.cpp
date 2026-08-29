@@ -1145,11 +1145,14 @@ void SmartCardHandler::setAgentInstalled(bool installed)
 void SmartCardHandler::rebuildIdentityModel(const QList<Client::FieldGroup>& groups)
 {
     // Reuse the client library's flatten (skip-binary + stringify) — the SAME
-    // rule the card:/ KIO worker uses. The plasmoid additionally drops
-    // empty-value rows (a blank summary/expander row looks broken in a popup)
-    // and adapts to QVariantMap for the QML Repeater.
+    // rule the card:/ KIO worker uses. Folding a security check's several
+    // `check_<N>_<suffix>` wire fields into one row (tolerant of the joined
+    // shape too) happens BEFORE the per-row loop, since it changes row count.
+    // The plasmoid additionally drops empty-value rows (a blank
+    // summary/expander row looks broken in a popup) and adapts to
+    // QVariantMap for the QML Repeater.
     QVariantList flat;
-    for (const Client::IdentityRow& row : Client::flattenIdentityFields(groups)) {
+    for (const Client::IdentityRow& row : LibreKDE::foldSecurityCheckFields(Client::flattenIdentityFields(groups))) {
         if (row.value.isEmpty() || LibreKDE::isHiddenIdentityRow(row)) {
             continue;
         }

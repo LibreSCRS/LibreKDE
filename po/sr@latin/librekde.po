@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: librekde\n"
 "Report-Msgid-Bugs-To: https://librescrs.github.io/\n"
-"POT-Creation-Date: 2026-08-28 16:33+0200\n"
+"POT-Creation-Date: 2026-08-29 23:02+0200\n"
 "PO-Revision-Date: 2026-07-31\n"
 "Last-Translator: hirashix0\n"
 "Language-Team: Serbian\n"
@@ -326,37 +326,37 @@ msgid "%1 — contact"
 msgstr "%1 — kontaktni"
 
 # --- components/plasmoid/src/SmartCardHandler.cpp --
-#: components/plasmoid/src/SmartCardHandler.cpp:1565
+#: components/plasmoid/src/SmartCardHandler.cpp:1568
 #, kde-format
 msgctxt "@info:status reading data from the card"
 msgid "Reading card…"
 msgstr "Čitam karticu…"
 
-#: components/plasmoid/src/SmartCardHandler.cpp:1567
+#: components/plasmoid/src/SmartCardHandler.cpp:1570
 #, kde-format
 msgctxt "@info:status waiting for PIN/CAN in the secure prompt"
 msgid "Waiting for input…"
 msgstr "Čekam unos…"
 
-#: components/plasmoid/src/SmartCardHandler.cpp:1569
+#: components/plasmoid/src/SmartCardHandler.cpp:1572
 #, kde-format
 msgctxt "@info:status verifying the entered secret on the card"
 msgid "Verifying…"
 msgstr "Proveravam…"
 
-#: components/plasmoid/src/SmartCardHandler.cpp:1571
+#: components/plasmoid/src/SmartCardHandler.cpp:1574
 #, kde-format
 msgctxt "@info:status producing the signature on the card"
 msgid "Signing…"
 msgstr "Potpisujem…"
 
-#: components/plasmoid/src/SmartCardHandler.cpp:1573
+#: components/plasmoid/src/SmartCardHandler.cpp:1576
 #, kde-format
 msgctxt "@info:status attaching a trusted timestamp"
 msgid "Adding timestamp…"
 msgstr "Dodajem vremenski žig…"
 
-#: components/plasmoid/src/SmartCardHandler.cpp:1579
+#: components/plasmoid/src/SmartCardHandler.cpp:1582
 #, kde-format
 msgctxt "@info:status generic in-progress card operation"
 msgid "Working…"
@@ -693,554 +693,554 @@ msgid "Too many signing requests. Try again shortly."
 msgstr "Previše zahteva za potpisivanje. Pokušajte ponovo uskoro."
 
 # --- shared/agentclient/IdentityRows.cpp (identity field labels) -----------
-#: shared/agentclient/IdentityRows.cpp:36
+#: shared/agentclient/IdentityRows.cpp:38
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Full Name"
 msgstr "Ime i prezime"
 
-#: shared/agentclient/IdentityRows.cpp:37
+#: shared/agentclient/IdentityRows.cpp:39
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Surname"
 msgstr "Prezime"
 
-#: shared/agentclient/IdentityRows.cpp:38
+#: shared/agentclient/IdentityRows.cpp:40
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Family Name"
 msgstr "Prezime"
 
-#: shared/agentclient/IdentityRows.cpp:40
+#: shared/agentclient/IdentityRows.cpp:42
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Family Name (Latin)"
 msgstr "Prezime (latinica)"
 
-#: shared/agentclient/IdentityRows.cpp:41
+#: shared/agentclient/IdentityRows.cpp:43
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Given Name"
 msgstr "Ime"
 
-#: shared/agentclient/IdentityRows.cpp:42
+#: shared/agentclient/IdentityRows.cpp:44
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Given Names"
 msgstr "Ime"
 
-#: shared/agentclient/IdentityRows.cpp:44
+#: shared/agentclient/IdentityRows.cpp:46
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Given Name (Latin)"
 msgstr "Ime (latinica)"
 
-#: shared/agentclient/IdentityRows.cpp:45
+#: shared/agentclient/IdentityRows.cpp:47
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Other Names"
 msgstr "Druga imena"
 
-#: shared/agentclient/IdentityRows.cpp:47
+#: shared/agentclient/IdentityRows.cpp:49
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Parent Given Name"
 msgstr "Ime roditelja"
 
-#: shared/agentclient/IdentityRows.cpp:48
+#: shared/agentclient/IdentityRows.cpp:50
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Parent Name"
 msgstr "Ime roditelja"
 
-#: shared/agentclient/IdentityRows.cpp:50
+#: shared/agentclient/IdentityRows.cpp:52
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Parent Name (Latin)"
 msgstr "Ime roditelja (latinica)"
 
-#: shared/agentclient/IdentityRows.cpp:51
+#: shared/agentclient/IdentityRows.cpp:53
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Sex"
 msgstr "Pol"
 
-#: shared/agentclient/IdentityRows.cpp:52
+#: shared/agentclient/IdentityRows.cpp:54
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Gender"
 msgstr "Pol"
 
-#: shared/agentclient/IdentityRows.cpp:53
+#: shared/agentclient/IdentityRows.cpp:55
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Title"
 msgstr "Titula"
 
-#: shared/agentclient/IdentityRows.cpp:54
+#: shared/agentclient/IdentityRows.cpp:56
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Profession"
 msgstr "Zanimanje"
 
-#: shared/agentclient/IdentityRows.cpp:55
+#: shared/agentclient/IdentityRows.cpp:57
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Nationality"
 msgstr "Državljanstvo"
 
-#: shared/agentclient/IdentityRows.cpp:57
+#: shared/agentclient/IdentityRows.cpp:59
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Status of Foreigner"
 msgstr "Status stranca"
 
-#: shared/agentclient/IdentityRows.cpp:60
+#: shared/agentclient/IdentityRows.cpp:62
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Date of Birth"
 msgstr "Datum rođenja"
 
-#: shared/agentclient/IdentityRows.cpp:61
+#: shared/agentclient/IdentityRows.cpp:63
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Place of Birth"
 msgstr "Mesto rođenja"
 
-#: shared/agentclient/IdentityRows.cpp:63
+#: shared/agentclient/IdentityRows.cpp:65
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Community of Birth"
 msgstr "Opština rođenja"
 
-#: shared/agentclient/IdentityRows.cpp:64
+#: shared/agentclient/IdentityRows.cpp:66
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "State of Birth"
 msgstr "Država rođenja"
 
-#: shared/agentclient/IdentityRows.cpp:68
+#: shared/agentclient/IdentityRows.cpp:70
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Personal Number"
 msgstr "Lični broj"
 
-#: shared/agentclient/IdentityRows.cpp:70
+#: shared/agentclient/IdentityRows.cpp:72
 #, kde-format
 msgctxt "@item:intable identity field (health insurant number)"
 msgid "Insurant Number"
 msgstr "Broj osiguranika"
 
-#: shared/agentclient/IdentityRows.cpp:73
+#: shared/agentclient/IdentityRows.cpp:75
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Address"
 msgstr "Adresa"
 
-#: shared/agentclient/IdentityRows.cpp:74
+#: shared/agentclient/IdentityRows.cpp:76
 #, kde-format
 msgctxt "@item:intable identity field (address)"
 msgid "State"
 msgstr "Država"
 
-#: shared/agentclient/IdentityRows.cpp:75
+#: shared/agentclient/IdentityRows.cpp:77
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Country"
 msgstr "Država"
 
-#: shared/agentclient/IdentityRows.cpp:76
+#: shared/agentclient/IdentityRows.cpp:78
 #, kde-format
 msgctxt "@item:intable identity field (address)"
 msgid "Community"
 msgstr "Opština"
 
-#: shared/agentclient/IdentityRows.cpp:77
+#: shared/agentclient/IdentityRows.cpp:79
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Municipality"
 msgstr "Opština"
 
-#: shared/agentclient/IdentityRows.cpp:78
+#: shared/agentclient/IdentityRows.cpp:80
 #, kde-format
 msgctxt "@item:intable identity field (address)"
 msgid "Place"
 msgstr "Mesto"
 
-#: shared/agentclient/IdentityRows.cpp:79
+#: shared/agentclient/IdentityRows.cpp:81
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Street"
 msgstr "Ulica"
 
-#: shared/agentclient/IdentityRows.cpp:80
+#: shared/agentclient/IdentityRows.cpp:82
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "House Number"
 msgstr "Kućni broj"
 
-#: shared/agentclient/IdentityRows.cpp:81
+#: shared/agentclient/IdentityRows.cpp:83
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "House Letter"
 msgstr "Slovo kuće"
 
-#: shared/agentclient/IdentityRows.cpp:83
+#: shared/agentclient/IdentityRows.cpp:85
 #, kde-format
 msgctxt "@item:intable identity field (house number)"
 msgid "Number"
 msgstr "Broj"
 
-#: shared/agentclient/IdentityRows.cpp:84
+#: shared/agentclient/IdentityRows.cpp:86
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Entrance"
 msgstr "Ulaz"
 
-#: shared/agentclient/IdentityRows.cpp:85
+#: shared/agentclient/IdentityRows.cpp:87
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Floor"
 msgstr "Sprat"
 
-#: shared/agentclient/IdentityRows.cpp:86
+#: shared/agentclient/IdentityRows.cpp:88
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Apartment"
 msgstr "Stan"
 
-#: shared/agentclient/IdentityRows.cpp:88
+#: shared/agentclient/IdentityRows.cpp:90
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Apartment Number"
 msgstr "Broj stana"
 
-#: shared/agentclient/IdentityRows.cpp:89
+#: shared/agentclient/IdentityRows.cpp:91
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Telephone"
 msgstr "Telefon"
 
-#: shared/agentclient/IdentityRows.cpp:91
+#: shared/agentclient/IdentityRows.cpp:93
 #, kde-format
 msgctxt "@item:intable identity field (when the address last changed)"
 msgid "Address Date"
 msgstr "Datum promene adrese"
 
-#: shared/agentclient/IdentityRows.cpp:93
+#: shared/agentclient/IdentityRows.cpp:95
 #, kde-format
 msgctxt "@item:intable identity field (the address as one line)"
 msgid "Address"
 msgstr "Adresa"
 
-#: shared/agentclient/IdentityRows.cpp:97
+#: shared/agentclient/IdentityRows.cpp:99
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Document Number"
 msgstr "Broj dokumenta"
 
-#: shared/agentclient/IdentityRows.cpp:98
+#: shared/agentclient/IdentityRows.cpp:100
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Document Code"
 msgstr "Šifra dokumenta"
 
-#: shared/agentclient/IdentityRows.cpp:99
+#: shared/agentclient/IdentityRows.cpp:101
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Document Type"
 msgstr "Vrsta dokumenta"
 
-#: shared/agentclient/IdentityRows.cpp:101
-#: shared/agentclient/IdentityRows.cpp:161
+#: shared/agentclient/IdentityRows.cpp:103
+#: shared/agentclient/IdentityRows.cpp:163
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Serial Number"
 msgstr "Serijski broj"
 
-#: shared/agentclient/IdentityRows.cpp:107
+#: shared/agentclient/IdentityRows.cpp:109
 #, kde-format
 msgctxt "@item:intable identity field (annex document number)"
 msgid "Document Number"
 msgstr "Broj dokumenta"
 
-#: shared/agentclient/IdentityRows.cpp:109
+#: shared/agentclient/IdentityRows.cpp:111
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Registration Number"
 msgstr "Registarski broj"
 
-#: shared/agentclient/IdentityRows.cpp:110
+#: shared/agentclient/IdentityRows.cpp:112
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Issuing State"
 msgstr "Država izdavanja"
 
-#: shared/agentclient/IdentityRows.cpp:112
+#: shared/agentclient/IdentityRows.cpp:114
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Issuing Authority"
 msgstr "Organ izdavanja"
 
-#: shared/agentclient/IdentityRows.cpp:113
+#: shared/agentclient/IdentityRows.cpp:115
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Issuing Date"
 msgstr "Datum izdavanja"
 
-#: shared/agentclient/IdentityRows.cpp:114
+#: shared/agentclient/IdentityRows.cpp:116
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Date of Issue"
 msgstr "Datum izdavanja"
 
-#: shared/agentclient/IdentityRows.cpp:115
+#: shared/agentclient/IdentityRows.cpp:117
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Date of Expiry"
 msgstr "Datum isteka"
 
-#: shared/agentclient/IdentityRows.cpp:116
+#: shared/agentclient/IdentityRows.cpp:118
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Expiry Date"
 msgstr "Datum isteka"
 
-#: shared/agentclient/IdentityRows.cpp:117
+#: shared/agentclient/IdentityRows.cpp:119
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Valid Until"
 msgstr "Važi do"
 
-#: shared/agentclient/IdentityRows.cpp:118
+#: shared/agentclient/IdentityRows.cpp:120
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Endorsements"
 msgstr "Napomene"
 
-#: shared/agentclient/IdentityRows.cpp:120
+#: shared/agentclient/IdentityRows.cpp:122
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Custody Information"
 msgstr "Podaci o starateljstvu"
 
-#: shared/agentclient/IdentityRows.cpp:123
+#: shared/agentclient/IdentityRows.cpp:125
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Insurer"
 msgstr "Osiguravač"
 
-#: shared/agentclient/IdentityRows.cpp:124
+#: shared/agentclient/IdentityRows.cpp:126
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Insurer ID"
 msgstr "ID osiguravača"
 
-#: shared/agentclient/IdentityRows.cpp:125
+#: shared/agentclient/IdentityRows.cpp:127
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Card ID"
 msgstr "Broj kartice"
 
-#: shared/agentclient/IdentityRows.cpp:127
+#: shared/agentclient/IdentityRows.cpp:129
 #, kde-format
 msgctxt "@item:intable identity field (insurance basis)"
 msgid "Basis"
 msgstr "Osnov osiguranja"
 
-#: shared/agentclient/IdentityRows.cpp:129
+#: shared/agentclient/IdentityRows.cpp:131
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Description"
 msgstr "Opis"
 
-#: shared/agentclient/IdentityRows.cpp:131
+#: shared/agentclient/IdentityRows.cpp:133
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Start Date"
 msgstr "Datum početka"
 
-#: shared/agentclient/IdentityRows.cpp:134
+#: shared/agentclient/IdentityRows.cpp:136
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Data Groups"
 msgstr "Grupe podataka"
 
-#: shared/agentclient/IdentityRows.cpp:136
+#: shared/agentclient/IdentityRows.cpp:138
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Authentication Method"
 msgstr "Metod autentifikacije"
 
-#: shared/agentclient/IdentityRows.cpp:138
+#: shared/agentclient/IdentityRows.cpp:140
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Data Integrity"
 msgstr "Integritet podataka"
 
-#: shared/agentclient/IdentityRows.cpp:140
+#: shared/agentclient/IdentityRows.cpp:142
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Data Authenticity"
 msgstr "Autentičnost podataka"
 
-#: shared/agentclient/IdentityRows.cpp:142
+#: shared/agentclient/IdentityRows.cpp:144
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Chip Genuineness"
 msgstr "Autentičnost čipa"
 
-#: shared/agentclient/IdentityRows.cpp:151
+#: shared/agentclient/IdentityRows.cpp:153
 #, kde-format
 msgctxt "@item:intable identity field (annex)"
 msgid "Data Integrity"
 msgstr "Integritet podataka"
 
-#: shared/agentclient/IdentityRows.cpp:153
+#: shared/agentclient/IdentityRows.cpp:155
 #, kde-format
 msgctxt "@item:intable identity field (annex)"
 msgid "Data Authenticity"
 msgstr "Autentičnost podataka"
 
-#: shared/agentclient/IdentityRows.cpp:157
+#: shared/agentclient/IdentityRows.cpp:159
 #, kde-format
 msgctxt "@item:intable identity field (card generation)"
 msgid "Card Type"
 msgstr "Tip kartice"
 
-#: shared/agentclient/IdentityRows.cpp:160
+#: shared/agentclient/IdentityRows.cpp:162
 #, kde-format
 msgctxt "@item:intable identity field (token label)"
 msgid "Label"
 msgstr "Naziv"
 
-#: shared/agentclient/IdentityRows.cpp:162
+#: shared/agentclient/IdentityRows.cpp:164
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Manufacturer"
 msgstr "Proizvođač"
 
-#: shared/agentclient/IdentityRows.cpp:173
+#: shared/agentclient/IdentityRows.cpp:175
 #, kde-format
 msgctxt "@title:group identity fields"
 msgid "Personal Data"
 msgstr "Lični podaci"
 
-#: shared/agentclient/IdentityRows.cpp:174
+#: shared/agentclient/IdentityRows.cpp:176
 #, kde-format
 msgctxt "@title:group identity fields"
 msgid "Document"
 msgstr "Dokument"
 
-#: shared/agentclient/IdentityRows.cpp:175
+#: shared/agentclient/IdentityRows.cpp:177
 #, kde-format
 msgctxt "@title:group identity fields"
 msgid "Issuing Information"
 msgstr "Podaci o izdavanju"
 
-#: shared/agentclient/IdentityRows.cpp:176
+#: shared/agentclient/IdentityRows.cpp:178
 #, kde-format
 msgctxt "@title:group identity fields"
 msgid "Additional Data"
 msgstr "Dodatni podaci"
 
-#: shared/agentclient/IdentityRows.cpp:177
+#: shared/agentclient/IdentityRows.cpp:179
 #, kde-format
 msgctxt "@title:group identity fields"
 msgid "National Data"
 msgstr "Nacionalni podaci"
 
-#: shared/agentclient/IdentityRows.cpp:178
+#: shared/agentclient/IdentityRows.cpp:180
 #, kde-format
 msgctxt "@title:group identity fields"
 msgid "Contacts"
 msgstr "Kontakti"
 
-#: shared/agentclient/IdentityRows.cpp:180
+#: shared/agentclient/IdentityRows.cpp:182
 #, kde-format
 msgctxt "@title:group identity fields"
 msgid "Travel Document Verification"
 msgstr "Provera podataka putne isprave"
 
-#: shared/agentclient/IdentityRows.cpp:183
+#: shared/agentclient/IdentityRows.cpp:185
 #, kde-format
 msgctxt "@title:group identity fields"
 msgid "Authentication"
 msgstr "Autentifikacija"
 
-#: shared/agentclient/IdentityRows.cpp:201
+#: shared/agentclient/IdentityRows.cpp:203
 #, kde-format
 msgctxt "@title:group identity fields"
 msgid "Additional Personal Data"
 msgstr "Dodatni lični podaci"
 
-#: shared/agentclient/IdentityRows.cpp:204
+#: shared/agentclient/IdentityRows.cpp:206
 #, kde-format
 msgctxt "@title:group identity fields"
 msgid "Additional Data Verification"
 msgstr "Provera dodatnih podataka"
 
-#: shared/agentclient/IdentityRows.cpp:250
+#: shared/agentclient/IdentityRows.cpp:294
 #, kde-format
 msgctxt "@item:intable security check outcome"
 msgid "Passed"
 msgstr "Uspešno"
 
-#: shared/agentclient/IdentityRows.cpp:251
+#: shared/agentclient/IdentityRows.cpp:295
 #, kde-format
 msgctxt "@item:intable security check outcome"
 msgid "Failed"
 msgstr "Neuspešno"
 
-#: shared/agentclient/IdentityRows.cpp:252
+#: shared/agentclient/IdentityRows.cpp:296
 #, kde-format
 msgctxt "@item:intable security check outcome"
 msgid "Not performed"
 msgstr "Nije izvršeno"
 
-#: shared/agentclient/IdentityRows.cpp:253
+#: shared/agentclient/IdentityRows.cpp:297
 #, kde-format
 msgctxt "@item:intable security check outcome"
 msgid "Not supported"
 msgstr "Nije podržano"
 
-#: shared/agentclient/IdentityRows.cpp:254
+#: shared/agentclient/IdentityRows.cpp:298
 #, kde-format
 msgctxt "@item:intable security check outcome"
 msgid "Skipped"
 msgstr "Preskočeno"
 
-#: shared/agentclient/IdentityRows.cpp:277
+#: shared/agentclient/IdentityRows.cpp:321
 #, kde-format
 msgctxt "@item:intable eMRTD access-control method"
 msgid "BAC"
 msgstr "BAC"
 
-#: shared/agentclient/IdentityRows.cpp:278
+#: shared/agentclient/IdentityRows.cpp:322
 #, kde-format
 msgctxt "@item:intable eMRTD access-control method"
 msgid "PACE (CAN)"
 msgstr "PACE (CAN)"
 
-#: shared/agentclient/IdentityRows.cpp:279
+#: shared/agentclient/IdentityRows.cpp:323
 #, kde-format
 msgctxt "@item:intable eMRTD access-control method"
 msgid "PACE (MRZ)"
 msgstr "PACE (MRZ)"
 
-#: shared/agentclient/IdentityRows.cpp:281
+#: shared/agentclient/IdentityRows.cpp:325
 #, kde-format
 msgctxt "@item:intable eMRTD access-control method"
 msgid "Chip Authentication"
 msgstr "Autentifikacija čipa"
 
-#: shared/agentclient/IdentityRows.cpp:283
+#: shared/agentclient/IdentityRows.cpp:327
 #, kde-format
 msgctxt "@item:intable eMRTD access-control method"
 msgid "None (plain read)"
 msgstr "Bez zaštite (otvoreno čitanje)"
 
-#: shared/agentclient/IdentityRows.cpp:324
+#: shared/agentclient/IdentityRows.cpp:422
 #, kde-format
 msgctxt "@item:intable identity field value (card carries no date)"
 msgid "Unknown"
