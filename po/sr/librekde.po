@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: librekde\n"
 "Report-Msgid-Bugs-To: https://librescrs.github.io/\n"
-"POT-Creation-Date: 2026-08-29 23:02+0200\n"
+"POT-Creation-Date: 2026-08-30 01:27+0200\n"
 "PO-Revision-Date: 2026-07-31\n"
 "Last-Translator: hirashix0\n"
 "Language-Team: Serbian\n"
@@ -1179,67 +1179,117 @@ msgctxt "@title:group identity fields"
 msgid "Additional Data Verification"
 msgstr "Провера додатних података"
 
-#: shared/agentclient/IdentityRows.cpp:294
+#: shared/agentclient/IdentityRows.cpp:303
+#, kde-format
+msgctxt "@item:intable why a security check came out as it did"
+msgid ""
+"No CSCA certificates have been imported. Import an ICAO master list so this "
+"document's signer can be checked."
+msgstr ""
+"Ниједан CSCA сертификат није увезен. Увезите ICAO мастер-листу да би "
+"потписник овог документа могао да се провери."
+
+#: shared/agentclient/IdentityRows.cpp:307
+#, kde-format
+msgctxt "@item:intable why a security check came out as it did"
+msgid ""
+"The CSCA trust store could not be read. Check that its directory exists and "
+"that its permissions allow reading."
+msgstr ""
+"Складиште CSCA сертификата се не може прочитати. Проверите да ли његов "
+"директоријум постоји и да ли дозволе допуштају читање."
+
+#: shared/agentclient/IdentityRows.cpp:311
+#, kde-format
+msgctxt "@item:intable why a security check came out as it did"
+msgid ""
+"The CSCA trust store holds no usable certificate. Import an ICAO master list "
+"again."
+msgstr ""
+"Складиште CSCA сертификата не садржи ниједан употребљив сертификат. Поново "
+"увезите ICAO мастер-листу."
+
+#: shared/agentclient/IdentityRows.cpp:314
+#, kde-format
+msgctxt "@item:intable why a security check came out as it did"
+msgid ""
+"No imported CSCA certificate belongs to this document's issuer. Import a "
+"master list that covers the issuing country."
+msgstr ""
+"Ниједан увезени CSCA сертификат не припада издаваоцу овог документа. Увезите "
+"мастер-листу која покрива државу издаваоца."
+
+#: shared/agentclient/IdentityRows.cpp:318
+#, kde-format
+msgctxt "@item:intable why a security check came out as it did"
+msgid ""
+"This document's signer does not chain to any imported CSCA certificate. Do "
+"not rely on this document; check it with the issuing authority."
+msgstr ""
+"Потписник овог документа се не повезује ни са једним увезеним CSCA "
+"сертификатом. Не ослањајте се на овај документ; проверите га код издаваоца."
+
+#: shared/agentclient/IdentityRows.cpp:346
 #, kde-format
 msgctxt "@item:intable security check outcome"
 msgid "Passed"
 msgstr "Успешно"
 
-#: shared/agentclient/IdentityRows.cpp:295
+#: shared/agentclient/IdentityRows.cpp:347
 #, kde-format
 msgctxt "@item:intable security check outcome"
 msgid "Failed"
 msgstr "Неуспешно"
 
-#: shared/agentclient/IdentityRows.cpp:296
+#: shared/agentclient/IdentityRows.cpp:348
 #, kde-format
 msgctxt "@item:intable security check outcome"
 msgid "Not performed"
 msgstr "Није извршено"
 
-#: shared/agentclient/IdentityRows.cpp:297
+#: shared/agentclient/IdentityRows.cpp:349
 #, kde-format
 msgctxt "@item:intable security check outcome"
 msgid "Not supported"
 msgstr "Није подржано"
 
-#: shared/agentclient/IdentityRows.cpp:298
+#: shared/agentclient/IdentityRows.cpp:350
 #, kde-format
 msgctxt "@item:intable security check outcome"
 msgid "Skipped"
 msgstr "Прескочено"
 
-#: shared/agentclient/IdentityRows.cpp:321
+#: shared/agentclient/IdentityRows.cpp:373
 #, kde-format
 msgctxt "@item:intable eMRTD access-control method"
 msgid "BAC"
 msgstr "BAC"
 
-#: shared/agentclient/IdentityRows.cpp:322
+#: shared/agentclient/IdentityRows.cpp:374
 #, kde-format
 msgctxt "@item:intable eMRTD access-control method"
 msgid "PACE (CAN)"
 msgstr "PACE (CAN)"
 
-#: shared/agentclient/IdentityRows.cpp:323
+#: shared/agentclient/IdentityRows.cpp:375
 #, kde-format
 msgctxt "@item:intable eMRTD access-control method"
 msgid "PACE (MRZ)"
 msgstr "PACE (MRZ)"
 
-#: shared/agentclient/IdentityRows.cpp:325
+#: shared/agentclient/IdentityRows.cpp:377
 #, kde-format
 msgctxt "@item:intable eMRTD access-control method"
 msgid "Chip Authentication"
 msgstr "Аутентификација чипа"
 
-#: shared/agentclient/IdentityRows.cpp:327
+#: shared/agentclient/IdentityRows.cpp:379
 #, kde-format
 msgctxt "@item:intable eMRTD access-control method"
 msgid "None (plain read)"
 msgstr "Без заштите (отворено читање)"
 
-#: shared/agentclient/IdentityRows.cpp:422
+#: shared/agentclient/IdentityRows.cpp:499
 #, kde-format
 msgctxt "@item:intable identity field value (card carries no date)"
 msgid "Unknown"

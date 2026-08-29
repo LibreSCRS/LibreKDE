@@ -25,9 +25,11 @@
 #include <gtest/gtest.h>
 
 using LibreKDE::isHiddenIdentityRow;
+using LibreKDE::localizedCheckReason;
 using LibreKDE::localizedFieldLabel;
 using LibreKDE::localizedFieldValue;
 using LibreKDE::localizedGroupLabel;
+using LibreKDE::mappedCheckReasonKeys;
 using LibreKDE::mappedGroupKeys;
 using LibreKDE::mappedLabelKeys;
 using LibreSCRS::AgentClient::IdentityRow;
@@ -304,16 +306,21 @@ TEST(IdentityValue, VerdictTokensRenderAsSentences)
 }
 
 // A verdict may carry a parenthetical the plugin authored. It is the only
-// specific record of WHY, no catalog can hold it, and it must survive.
+// specific record of WHY those checks have, no catalog can hold it, and it must
+// survive. The reason key does NOT retire this passthrough: it retires the
+// English sentence at the producer, for the one check that now ships a key. The
+// example here is deliberately a check that ships no reason — the CSCA sentence
+// this used to name is gone from the producer, and a test that keeps asserting
+// it would be pinning a string nobody sends.
 TEST(IdentityValue, VerdictDetailSurvivesTranslation)
 {
     KLocalizedString::setLanguages({QStringLiteral("sr")});
     IdentityRow row;
     row.groupKey = QStringLiteral("security_status");
-    row.value = QStringLiteral("NOT_PERFORMED (No CSCA trust store configured)");
+    row.value = QStringLiteral("FAILED (DG2 hash mismatch)");
     const QString out = localizedFieldValue(row);
-    EXPECT_TRUE(out.startsWith(QString::fromUtf8("Није извршено"))) << qPrintable(out);
-    EXPECT_TRUE(out.contains(QStringLiteral("(No CSCA trust store configured)"))) << qPrintable(out);
+    EXPECT_TRUE(out.startsWith(QString::fromUtf8("Неуспешно"))) << qPrintable(out);
+    EXPECT_TRUE(out.contains(QStringLiteral("(DG2 hash mismatch)"))) << qPrintable(out);
     KLocalizedString::clearLanguages();
 }
 
@@ -420,6 +427,76 @@ TEST(IdentityGroupLabel, AnnexHasAReadingOrderAndOtherGroupsDoNot)
     const QStringList security = LibreKDE::fieldOrderForGroup(QStringLiteral("annex.rs.security"));
     EXPECT_EQ(security, (QStringList{QStringLiteral("annex_integrity"), QStringLiteral("annex_authenticity")}))
         << "integrity leads the verdict pair, matching the desktop client";
+}
+
+// The five CSCA reason keys, in Serbian, asserted by CONTENT. These are the
+// only place a reader is told what to DO about a chain check that did not run,
+// so a key that resolves to nothing (or to itself) is the whole feature
+// missing. Each names the remedy, not just the condition — "not configured" and
+// "could not be read" want different instructions, which is why the wire
+// carries a reason key at all rather than one status.
+TEST(IdentityCheckReason, EveryReasonResolvesToSerbian)
+{
+    KLocalizedString::setLanguages({QStringLiteral("sr")});
+    EXPECT_EQ(localizedCheckReason(QStringLiteral("csca.not-configured")),
+              QString::fromUtf8("Ниједан CSCA сертификат није увезен. Увезите ICAO мастер-листу да би "
+                                "потписник овог документа могао да се провери."));
+    EXPECT_EQ(localizedCheckReason(QStringLiteral("csca.anchors-unreadable")),
+              QString::fromUtf8("Складиште CSCA сертификата се не може прочитати. Проверите да ли његов "
+                                "директоријум постоји и да ли дозволе допуштају читање."));
+    EXPECT_EQ(localizedCheckReason(QStringLiteral("csca.anchors-undecodable")),
+              QString::fromUtf8("Складиште CSCA сертификата не садржи ниједан употребљив сертификат. "
+                                "Поново увезите ICAO мастер-листу."));
+    EXPECT_EQ(localizedCheckReason(QStringLiteral("csca.no-anchor-for-issuer")),
+              QString::fromUtf8("Ниједан увезени CSCA сертификат не припада издаваоцу овог документа. "
+                                "Увезите мастер-листу која покрива државу издаваоца."));
+    EXPECT_EQ(localizedCheckReason(QStringLiteral("csca.chain-failed")),
+              QString::fromUtf8("Потписник овог документа се не повезује ни са једним увезеним CSCA "
+                                "сертификатом. Не ослањајте се на овај документ; проверите га код издаваоца."));
+    KLocalizedString::clearLanguages();
+}
+
+// Same three-step the field labels take: catalog hit, else the text the
+// producer authored, else the raw key. Never blank, never the word "unknown" —
+// a reason this build cannot name still has to leave the reader something to
+// quote in a bug report.
+TEST(IdentityCheckReason, UnknownKeyDegradesRatherThanErasing)
+{
+    KLocalizedString::setLanguages({QStringLiteral("sr")});
+    EXPECT_EQ(localizedCheckReason(QStringLiteral("csca.invented-later"), QStringLiteral("agent sentence")),
+              QStringLiteral("agent sentence"));
+    EXPECT_EQ(localizedCheckReason(QStringLiteral("csca.invented-later")), QStringLiteral("csca.invented-later"));
+    EXPECT_FALSE(localizedCheckReason(QStringLiteral("csca.invented-later")).isEmpty());
+    KLocalizedString::clearLanguages();
+}
+
+TEST(IdentityCheckReason, MappedReasonKeyCoverageIsPinned)
+{
+    const QStringList keys = mappedCheckReasonKeys();
+    EXPECT_EQ(keys.size(), 5);
+    // Exactly one of the five accuses the document; the other four describe the
+    // reader's own configuration and must never be reported as FAILED.
+    EXPECT_TRUE(keys.contains(QStringLiteral("csca.not-configured")));
+    EXPECT_TRUE(keys.contains(QStringLiteral("csca.anchors-unreadable")));
+    EXPECT_TRUE(keys.contains(QStringLiteral("csca.anchors-undecodable")));
+    EXPECT_TRUE(keys.contains(QStringLiteral("csca.no-anchor-for-issuer")));
+    EXPECT_TRUE(keys.contains(QStringLiteral("csca.chain-failed")));
+}
+
+// No two reasons may share a string: the five exist precisely because one
+// message for all of them sends the reader looking in the wrong place.
+TEST(IdentityCheckReason, NoTwoReasonsShareAMessage)
+{
+    KLocalizedString::setLanguages({QStringLiteral("sr")});
+    QStringList seen;
+    for (const QString& key : mappedCheckReasonKeys()) {
+        const QString text = localizedCheckReason(key);
+        EXPECT_FALSE(text.isEmpty()) << qPrintable(key);
+        EXPECT_NE(text, key) << qPrintable(key) << " has no translation of its own";
+        EXPECT_FALSE(seen.contains(text)) << qPrintable(key) << " repeats another reason's message";
+        seen << text;
+    }
+    KLocalizedString::clearLanguages();
 }
 
 int main(int argc, char** argv)

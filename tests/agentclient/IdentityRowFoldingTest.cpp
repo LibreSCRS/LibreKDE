@@ -99,9 +99,11 @@ TEST(IdentityRowFolding, StillRendersTheJoinedShapeUntilTheProducerMoves)
         << "the old shape must keep working while the producer still sends it";
 }
 
-// An unrecognised suffix (category, error, and reason before a later change
-// teaches this file its vocabulary) must not surface as its own row — it
-// would appear before any catalog exists to render it meaningfully.
+// An unrecognised suffix — category and error, which this build reads and has
+// no vocabulary for, and any suffix a newer agent appends — must not surface as
+// its own row: it would appear before any catalog exists to render it
+// meaningfully. `reason` used to sit in this list; it is recognised now, and
+// its own tests below say what it renders as instead.
 TEST(IdentityRowFolding, UnknownSuffixIsDroppedNotRendered)
 {
     const auto rows = rowsFor("security_status", {
@@ -110,12 +112,106 @@ TEST(IdentityRowFolding, UnknownSuffixIsDroppedNotRendered)
                                                      {"check_0_status", "", "NOT_PERFORMED"},
                                                      {"check_0_category", "", "passive_authentication"},
                                                      {"check_0_error", "", "raw diagnostic text"},
-                                                     {"check_0_reason", "", "csca.not-configured"},
+                                                     {"check_0_futuresuffix", "", "something a newer agent sends"},
                                                  });
     ASSERT_EQ(rows.size(), 1) << "an unrecognised suffix must not become its own row";
     EXPECT_EQ(rows[0].label, QStringLiteral("CSCA Certificate Chain"));
     EXPECT_EQ(rows[0].value, localizedNotPerformed())
-        << "category/error/reason must not leak into the rendered value either";
+        << "category/error/an unknown suffix must not leak into the rendered value either";
+}
+
+// The whole point of the reason key: the check says WHAT TO DO, and says it in
+// the reader's language. Each of the five reasons is pinned by content, because
+// a reason that names the condition without naming the remedy leaves the reader
+// exactly where the English sentence this replaces left them.
+TEST(IdentityRowFolding, EveryReasonRendersAsAnInstruction)
+{
+    struct Case
+    {
+        const char* status;
+        const char* reasonKey;
+        const char* english;
+    };
+    // Four of the five are NOT_PERFORMED. Only a chain that was really
+    // attempted and really failed is FAILED — the accusation verdict — and a
+    // store nobody finished configuring must never produce it.
+    static const std::array<Case, 5> cases{{
+        {"NOT_PERFORMED", "csca.not-configured",
+         "No CSCA certificates have been imported. Import an ICAO master list so this document's signer "
+         "can be checked."},
+        {"NOT_PERFORMED", "csca.anchors-unreadable",
+         "The CSCA trust store could not be read. Check that its directory exists and that its "
+         "permissions allow reading."},
+        {"NOT_PERFORMED", "csca.anchors-undecodable",
+         "The CSCA trust store holds no usable certificate. Import an ICAO master list again."},
+        {"NOT_PERFORMED", "csca.no-anchor-for-issuer",
+         "No imported CSCA certificate belongs to this document's issuer. Import a master list that "
+         "covers the issuing country."},
+        {"FAILED", "csca.chain-failed",
+         "This document's signer does not chain to any imported CSCA certificate. Do not rely on this "
+         "document; check it with the issuing authority."},
+    }};
+
+    for (const Case& c : cases) {
+        const auto rows = rowsFor("security_status", {
+                                                         {"check_0_id", "", "pa_csca_chain"},
+                                                         {"check_0_label", "", "CSCA Certificate Chain"},
+                                                         {"check_0_status", "", c.status},
+                                                         {"check_0_reason", "", c.reasonKey},
+                                                     });
+        ASSERT_EQ(rows.size(), 1) << c.reasonKey;
+        EXPECT_TRUE(rows[0].value.endsWith(QStringLiteral(" (") + QString::fromUtf8(c.english) + QLatin1Char(')')))
+            << c.reasonKey << " rendered as: " << rows[0].value.toStdString();
+        EXPECT_FALSE(rows[0].value.contains(QStringLiteral("csca."))) << "the raw key must not reach a reader";
+    }
+}
+
+// A newer agent may ship a reason key this build has never heard of. It must
+// DEGRADE — the same three-step the field labels already take (catalog hit, else
+// the producer's own text, else the raw key) — never blank the row and never
+// print the word "unknown".
+TEST(IdentityRowFolding, UnknownReasonKeyDegradesToTheProducersDetail)
+{
+    const auto rows = rowsFor("security_status", {
+                                                     {"check_0_id", "", "pa_csca_chain"},
+                                                     {"check_0_label", "", "CSCA Certificate Chain"},
+                                                     {"check_0_status", "", "NOT_PERFORMED"},
+                                                     {"check_0_reason", "", "csca.something-invented-later"},
+                                                     {"check_0_detail", "", "a sentence the newer agent wrote"},
+                                                 });
+    ASSERT_EQ(rows.size(), 1);
+    EXPECT_EQ(rows[0].value, localizedNotPerformed() + QStringLiteral(" (a sentence the newer agent wrote)"));
+}
+
+TEST(IdentityRowFolding, UnknownReasonKeyWithNoDetailShowsTheKeyRatherThanNothing)
+{
+    const auto rows = rowsFor("security_status", {
+                                                     {"check_0_id", "", "pa_csca_chain"},
+                                                     {"check_0_label", "", "CSCA Certificate Chain"},
+                                                     {"check_0_status", "", "NOT_PERFORMED"},
+                                                     {"check_0_reason", "", "csca.something-invented-later"},
+                                                 });
+    ASSERT_EQ(rows.size(), 1);
+    EXPECT_EQ(rows[0].value, localizedNotPerformed() + QStringLiteral(" (csca.something-invented-later)"))
+        << "erasing the row would tell the reader nothing at all";
+}
+
+// A recognised reason and a detail together: the reason wins. Two parentheticals
+// on one row is noise, and the reason is the half a catalog can translate — the
+// producer that sends a reason has already replaced its English sentence.
+TEST(IdentityRowFolding, ARecognisedReasonSupersedesTheProducersDetail)
+{
+    const auto rows = rowsFor("security_status", {
+                                                     {"check_0_id", "", "pa_csca_chain"},
+                                                     {"check_0_label", "", "CSCA Certificate Chain"},
+                                                     {"check_0_status", "", "NOT_PERFORMED"},
+                                                     {"check_0_reason", "", "csca.not-configured"},
+                                                     {"check_0_detail", "", "No CSCA trust store configured"},
+                                                 });
+    ASSERT_EQ(rows.size(), 1);
+    EXPECT_FALSE(rows[0].value.contains(QStringLiteral("No CSCA trust store configured")))
+        << "the English sentence the key replaces must not ride along beside it";
+    EXPECT_EQ(rows[0].value.count(QLatin1Char('(')), 1);
 }
 
 // check_N_detail is appended only when present — a check with no detail must

@@ -281,13 +281,65 @@ struct FoldedCheck
     QHash<QString, QString> fieldsBySuffix;
 };
 
+// Frozen `check_<N>_reason` key -> the instruction a reader acts on, in the
+// `librekde` domain and resolved per lookup, exactly like labelTable() above.
+//
+// These five are the passive-authentication CSCA chain check's vocabulary. Four
+// of them describe THIS MACHINE's configuration and reach the wire as
+// NOT_PERFORMED; only `csca.chain-failed` is FAILED, which is the accusation
+// verdict — a trust store nobody finished setting up must never produce it, and
+// the copy must not read as if it had.
+//
+// Each names the REMEDY, not just the condition. "No CSCA trust store
+// configured" — the English sentence these replace — told a reader what was
+// wrong and left them there; a store that is missing and a store that cannot be
+// read need different instructions, which is the whole reason the wire carries
+// a key instead of one status.
+const QHash<QString, KLocalizedString>& checkReasonTable()
+{
+    static const auto* const table = new QHash<QString, KLocalizedString>{
+        {QStringLiteral("csca.not-configured"),
+         ki18ndc("librekde", "@item:intable why a security check came out as it did",
+                 "No CSCA certificates have been imported. Import an ICAO master list so this document's "
+                 "signer can be checked.")},
+        {QStringLiteral("csca.anchors-unreadable"),
+         ki18ndc("librekde", "@item:intable why a security check came out as it did",
+                 "The CSCA trust store could not be read. Check that its directory exists and that its "
+                 "permissions allow reading.")},
+        {QStringLiteral("csca.anchors-undecodable"),
+         ki18ndc("librekde", "@item:intable why a security check came out as it did",
+                 "The CSCA trust store holds no usable certificate. Import an ICAO master list again.")},
+        {QStringLiteral("csca.no-anchor-for-issuer"),
+         ki18ndc("librekde", "@item:intable why a security check came out as it did",
+                 "No imported CSCA certificate belongs to this document's issuer. Import a master list that "
+                 "covers the issuing country.")},
+        {QStringLiteral("csca.chain-failed"),
+         ki18ndc("librekde", "@item:intable why a security check came out as it did",
+                 "This document's signer does not chain to any imported CSCA certificate. Do not rely on "
+                 "this document; check it with the issuing authority.")},
+    };
+    return *table;
+}
+
 /// The status token at the head of @p value, localized; empty when @p value does
 /// not start with one this build names.
 ///
-/// A verdict may carry a parenthetical the plugin authored — "NOT_PERFORMED (No
-/// CSCA trust store configured)". The token is translated and the remainder is
-/// kept verbatim: it is the only specific record of WHY, and no catalog can
-/// hold it.
+/// A verdict may carry a parenthetical. The token is translated and the
+/// remainder is kept VERBATIM, and that passthrough stays even though the
+/// reason key now exists — because the two carry different things and only one
+/// of them is a reason:
+///
+///  - a check that ships `check_N_reason` has already had its parenthetical
+///    resolved to localized copy by `foldSecurityCheckFields`, so what reaches
+///    here is finished text in the reader's language and must not be touched;
+///  - the joined shape, and any check that ships only `check_N_detail`, put
+///    the plugin's own English there. It is the only specific record of WHY
+///    those checks have, and no catalog can hold it. Dropping the passthrough
+///    would blank it and tell the reader strictly less.
+///
+/// What the reason key retires is the English sentence AT THE PRODUCER — the
+/// eMRTD plugin no longer authors one for the CSCA chain check — not the
+/// transport that carries whatever a producer still does author.
 QString localizedStatusToken(const QString& value)
 {
     static const QHash<QString, KLocalizedString> tokens{
@@ -332,6 +384,22 @@ QString localizedAuthMethod(const QString& value)
 
 } // namespace
 
+QString localizedCheckReason(const QString& reasonKey, const QString& detail)
+{
+    if (const auto it = checkReasonTable().constFind(reasonKey); it != checkReasonTable().constEnd()) {
+        return it->toString();
+    }
+    if (!detail.isEmpty()) {
+        return detail;
+    }
+    return reasonKey;
+}
+
+QStringList mappedCheckReasonKeys()
+{
+    return checkReasonTable().keys();
+}
+
 QList<LibreSCRS::AgentClient::IdentityRow>
 foldSecurityCheckFields(const QList<LibreSCRS::AgentClient::IdentityRow>& rows)
 {
@@ -374,12 +442,21 @@ foldSecurityCheckFields(const QList<LibreSCRS::AgentClient::IdentityRow>& rows)
         folded.fieldKey = check.fieldsBySuffix.value(QStringLiteral("id"), QStringLiteral("check_") + check.index);
         folded.labelFallback = check.fieldsBySuffix.value(QStringLiteral("label"), folded.fieldKey);
         QString value = check.fieldsBySuffix.value(QStringLiteral("status"));
-        if (const QString detail = check.fieldsBySuffix.value(QStringLiteral("detail")); !detail.isEmpty()) {
-            value += QStringLiteral(" (") + detail + QLatin1Char(')');
+        // The explanation, in the reader's language where one exists. A reason
+        // key SUPERSEDES the plugin's detail rather than joining it: a producer
+        // that ships a reason has already replaced its English sentence with
+        // the key, so appending both would print the sentence the key retired.
+        // The detail stays the fallback for a reason this build cannot name,
+        // and the only explanation a check that ships no reason at all has.
+        const QString reasonKey = check.fieldsBySuffix.value(QStringLiteral("reason"));
+        const QString detail = check.fieldsBySuffix.value(QStringLiteral("detail"));
+        const QString explanation = reasonKey.isEmpty() ? detail : localizedCheckReason(reasonKey, detail);
+        if (!explanation.isEmpty()) {
+            value += QStringLiteral(" (") + explanation + QLatin1Char(')');
         }
         folded.value = value;
-        // Every other suffix collected above (category, error, and reason once
-        // a later change adds it) is read no further here: dropped, not
+        // Every remaining suffix collected above (category, error, and whatever
+        // a newer agent appends) is read no further here: dropped, not
         // rendered, until this file is taught its vocabulary.
         out[check.slot] = folded;
     }

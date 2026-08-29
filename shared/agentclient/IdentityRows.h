@@ -65,15 +65,44 @@ namespace LibreKDE {
 /// its FIRST field occupied, and every other row keeps its own position.
 ///
 /// The folded row's label comes from `check_N_label`, falling back to
-/// `check_N_id`; its value from `check_N_status`, with `check_N_detail`
-/// appended in parentheses only when present — the joined shape's own
+/// `check_N_id`; its value from `check_N_status`, followed in parentheses by
+/// the check's explanation when it has one — the joined shape's own
 /// `"STATUS (detail)"` spelling, so `localizedFieldValue` needs no change to
-/// translate either shape. Every other suffix (`category`, `error`, and
-/// `reason` once a later change adds it) is read and DROPPED, not rendered as
-/// an unknown row — until this file is taught that suffix's vocabulary, an
-/// unrecognised one must disappear rather than surface as a raw row.
+/// translate either shape.
+///
+/// The explanation is `check_N_reason` resolved through `localizedCheckReason`
+/// when the check carries one, and the plugin's own `check_N_detail`
+/// otherwise. A reason SUPERSEDES a detail rather than joining it: two
+/// parentheticals on one row is noise, and a producer that ships a reason has
+/// already replaced its English sentence with the key.
+///
+/// Every remaining suffix (`category`, `error`, and anything a newer agent
+/// appends) is read and DROPPED, not rendered as an unknown row — until this
+/// file is taught that suffix's vocabulary, an unrecognised one must disappear
+/// rather than surface as a raw row.
 [[nodiscard]] QList<LibreSCRS::AgentClient::IdentityRow>
 foldSecurityCheckFields(const QList<LibreSCRS::AgentClient::IdentityRow>& rows);
+
+/// @brief Resolve a security check's `check_N_reason` KEY into the sentence a
+///        reader is meant to act on.
+///
+/// A verdict alone strands the reader: "Not performed" over a travel document
+/// says nothing about whether the document is suspect or the machine simply has
+/// no trust anchors yet, and those two want opposite responses. The plugin
+/// therefore ships a frozen reason key instead of an English sentence, and this
+/// is where that key becomes copy that names the REMEDY — "import a master
+/// list", "check the directory's permissions" — rather than restating the
+/// condition.
+///
+/// Resolution order is `localizedFieldLabel`'s, for the same reason: the
+/// translated instruction for a KNOWN key; else the producer-authored
+/// @p detail; else the raw key. Never empty and never the word "unknown" — a
+/// newer agent may name a reason this build has never heard of, and blanking
+/// the explanation would hide a verdict that is being reported correctly.
+[[nodiscard]] QString localizedCheckReason(const QString& reasonKey, const QString& detail = {});
+
+/// @brief Every reason key the table maps, so a test can pin the set.
+[[nodiscard]] QStringList mappedCheckReasonKeys();
 
 /// @brief Resolve an identity field's display label, localized.
 ///
