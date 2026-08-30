@@ -271,11 +271,11 @@ IdentityResult AgentCardDataSource::readIdentity(const QString& cardId)
         return result;
     }
 
-    // Fold a security check's several `check_<N>_<suffix>` wire fields into
-    // one row (tolerant of the joined shape too) BEFORE the per-row loop,
-    // since it changes row count — same rule the plasmoid applies.
-    for (const Client::IdentityRow& row :
-         foldSecurityCheckFields(Client::flattenIdentityFields(op->identityResult()))) {
+    // Shared row assembly: the client library separates each security check's
+    // several `check_<N>_<suffix>` wire fields into one row (reading the joined
+    // shape too) and flattens everything else. It changes row count, so it runs
+    // BEFORE the per-row loop — same rule the plasmoid applies.
+    for (const Client::IdentityRow& row : identityRows(op->identityResult())) {
         if (isHiddenIdentityRow(row)) {
             continue;
         }

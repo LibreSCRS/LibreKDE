@@ -1,17 +1,25 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // SPDX-FileCopyrightText: 2026 hirashix0
 //
-// Pins `foldSecurityCheckFields` against BOTH shapes a plugin may ship a
-// security check as: the joined shape (one field per check, key = the check
-// id, value "STATUS (detail)") and the structured shape (several
-// `check_<N>_<suffix>` fields). The client must render one readable row per
-// check either way — the structured shape must not explode into one row per
-// wire field, and the joined shape must keep rendering exactly as it does
-// today while the producer still sends it.
+// Pins the ROWS a LibreKDE surface draws for a security-verdict group, against
+// both shapes a plugin may ship a check as: the joined shape (one field per
+// check, key = the check id, value "STATUS (detail)") and the structured shape
+// (several `check_<N>_<suffix>` fields). One readable row per check either
+// way — the structured shape must not explode into one row per wire field, and
+// the joined shape must keep rendering exactly as it does today while the
+// producer still sends it.
+//
+// The wire shape itself is read by the client library
+// (`LibreSCRS::AgentClient::separateSecurityChecks`), which every client that
+// builds it shares; what this file measures is what a READER ends up seeing
+// after this repository's own label, value and reason catalogues have had
+// their say. These are claims about the screen, not about which function does
+// the separating.
 
 #include "IdentityRows.h"
 
 #include <LibreSCRS/AgentClient/IdentityRows.h>
+#include <LibreSCRS/AgentClient/Types.h>
 
 #include <gtest/gtest.h>
 
@@ -19,6 +27,8 @@
 #include <initializer_list>
 #include <ostream>
 
+using LibreSCRS::AgentClient::Field;
+using LibreSCRS::AgentClient::FieldGroup;
 using LibreSCRS::AgentClient::IdentityRow;
 
 // Readable QString diagnostics on a mismatch — see the identical note in
@@ -32,8 +42,8 @@ inline void PrintTo(const QString& value, std::ostream* os)
 namespace {
 
 /// One rendered row: the label and value a view actually draws, produced the
-/// same way SmartCardHandler and AgentCardDataSource produce them — fold the
-/// group's raw wire rows, then resolve each survivor's label and value
+/// same way SmartCardHandler and AgentCardDataSource produce them — assemble
+/// the group's wire fields into rows, then resolve each row's label and value
 /// through the SAME host-side functions every LibreKDE surface uses.
 struct RenderedRow
 {
@@ -41,37 +51,56 @@ struct RenderedRow
     QString value;
 };
 
-/// Builds one group's raw wire rows from (fieldKey, labelFallback, value)
-/// triples and runs them through the production fold + render path.
+/// Builds one wire group from (fieldKey, labelFallback, value) triples and runs
+/// it through the production assembly + render path.
 QList<RenderedRow> rowsFor(const char* groupKey, std::initializer_list<std::array<const char*, 3>> fields)
 {
-    QList<IdentityRow> raw;
-    raw.reserve(static_cast<qsizetype>(fields.size()));
+    FieldGroup group;
+    group.key = QString::fromUtf8(groupKey);
+    group.fields.reserve(static_cast<qsizetype>(fields.size()));
     for (const std::array<const char*, 3>& field : fields) {
-        IdentityRow row;
-        row.groupKey = QString::fromUtf8(groupKey);
-        row.fieldKey = QString::fromUtf8(field[0]);
-        row.labelFallback = QString::fromUtf8(field[1]);
-        row.value = QString::fromUtf8(field[2]);
-        raw.append(row);
+        Field wire;
+        wire.key = QString::fromUtf8(field[0]);
+        wire.value = QString::fromUtf8(field[2]);
+        // The canonical wire-metadata key, spelled as the agent ships it; the
+        // library's flatten reads the display fallback from here.
+        wire.extra.insert(QStringLiteral("labelFallback"), QString::fromUtf8(field[1]));
+        group.fields.append(wire);
     }
 
     QList<RenderedRow> rendered;
-    for (const IdentityRow& row : LibreKDE::foldSecurityCheckFields(raw)) {
+    for (const IdentityRow& row : LibreKDE::identityRows({group})) {
         rendered.append({LibreKDE::localizedFieldLabel(row), LibreKDE::localizedFieldValue(row)});
     }
     return rendered;
 }
 
-/// The localized "NOT_PERFORMED" verdict token, resolved through the SAME
-/// path production uses — never a hard-coded string, so this stays correct
-/// under whatever language the test process happens to run in.
-QString localizedNotPerformed()
+/// A verdict token localized through the SAME path production uses — never a
+/// hard-coded string, so these stay correct under whatever language the test
+/// process happens to run in.
+QString localizedVerdict(const char* token)
 {
     IdentityRow row;
     row.groupKey = QStringLiteral("security_status");
-    row.value = QStringLiteral("NOT_PERFORMED");
+    row.value = QString::fromUtf8(token);
     return LibreKDE::localizedFieldValue(row);
+}
+
+QString localizedNotPerformed()
+{
+    return localizedVerdict("NOT_PERFORMED");
+}
+
+/// Every label in @p rows, so a claim about WHICH rows exist can be made
+/// without also claiming what order they came in — invariant 2 of the
+/// identity-render contract (shared/agentclient/IdentityRows.h).
+QStringList labelsOf(const QList<RenderedRow>& rows)
+{
+    QStringList labels;
+    for (const RenderedRow& row : rows) {
+        labels << row.label;
+    }
+    return labels;
 }
 
 } // namespace
@@ -95,6 +124,7 @@ TEST(IdentityRowFolding, StillRendersTheJoinedShapeUntilTheProducerMoves)
                                        {"pa_csca_chain", "CSCA Certificate Chain", "NOT_PERFORMED (no store)"},
                                    });
     ASSERT_EQ(rows.size(), 1);
+    EXPECT_EQ(rows[0].label, QStringLiteral("CSCA Certificate Chain"));
     EXPECT_TRUE(rows[0].value.endsWith(QStringLiteral(" (no store)")))
         << "the old shape must keep working while the producer still sends it";
 }
@@ -238,4 +268,49 @@ TEST(IdentityRowFolding, NonVerdictGroupsAreNeverFolded)
     ASSERT_EQ(rows.size(), 1);
     EXPECT_EQ(rows[0].label, QStringLiteral("Some Field"));
     EXPECT_EQ(rows[0].value, QStringLiteral("some_value"));
+}
+
+// Checks are ordered by their ordinal read as a NUMBER, so the eleventh check
+// follows the third. Identity crosses the wire as map-of-maps and so arrives
+// sorted by key TEXT, where "check_10_" sits between "check_1_" and "check_2_";
+// an assembly that took each check's position from where its first field landed
+// wedged the eleventh check into the middle of the list. This is the one row
+// ORDER claim in this file, and it is the client library's own documented
+// promise rather than a shape this repository chose.
+TEST(IdentityRowFolding, ChecksAreOrderedByNumericOrdinalNotByKeyText)
+{
+    const auto rows = rowsFor("security_status", {
+                                                     // Arrival order: key-sorted, exactly as the wire delivers it.
+                                                     {"check_10_id", "", "eleventh"},
+                                                     {"check_10_label", "", "Eleventh Check"},
+                                                     {"check_10_status", "", "PASSED"},
+                                                     {"check_2_id", "", "third"},
+                                                     {"check_2_label", "", "Third Check"},
+                                                     {"check_2_status", "", "PASSED"},
+                                                 });
+    ASSERT_EQ(rows.size(), 2);
+    EXPECT_EQ(rows[0].label, QStringLiteral("Third Check"));
+    EXPECT_EQ(rows[1].label, QStringLiteral("Eleventh Check"));
+}
+
+// The group's aggregate roll-ups are neither swallowed by the check separation
+// nor mistaken for a check of their own: they keep their row, and their value
+// still goes through the verdict vocabulary. Asserted as a SET, because no view
+// may depend on the order these arrive in.
+TEST(IdentityRowFolding, AggregateVerdictsSurviveBesideTheChecks)
+{
+    const auto rows = rowsFor("security_status", {
+                                                     {"check_0_id", "", "pa_csca_chain"},
+                                                     {"check_0_label", "", "CSCA Certificate Chain"},
+                                                     {"check_0_status", "", "NOT_PERFORMED"},
+                                                     {"overall_integrity", "Data Integrity", "PASSED"},
+                                                 });
+    ASSERT_EQ(rows.size(), 2) << "the roll-up must not be swallowed by the check separation";
+    EXPECT_EQ(labelsOf(rows).count(QStringLiteral("CSCA Certificate Chain")), 1);
+    EXPECT_EQ(labelsOf(rows).count(QStringLiteral("Data Integrity")), 1);
+    for (const RenderedRow& row : rows) {
+        if (row.label == QStringLiteral("Data Integrity")) {
+            EXPECT_EQ(row.value, localizedVerdict("PASSED"));
+        }
+    }
 }

@@ -1180,7 +1180,7 @@ msgctxt "@title:group identity fields"
 msgid "Additional Data Verification"
 msgstr "Provera dodatnih podataka"
 
-#: shared/agentclient/IdentityRows.cpp:303
+#: shared/agentclient/IdentityRows.cpp:252
 #, kde-format
 msgctxt "@item:intable why a security check came out as it did"
 msgid ""
@@ -1190,7 +1190,7 @@ msgstr ""
 "Nijedan CSCA sertifikat nije uvezen. Uvezite ICAO master-listu da bi "
 "potpisnik ovog dokumenta mogao da se proveri."
 
-#: shared/agentclient/IdentityRows.cpp:307
+#: shared/agentclient/IdentityRows.cpp:256
 #, kde-format
 msgctxt "@item:intable why a security check came out as it did"
 msgid ""
@@ -1200,7 +1200,7 @@ msgstr ""
 "Skladište CSCA sertifikata se ne može pročitati. Proverite da li njegov "
 "direktorijum postoji i da li dozvole dopuštaju čitanje."
 
-#: shared/agentclient/IdentityRows.cpp:311
+#: shared/agentclient/IdentityRows.cpp:260
 #, kde-format
 msgctxt "@item:intable why a security check came out as it did"
 msgid ""
@@ -1210,7 +1210,7 @@ msgstr ""
 "Skladište CSCA sertifikata ne sadrži nijedan upotrebljiv sertifikat. Ponovo "
 "uvezite ICAO master-listu."
 
-#: shared/agentclient/IdentityRows.cpp:314
+#: shared/agentclient/IdentityRows.cpp:263
 #, kde-format
 msgctxt "@item:intable why a security check came out as it did"
 msgid ""
@@ -1220,7 +1220,7 @@ msgstr ""
 "Nijedan uvezeni CSCA sertifikat ne pripada izdavaocu ovog dokumenta. Uvezite "
 "master-listu koja pokriva državu izdavaoca."
 
-#: shared/agentclient/IdentityRows.cpp:318
+#: shared/agentclient/IdentityRows.cpp:267
 #, kde-format
 msgctxt "@item:intable why a security check came out as it did"
 msgid ""
@@ -1230,67 +1230,67 @@ msgstr ""
 "Potpisnik ovog dokumenta se ne povezuje ni sa jednim uvezenim CSCA "
 "sertifikatom. Ne oslanjajte se na ovaj dokument; proverite ga kod izdavaoca."
 
-#: shared/agentclient/IdentityRows.cpp:346
+#: shared/agentclient/IdentityRows.cpp:295
 #, kde-format
 msgctxt "@item:intable security check outcome"
 msgid "Passed"
 msgstr "Uspešno"
 
-#: shared/agentclient/IdentityRows.cpp:347
+#: shared/agentclient/IdentityRows.cpp:296
 #, kde-format
 msgctxt "@item:intable security check outcome"
 msgid "Failed"
 msgstr "Neuspešno"
 
-#: shared/agentclient/IdentityRows.cpp:348
+#: shared/agentclient/IdentityRows.cpp:297
 #, kde-format
 msgctxt "@item:intable security check outcome"
 msgid "Not performed"
 msgstr "Nije izvršeno"
 
-#: shared/agentclient/IdentityRows.cpp:349
+#: shared/agentclient/IdentityRows.cpp:298
 #, kde-format
 msgctxt "@item:intable security check outcome"
 msgid "Not supported"
 msgstr "Nije podržano"
 
-#: shared/agentclient/IdentityRows.cpp:350
+#: shared/agentclient/IdentityRows.cpp:299
 #, kde-format
 msgctxt "@item:intable security check outcome"
 msgid "Skipped"
 msgstr "Preskočeno"
 
-#: shared/agentclient/IdentityRows.cpp:373
+#: shared/agentclient/IdentityRows.cpp:322
 #, kde-format
 msgctxt "@item:intable eMRTD access-control method"
 msgid "BAC"
 msgstr "BAC"
 
-#: shared/agentclient/IdentityRows.cpp:374
+#: shared/agentclient/IdentityRows.cpp:323
 #, kde-format
 msgctxt "@item:intable eMRTD access-control method"
 msgid "PACE (CAN)"
 msgstr "PACE (CAN)"
 
-#: shared/agentclient/IdentityRows.cpp:375
+#: shared/agentclient/IdentityRows.cpp:324
 #, kde-format
 msgctxt "@item:intable eMRTD access-control method"
 msgid "PACE (MRZ)"
 msgstr "PACE (MRZ)"
 
-#: shared/agentclient/IdentityRows.cpp:377
+#: shared/agentclient/IdentityRows.cpp:326
 #, kde-format
 msgctxt "@item:intable eMRTD access-control method"
 msgid "Chip Authentication"
 msgstr "Autentifikacija čipa"
 
-#: shared/agentclient/IdentityRows.cpp:379
+#: shared/agentclient/IdentityRows.cpp:328
 #, kde-format
 msgctxt "@item:intable eMRTD access-control method"
 msgid "None (plain read)"
 msgstr "Bez zaštite (otvoreno čitanje)"
 
-#: shared/agentclient/IdentityRows.cpp:499
+#: shared/agentclient/IdentityRows.cpp:445
 #, kde-format
 msgctxt "@item:intable identity field value (card carries no date)"
 msgid "Unknown"

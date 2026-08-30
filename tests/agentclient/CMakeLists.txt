@@ -124,12 +124,18 @@ else()
     message(WARNING "msgfmt not found — IdentityLabelTest and LatinCatalogTest (Serbian catalog resolution) are skipped")
 endif()
 
-# Pins foldSecurityCheckFields against both security-check shapes a plugin may
-# ship: the joined shape (one field per check) and the structured shape
-# (several check_<N>_<suffix> fields), which must fold into one readable row
-# per check rather than one row per wire field.
+# Pins the rows a surface draws for a security-verdict group, against both
+# shapes a plugin may ship: the joined shape (one field per check) and the
+# structured shape (several check_<N>_<suffix> fields), which must become one
+# readable row per check rather than one row per wire field. The wire shape is
+# read by the client library; what is pinned here is what a READER sees once
+# this repo's label, value and reason catalogues have had their say.
 add_executable(IdentityRowFoldingTest IdentityRowFoldingTest.cpp)
 target_link_libraries(IdentityRowFoldingTest PRIVATE GTest::gtest_main librekde-agentclient KF6::I18n)
+# Named explicitly, though librekde-agentclient carries it PUBLIC: this suite
+# includes the client library's own headers, and a test's dependency on headers
+# it includes itself must not rest on another target's public interface.
+target_link_libraries(IdentityRowFoldingTest PRIVATE LibreAgent::ClientQt)
 target_compile_features(IdentityRowFoldingTest PRIVATE cxx_std_23)
 add_test(NAME IdentityRowFoldingTest COMMAND IdentityRowFoldingTest)
 set_tests_properties(IdentityRowFoldingTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")

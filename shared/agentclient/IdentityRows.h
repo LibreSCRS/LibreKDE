@@ -3,6 +3,7 @@
 #pragma once
 
 #include <LibreSCRS/AgentClient/IdentityRows.h>
+#include <LibreSCRS/AgentClient/Types.h>
 
 #include <QList>
 #include <QString>
@@ -52,36 +53,44 @@
 
 namespace LibreKDE {
 
-/// @brief Fold a security check's several `check_<N>_<suffix>` fields into one
-///        row per check, tolerant of the joined shape a plugin may still be
-///        shipping (one field whose KEY is the check id itself, value
-///        `"STATUS (detail)"`).
+/// @brief Assemble an identity read's field groups into the rows a LibreKDE
+///        surface draws: one row per security check, everything else flattened
+///        as it arrived.
 ///
-/// Scoped to verdict groups (the same set `localizedFieldValue` treats as the
-/// closed status vocabulary): a `personal` field that happens to be keyed
-/// `check_3_status` is never folded. Every other row — including the joined
-/// shape — passes through UNCHANGED, so this is safe to call on a full,
-/// mixed-group row list; a check's several rows collapse into the position
-/// its FIRST field occupied, and every other row keeps its own position.
+/// The wire SHAPE of a security check — which keys make up one check, which
+/// keys are the group's aggregate roll-ups, what an unrecognised suffix means,
+/// and which groups carry verdicts at all — is deliberately not read here.
+/// `LibreSCRS::AgentClient::separateSecurityChecks` owns it, once, for every
+/// client that builds that library. This repository used to carry a second
+/// reader of the same shape: two readers agree only until one of them is
+/// taught something, and each was pinned by its own tests, so neither ever
+/// noticed that it had drifted.
 ///
-/// The folded row's label comes from `check_N_label`, falling back to
-/// `check_N_id`; its value from `check_N_status`, followed in parentheses by
-/// the check's explanation when it has one — the joined shape's own
-/// `"STATUS (detail)"` spelling, so `localizedFieldValue` needs no change to
-/// translate either shape.
+/// Every group is piped through the library, not only the ones this file would
+/// have guessed are verdict groups — a group the library does not claim comes
+/// back untouched, so the scope rule stays in the one place that owns it.
 ///
-/// The explanation is `check_N_reason` resolved through `localizedCheckReason`
-/// when the check carries one, and the plugin's own `check_N_detail`
-/// otherwise. A reason SUPERSEDES a detail rather than joining it: two
-/// parentheticals on one row is noise, and a producer that ships a reason has
-/// already replaced its English sentence with the key.
+/// What remains here is the half the library refuses to do, because it never
+/// translates:
 ///
-/// Every remaining suffix (`category`, `error`, and anything a newer agent
-/// appends) is read and DROPPED, not rendered as an unknown row — until this
-/// file is taught that suffix's vocabulary, an unrecognised one must disappear
-/// rather than surface as a raw row.
+///  - `check_N_reason` is a KEY, and becomes the instruction a reader acts on
+///    through `localizedCheckReason` below;
+///  - the row's value is spelled `"STATUS (explanation)"` — the joined shape's
+///    own spelling — so `localizedFieldValue` translates either shape with no
+///    second case;
+///  - a reason SUPERSEDES a detail rather than joining it: two parentheticals
+///    on one row is noise, and a producer that ships a reason has already
+///    replaced its English sentence with the key;
+///  - `category` and `error`, which the library separates faithfully, are not
+///    rendered. This build has no vocabulary for either, and a raw producer
+///    token on screen is a machine key put in front of a person.
+///
+/// Order: a group's checks come first, in the library's ascending numeric
+/// ordinal, then every field it did not consume, in arrival order; groups keep
+/// their own order. Stated so the assembly is describable — invariant 2 above
+/// still stands, and no view may depend on it.
 [[nodiscard]] QList<LibreSCRS::AgentClient::IdentityRow>
-foldSecurityCheckFields(const QList<LibreSCRS::AgentClient::IdentityRow>& rows);
+identityRows(const QList<LibreSCRS::AgentClient::FieldGroup>& groups);
 
 /// @brief Resolve a security check's `check_N_reason` KEY into the sentence a
 ///        reader is meant to act on.
