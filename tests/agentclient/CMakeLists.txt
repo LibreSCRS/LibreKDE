@@ -87,8 +87,41 @@ if(MSGFMT_EXECUTABLE)
     set_tests_properties(IdentityLabelTest PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=sr;LANG=en_US.UTF-8"
         ENVIRONMENT_MODIFICATION "XDG_DATA_DIRS=path_list_prepend:${_id_locale_root};XDG_DATA_HOME=set:${_id_locale_root}")
+
+    # Serbian LATIN catalog — the runtime counterpart to CatalogReconcile
+    # (tools/check-catalogs.py), which only proves po/sr@latin carries the
+    # SAME msgids as po/sr, never what they say. Same private-XDG-tree
+    # mechanism as IdentityLabelTest above, reusing its locale root so both
+    # languages' compiled catalogs coexist under one XDG_DATA_DIRS entry;
+    # sr@latin is a real, already-installed locale (see ki18n_install(po) at
+    # the top level), so this exercises exactly what a user's desktop does.
+    set(_id_latin_mo "${_id_locale_root}/locale/sr@latin/LC_MESSAGES/librekde.mo")
+    add_custom_command(
+        OUTPUT "${_id_latin_mo}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${_id_locale_root}/locale/sr@latin/LC_MESSAGES"
+        COMMAND ${MSGFMT_EXECUTABLE} "${CMAKE_SOURCE_DIR}/po/sr@latin/librekde.po" -o "${_id_latin_mo}"
+        DEPENDS "${CMAKE_SOURCE_DIR}/po/sr@latin/librekde.po"
+        COMMENT "Compiling sr@latin librekde catalog for LatinCatalogTest"
+        VERBATIM)
+    add_custom_target(LatinCatalogTest_catalog DEPENDS "${_id_latin_mo}")
+
+    add_executable(LatinCatalogTest LatinCatalogTest.cpp)
+    add_dependencies(LatinCatalogTest LatinCatalogTest_catalog)
+    target_link_libraries(LatinCatalogTest PRIVATE GTest::gtest librekde-agentclient KF6::I18n)
+    target_compile_features(LatinCatalogTest PRIVATE cxx_std_23)
+    # The whole-catalog content scan opens the shipped .po files directly
+    # (not through any build-tree copy), so it needs the checkout root.
+    target_compile_definitions(LatinCatalogTest PRIVATE LIBREKDE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+    add_test(NAME LatinCatalogTest COMMAND LatinCatalogTest)
+    # Same locale-resolution rationale as IdentityLabelTest: LANGUAGE selects
+    # the catalog, LANG must still name a real UTF-8 locale, and XDG_DATA_HOME
+    # is pinned ahead of XDG_DATA_DIRS so a dogfood-installed librekde catalog
+    # cannot shadow the freshly built one.
+    set_tests_properties(LatinCatalogTest PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=sr@latin;LANG=en_US.UTF-8"
+        ENVIRONMENT_MODIFICATION "XDG_DATA_DIRS=path_list_prepend:${_id_locale_root};XDG_DATA_HOME=set:${_id_locale_root}")
 else()
-    message(WARNING "msgfmt not found — IdentityLabelTest (Serbian catalog resolution) is skipped")
+    message(WARNING "msgfmt not found — IdentityLabelTest and LatinCatalogTest (Serbian catalog resolution) are skipped")
 endif()
 
 # Pins foldSecurityCheckFields against both security-check shapes a plugin may
