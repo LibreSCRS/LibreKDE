@@ -244,24 +244,39 @@ namespace {
 // wrong and left them there; a store that is missing and a store that cannot be
 // read need different instructions, which is the whole reason the wire carries
 // a key instead of one status.
+//
+// A remedy also names WHERE it is performed, or it is a condition in the
+// imperative mood: "import a master list" is an instruction only for a reader
+// who already knows that the import lives in LibreCelik, under Settings →
+// Trust — and the average reader does not. So the three that ask for an import
+// carry that location; the other two ask for something else (a directory's
+// permissions, the issuing authority) and naming a screen they are not about
+// would only mislead. No download URL here: that settings screen names the
+// portal itself, and a URL repeated across every surface is a URL that rots on
+// every surface but the one someone remembers to update.
+//
+// The location is set off by commas, not parentheses, in every language: a
+// check renders as `STATUS (reason)`, so a parenthetical inside a reason nests
+// inside that one and the cell reads as two half-closed asides.
 const QHash<QString, KLocalizedString>& checkReasonTable()
 {
     static const auto* const table = new QHash<QString, KLocalizedString>{
         {QStringLiteral("csca.not-configured"),
          ki18ndc("librekde", "@item:intable why a security check came out as it did",
-                 "No CSCA certificates have been imported. Import an ICAO master list so this document's "
-                 "signer can be checked.")},
+                 "No CSCA certificates have been imported. Import an ICAO master list in LibreCelik, under "
+                 "Settings → Trust, so this document's signer can be checked.")},
         {QStringLiteral("csca.anchors-unreadable"),
          ki18ndc("librekde", "@item:intable why a security check came out as it did",
                  "The CSCA trust store could not be read. Check that its directory exists and that its "
                  "permissions allow reading.")},
         {QStringLiteral("csca.anchors-undecodable"),
          ki18ndc("librekde", "@item:intable why a security check came out as it did",
-                 "The CSCA trust store holds no usable certificate. Import an ICAO master list again.")},
+                 "The CSCA trust store holds no usable certificate. Import an ICAO master list again in "
+                 "LibreCelik, under Settings → Trust.")},
         {QStringLiteral("csca.no-anchor-for-issuer"),
          ki18ndc("librekde", "@item:intable why a security check came out as it did",
-                 "No imported CSCA certificate belongs to this document's issuer. Import a master list that "
-                 "covers the issuing country.")},
+                 "No imported CSCA certificate belongs to this document's issuer. In LibreCelik, under "
+                 "Settings → Trust, import a master list that covers the issuing country.")},
         {QStringLiteral("csca.chain-failed"),
          ki18ndc("librekde", "@item:intable why a security check came out as it did",
                  "This document's signer does not chain to any imported CSCA certificate. Do not rely on "

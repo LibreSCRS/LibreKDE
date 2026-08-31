@@ -167,16 +167,17 @@ TEST(IdentityRowFolding, EveryReasonRendersAsAnInstruction)
     // store nobody finished configuring must never produce it.
     static const std::array<Case, 5> cases{{
         {"NOT_PERFORMED", "csca.not-configured",
-         "No CSCA certificates have been imported. Import an ICAO master list so this document's signer "
-         "can be checked."},
+         "No CSCA certificates have been imported. Import an ICAO master list in LibreCelik, under "
+         "Settings → Trust, so this document's signer can be checked."},
         {"NOT_PERFORMED", "csca.anchors-unreadable",
          "The CSCA trust store could not be read. Check that its directory exists and that its "
          "permissions allow reading."},
         {"NOT_PERFORMED", "csca.anchors-undecodable",
-         "The CSCA trust store holds no usable certificate. Import an ICAO master list again."},
+         "The CSCA trust store holds no usable certificate. Import an ICAO master list again in "
+         "LibreCelik, under Settings → Trust."},
         {"NOT_PERFORMED", "csca.no-anchor-for-issuer",
-         "No imported CSCA certificate belongs to this document's issuer. Import a master list that "
-         "covers the issuing country."},
+         "No imported CSCA certificate belongs to this document's issuer. In LibreCelik, under "
+         "Settings → Trust, import a master list that covers the issuing country."},
         {"FAILED", "csca.chain-failed",
          "This document's signer does not chain to any imported CSCA certificate. Do not rely on this "
          "document; check it with the issuing authority."},
@@ -193,6 +194,12 @@ TEST(IdentityRowFolding, EveryReasonRendersAsAnInstruction)
         EXPECT_TRUE(rows[0].value.endsWith(QStringLiteral(" (") + QString::fromUtf8(c.english) + QLatin1Char(')')))
             << c.reasonKey << " rendered as: " << rows[0].value.toStdString();
         EXPECT_FALSE(rows[0].value.contains(QStringLiteral("csca."))) << "the raw key must not reach a reader";
+        // A check renders as `STATUS (reason)`, so a parenthetical written into
+        // a reason nests inside that one and the cell reads as two half-closed
+        // asides. Set an aside off with commas instead — in every language, and
+        // this holds it for the English the catalogs are keyed on.
+        EXPECT_EQ(rows[0].value.count(QLatin1Char('(')), 1)
+            << c.reasonKey << " rendered as: " << rows[0].value.toStdString();
     }
 }
 

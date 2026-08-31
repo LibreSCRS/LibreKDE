@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: librekde\n"
 "Report-Msgid-Bugs-To: https://librescrs.github.io/\n"
-"POT-Creation-Date: 2026-08-30 01:27+0200\n"
+"POT-Creation-Date: 2026-08-31 17:00+0200\n"
 "PO-Revision-Date: 2026-07-31\n"
 "Last-Translator: hirashix0\n"
 "Language-Team: Serbian\n"
@@ -1179,17 +1179,18 @@ msgctxt "@title:group identity fields"
 msgid "Additional Data Verification"
 msgstr "Провера додатних података"
 
-#: shared/agentclient/IdentityRows.cpp:252
+#: shared/agentclient/IdentityRows.cpp:266
 #, kde-format
 msgctxt "@item:intable why a security check came out as it did"
 msgid ""
-"No CSCA certificates have been imported. Import an ICAO master list so this "
-"document's signer can be checked."
+"No CSCA certificates have been imported. Import an ICAO master list in "
+"LibreCelik, under Settings → Trust, so this document's signer can be checked."
 msgstr ""
-"Ниједан CSCA сертификат није увезен. Увезите ICAO мастер-листу да би "
-"потписник овог документа могао да се провери."
+"Ниједан CSCA сертификат није увезен. Увезите ICAO мастер-листу у LibreCelik-"
+"у, у одељку Подешавања → Поверење, да би потписник овог документа могао да "
+"се провери."
 
-#: shared/agentclient/IdentityRows.cpp:256
+#: shared/agentclient/IdentityRows.cpp:270
 #, kde-format
 msgctxt "@item:intable why a security check came out as it did"
 msgid ""
@@ -1199,27 +1200,29 @@ msgstr ""
 "Складиште CSCA сертификата се не може прочитати. Проверите да ли његов "
 "директоријум постоји и да ли дозволе допуштају читање."
 
-#: shared/agentclient/IdentityRows.cpp:260
+#: shared/agentclient/IdentityRows.cpp:274
 #, kde-format
 msgctxt "@item:intable why a security check came out as it did"
 msgid ""
 "The CSCA trust store holds no usable certificate. Import an ICAO master list "
-"again."
+"again in LibreCelik, under Settings → Trust."
 msgstr ""
 "Складиште CSCA сертификата не садржи ниједан употребљив сертификат. Поново "
-"увезите ICAO мастер-листу."
+"увезите ICAO мастер-листу у LibreCelik-у, у одељку Подешавања → Поверење."
 
-#: shared/agentclient/IdentityRows.cpp:263
+#: shared/agentclient/IdentityRows.cpp:278
 #, kde-format
 msgctxt "@item:intable why a security check came out as it did"
 msgid ""
-"No imported CSCA certificate belongs to this document's issuer. Import a "
-"master list that covers the issuing country."
+"No imported CSCA certificate belongs to this document's issuer. In "
+"LibreCelik, under Settings → Trust, import a master list that covers the "
+"issuing country."
 msgstr ""
-"Ниједан увезени CSCA сертификат не припада издаваоцу овог документа. Увезите "
-"мастер-листу која покрива државу издаваоца."
+"Ниједан увезени CSCA сертификат не припада издаваоцу овог документа. У "
+"LibreCelik-у, у одељку Подешавања → Поверење, увезите мастер-листу која "
+"покрива државу издаваоца."
 
-#: shared/agentclient/IdentityRows.cpp:267
+#: shared/agentclient/IdentityRows.cpp:282
 #, kde-format
 msgctxt "@item:intable why a security check came out as it did"
 msgid ""
@@ -1229,67 +1232,67 @@ msgstr ""
 "Потписник овог документа се не повезује ни са једним увезеним CSCA "
 "сертификатом. Не ослањајте се на овај документ; проверите га код издаваоца."
 
-#: shared/agentclient/IdentityRows.cpp:295
+#: shared/agentclient/IdentityRows.cpp:310
 #, kde-format
 msgctxt "@item:intable security check outcome"
 msgid "Passed"
 msgstr "Успешно"
 
-#: shared/agentclient/IdentityRows.cpp:296
+#: shared/agentclient/IdentityRows.cpp:311
 #, kde-format
 msgctxt "@item:intable security check outcome"
 msgid "Failed"
 msgstr "Неуспешно"
 
-#: shared/agentclient/IdentityRows.cpp:297
+#: shared/agentclient/IdentityRows.cpp:312
 #, kde-format
 msgctxt "@item:intable security check outcome"
 msgid "Not performed"
 msgstr "Није извршено"
 
-#: shared/agentclient/IdentityRows.cpp:298
+#: shared/agentclient/IdentityRows.cpp:313
 #, kde-format
 msgctxt "@item:intable security check outcome"
 msgid "Not supported"
 msgstr "Није подржано"
 
-#: shared/agentclient/IdentityRows.cpp:299
+#: shared/agentclient/IdentityRows.cpp:314
 #, kde-format
 msgctxt "@item:intable security check outcome"
 msgid "Skipped"
 msgstr "Прескочено"
 
-#: shared/agentclient/IdentityRows.cpp:322
+#: shared/agentclient/IdentityRows.cpp:337
 #, kde-format
 msgctxt "@item:intable eMRTD access-control method"
 msgid "BAC"
 msgstr "BAC"
 
-#: shared/agentclient/IdentityRows.cpp:323
+#: shared/agentclient/IdentityRows.cpp:338
 #, kde-format
 msgctxt "@item:intable eMRTD access-control method"
 msgid "PACE (CAN)"
 msgstr "PACE (CAN)"
 
-#: shared/agentclient/IdentityRows.cpp:324
+#: shared/agentclient/IdentityRows.cpp:339
 #, kde-format
 msgctxt "@item:intable eMRTD access-control method"
 msgid "PACE (MRZ)"
 msgstr "PACE (MRZ)"
 
-#: shared/agentclient/IdentityRows.cpp:326
+#: shared/agentclient/IdentityRows.cpp:341
 #, kde-format
 msgctxt "@item:intable eMRTD access-control method"
 msgid "Chip Authentication"
 msgstr "Аутентификација чипа"
 
-#: shared/agentclient/IdentityRows.cpp:328
+#: shared/agentclient/IdentityRows.cpp:343
 #, kde-format
 msgctxt "@item:intable eMRTD access-control method"
 msgid "None (plain read)"
 msgstr "Без заштите (отворено читање)"
 
-#: shared/agentclient/IdentityRows.cpp:445
+#: shared/agentclient/IdentityRows.cpp:460
 #, kde-format
 msgctxt "@item:intable identity field value (card carries no date)"
 msgid "Unknown"

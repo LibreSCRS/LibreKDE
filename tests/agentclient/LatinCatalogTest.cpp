@@ -45,6 +45,7 @@ using LibreKDE::localizedCheckReason;
 using LibreKDE::localizedFieldLabel;
 using LibreKDE::localizedFieldValue;
 using LibreKDE::localizedGroupLabel;
+using LibreKDE::mappedCheckReasonKeys;
 using LibreSCRS::AgentClient::IdentityRow;
 
 namespace {
@@ -301,6 +302,40 @@ TEST(IdentityCheckReasonLatin, ChainFailedResolvesToLatinTransliteration)
                                         "сертификатом. Не ослањајте се на овај документ; проверите га код издаваоца."))
         << "still the Cyrillic catalog's answer";
 
+    KLocalizedString::clearLanguages();
+}
+
+// The sr@latin half of IdentityLabelTest's EveryImportRemedyNamesWhereToImport,
+// and the one gate that can see this file lose the location clause. Neither of
+// the two checks that already cover sr@latin would: the whole-catalog scan only
+// asks whether a string transliterated, and CatalogReconcile compares msgid sets,
+// so a Latin msgstr left behind at an older English source reconciles perfectly
+// while telling its reader to import a master list and never saying where.
+TEST(IdentityCheckReasonLatin, ImportRemedyStillNamesWhereToImport)
+{
+    const QString application = QStringLiteral("LibreCelik");
+    const QString menuPath = QString::fromUtf8("→");
+
+    // Which reasons owe a location is read off the English source, exactly as the
+    // Cyrillic test reads it — never from a list of keys kept in a test file.
+    QStringList askForAnImport;
+    KLocalizedString::setLanguages({QStringLiteral("en")});
+    for (const QString& key : mappedCheckReasonKeys()) {
+        if (localizedCheckReason(key).contains(QStringLiteral("master list"))) {
+            askForAnImport << key;
+        }
+    }
+    EXPECT_EQ(askForAnImport.size(), 3);
+
+    KLocalizedString::setLanguages({QStringLiteral("sr@latin")});
+    for (const QString& key : std::as_const(askForAnImport)) {
+        const QString latin = localizedCheckReason(key);
+        EXPECT_TRUE(latin.contains(application))
+            << qPrintable(key) << " lost the location in transliteration: " << qPrintable(latin);
+        EXPECT_TRUE(latin.contains(menuPath))
+            << qPrintable(key) << " lost the location in transliteration: " << qPrintable(latin);
+        EXPECT_FALSE(containsCyrillic(latin)) << qPrintable(key) << ": " << qPrintable(latin);
+    }
     KLocalizedString::clearLanguages();
 }
 

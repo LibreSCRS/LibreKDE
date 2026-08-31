@@ -22,6 +22,8 @@
 
 #include <QCoreApplication>
 
+#include <utility>
+
 #include <gtest/gtest.h>
 
 using LibreKDE::isHiddenIdentityRow;
@@ -439,17 +441,20 @@ TEST(IdentityCheckReason, EveryReasonResolvesToSerbian)
 {
     KLocalizedString::setLanguages({QStringLiteral("sr")});
     EXPECT_EQ(localizedCheckReason(QStringLiteral("csca.not-configured")),
-              QString::fromUtf8("Ниједан CSCA сертификат није увезен. Увезите ICAO мастер-листу да би "
-                                "потписник овог документа могао да се провери."));
+              QString::fromUtf8("Ниједан CSCA сертификат није увезен. Увезите ICAO мастер-листу у "
+                                "LibreCelik-у, у одељку Подешавања → Поверење, да би потписник овог "
+                                "документа могао да се провери."));
     EXPECT_EQ(localizedCheckReason(QStringLiteral("csca.anchors-unreadable")),
               QString::fromUtf8("Складиште CSCA сертификата се не може прочитати. Проверите да ли његов "
                                 "директоријум постоји и да ли дозволе допуштају читање."));
     EXPECT_EQ(localizedCheckReason(QStringLiteral("csca.anchors-undecodable")),
               QString::fromUtf8("Складиште CSCA сертификата не садржи ниједан употребљив сертификат. "
-                                "Поново увезите ICAO мастер-листу."));
+                                "Поново увезите ICAO мастер-листу у LibreCelik-у, у одељку "
+                                "Подешавања → Поверење."));
     EXPECT_EQ(localizedCheckReason(QStringLiteral("csca.no-anchor-for-issuer")),
-              QString::fromUtf8("Ниједан увезени CSCA сертификат не припада издаваоцу овог документа. "
-                                "Увезите мастер-листу која покрива државу издаваоца."));
+              QString::fromUtf8("Ниједан увезени CSCA сертификат не припада издаваоцу овог документа. У "
+                                "LibreCelik-у, у одељку Подешавања → Поверење, увезите мастер-листу која "
+                                "покрива државу издаваоца."));
     EXPECT_EQ(localizedCheckReason(QStringLiteral("csca.chain-failed")),
               QString::fromUtf8("Потписник овог документа се не повезује ни са једним увезеним CSCA "
                                 "сертификатом. Не ослањајте се на овај документ; проверите га код издаваоца."));
@@ -495,6 +500,62 @@ TEST(IdentityCheckReason, NoTwoReasonsShareAMessage)
         EXPECT_NE(text, key) << qPrintable(key) << " has no translation of its own";
         EXPECT_FALSE(seen.contains(text)) << qPrintable(key) << " repeats another reason's message";
         seen << text;
+    }
+    KLocalizedString::clearLanguages();
+}
+
+// A remedy the reader cannot locate is a condition in the imperative mood: "import
+// a master list" is an instruction only for someone who already knows where the
+// import lives, and the average reader does not. So every reason that asks for an
+// import has to name the place — in English AND in every translation of it.
+//
+// The translation half is the point. Changing the English source of a message that
+// already has one leaves the OLD translation attached to the new msgid, so the
+// Serbian reader keeps being shown the sentence that named nowhere while the
+// English reader sees the fixed one. Nothing else in this suite would notice:
+// msgfmt is happy, the catalogs still reconcile, and a by-value assertion only
+// covers the strings someone remembered to write down.
+//
+// Deliberately a property rather than a transcript — the exact sentences are pinned
+// by EveryReasonResolvesToSerbian above. Which reasons must carry a location is
+// derived from the English text (it asks for an import), not from a list kept here,
+// so a sixth reason key added later inherits the rule without anyone updating this.
+TEST(IdentityCheckReason, EveryImportRemedyNamesWhereToImport)
+{
+    // The import lives in LibreCelik, under Settings → Trust; the KDE surfaces
+    // launch that application rather than carrying an import of their own. What is
+    // asserted is that an application and a menu path are named AT ALL — not their
+    // wording, which a translation is free to change. No URL is asserted, and none
+    // belongs here: that settings screen names the portal itself.
+    const QString application = QStringLiteral("LibreCelik");
+    const QString menuPath = QString::fromUtf8("→");
+
+    QStringList askForAnImport;
+    KLocalizedString::setLanguages({QStringLiteral("en")});
+    for (const QString& key : mappedCheckReasonKeys()) {
+        const QString english = localizedCheckReason(key);
+        ASSERT_NE(english, key) << qPrintable(key) << " resolved to nothing but itself";
+        if (!english.contains(QStringLiteral("master list"))) {
+            EXPECT_FALSE(english.contains(application))
+                << qPrintable(key) << " sends the reader to a screen it never asks them to use";
+            continue;
+        }
+        askForAnImport << key;
+        EXPECT_TRUE(english.contains(application)) << qPrintable(key) << ": " << qPrintable(english);
+        EXPECT_TRUE(english.contains(menuPath)) << qPrintable(key) << ": " << qPrintable(english);
+    }
+    // Two of the five ask for something else entirely — a directory's permissions,
+    // and the issuing authority — so a run that found every reason asking for an
+    // import has stopped discriminating and proves nothing.
+    EXPECT_EQ(askForAnImport.size(), 3);
+
+    KLocalizedString::setLanguages({QStringLiteral("sr")});
+    for (const QString& key : std::as_const(askForAnImport)) {
+        const QString serbian = localizedCheckReason(key);
+        EXPECT_TRUE(serbian.contains(application))
+            << qPrintable(key) << " lost the location in translation: " << qPrintable(serbian);
+        EXPECT_TRUE(serbian.contains(menuPath))
+            << qPrintable(key) << " lost the location in translation: " << qPrintable(serbian);
     }
     KLocalizedString::clearLanguages();
 }
