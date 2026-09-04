@@ -8,3 +8,6 @@ install*/
 compile_commands.json
 .clangd/
 __pycache__/
+
+# Working copy of the packaging recipe; dpkg-buildpackage wants it at the root.
+/debian/

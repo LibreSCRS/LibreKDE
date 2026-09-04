@@ -10,6 +10,20 @@ every entry below describes a change to what you get by building from source.
 
 ## [Unreleased] — 5.0.0
 
+### Added
+
+- **Five distribution packages for the KDE integration.** The plasmoid, the
+  `card:/` KIO worker, the Purpose "Sign" plugin, the credential window, and an
+  architecture-independent package carrying the message catalogues and the
+  AppStream metadata the other four share. These are compiled objects living in
+  system plugin directories, so no bundle format can deliver them.
+
+  The previous recipes required the middleware, which this project does not link
+  at all — it talks to the agent through the Qt client library — and packaged two
+  of the five artefacts, leaving the KIO worker, the Purpose plugin and every
+  message catalogue unpackaged.
+
+
 ### Removed
 
 - Two build options that named components this repository does not contain:

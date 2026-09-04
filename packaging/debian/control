@@ -1,25 +1,75 @@
 Source: librekde
 Section: kde
 Priority: optional
-Maintainer: hirashix0 <hirashix0@proton.me>
+Maintainer: LibreSCRS <packages@librescrs.org>
 Build-Depends: debhelper-compat (= 13),
-               cmake,
-               extra-cmake-modules,
+               cmake (>= 3.24),
+               ninja-build,
+               make,
+               pkg-config,
+               git,
+               extra-cmake-modules (>= 6.0),
+               qt6-base-dev,
+               qt6-declarative-dev,
+               qt6-tools-dev-tools,
                libkf6coreaddons-dev,
                libkf6i18n-dev,
                libkf6notifications-dev,
-               qt6-base-dev,
-               qt6-declarative-dev,
+               libkf6config-dev,
+               libkf6kio-dev,
+               libkf6purpose-dev,
+               libkirigami-dev,
+               libkf6dbusaddons-dev,
                libplasma-dev,
-               librescrs-middleware-dev (>= 4.0)
-Standards-Version: 4.6.2
-Homepage: https://librescrs.github.io/
+               libgtest-dev,
+               dbus-daemon,
+               python3,
+               liblibrescrs-agentclient-qt-dev (>= 5.0)
+Standards-Version: 4.7.0
+Homepage: https://github.com/LibreSCRS/LibreKDE
+Rules-Requires-Root: no
+
+Package: librekde-common
+Architecture: all
+Multi-Arch: foreign
+Depends: ${misc:Depends}
+Description: Shared data for the LibreSCRS KDE integration
+ Message catalogues and AppStream metadata shared by the plasmoid, the KIO
+ worker, the Purpose plugin and the credential window.
 
 Package: librekde-plasmoid
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends},
+         librekde-common (= ${source:Version}),
          plasma-workspace,
          qml6-module-qtquick-dialogs,
-         librescrs-middleware (>= 4.0)
+         liblibrescrs-agentclient-qt5 (>= 5.0)
+Recommends: librescrs-agent (>= 5.0)
 Description: LibreSCRS smart-card plasmoid for KDE Plasma 6
- Status icon for inserted LibreSCRS smart cards.
+ A system-tray widget that shows what is on a LibreSCRS-supported card the
+ moment it is inserted.
+
+Package: librekde-kio
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends},
+         librekde-common (= ${source:Version}),
+         liblibrescrs-agentclient-qt5 (>= 5.0)
+Description: card:/ KIO worker for the LibreSCRS KDE integration
+ Browse the contents of an inserted card from any KIO-aware application.
+
+Package: librekde-purpose
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends},
+         librekde-common (= ${source:Version}),
+         liblibrescrs-agentclient-qt5 (>= 5.0)
+Description: Purpose "Sign" plugin for the LibreSCRS KDE integration
+ Adds a Sign action to the KDE share menu, so a document can be signed with a
+ card from wherever it is.
+
+Package: librekde-credentials
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends},
+         librekde-common (= ${source:Version}),
+         liblibrescrs-agentclient-qt5 (>= 5.0)
+Description: Credential-management window for LibreSCRS cards
+ Change a PIN, unblock one with a PUK, and see how many attempts are left.
