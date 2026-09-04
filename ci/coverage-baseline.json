@@ -1,0 +1,54 @@
+{
+  "config": {
+    "cmake_args": "-DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS=-O0 -g --coverage -fprofile-update=atomic -DBUILD_TESTING=ON",
+    "compiler": "GNU-16",
+    "discovered_tests": 25,
+    "gcovr": "8.6",
+    "test_manifest_sha256": "92b9a986f8ca0f48056953e1f930b92d4c9896e8e2867befdd6943ef14e3a517"
+  },
+  "files": {
+    "components/credentials/src/CredentialController.cpp": 93.3,
+    "components/credentials/src/CredentialController.h": 85.7,
+    "components/credentials/src/CredentialModel.cpp": 83.5,
+    "components/credentials/src/main.cpp": 0.0,
+    "components/kio/AgentCardDataSource.cpp": 75.3,
+    "components/kio/CardDataSource.h": 50.0,
+    "components/kio/CardRenderers.cpp": 96.1,
+    "components/kio/CardTree.cpp": 95.5,
+    "components/kio/CardWorker.cpp": 0.0,
+    "components/kio/CardWorkerLogic.cpp": 86.5,
+    "components/kio/CardWorkerLogic.h": 50.0,
+    "components/plasmoid/src/CardPhotoProvider.cpp": 41.7,
+    "components/plasmoid/src/CardPhotoStore.cpp": 100.0,
+    "components/plasmoid/src/CardPhotoStore.h": 100.0,
+    "components/plasmoid/src/CardStateModel.cpp": 95.0,
+    "components/plasmoid/src/EngineInit.cpp": 0.0,
+    "components/plasmoid/src/SmartCardHandler.cpp": 88.8,
+    "components/plasmoid/src/SmartCardHandler.h": 11.1,
+    "components/purpose/librescrs_sign_purpose.cpp": 0.0,
+    "shared/agentclient/Cards.cpp": 90.9,
+    "shared/agentclient/CredentialText.cpp": 95.5,
+    "shared/agentclient/DisplayText.cpp": 100.0,
+    "shared/agentclient/ErrorText.cpp": 97.8,
+    "shared/agentclient/IdentityRows.cpp": 100.0,
+    "shared/agentclient/Readers.cpp": 100.0,
+    "shared/signing/CardSelection.cpp": 100.0,
+    "shared/signing/MimeFormatMap.cpp": 100.0,
+    "shared/signing/MimeFormatMap.h": 100.0,
+    "shared/signing/SignJob.cpp": 78.1,
+    "shared/signing/SignSeams.cpp": 0.0
+  },
+  "rules": {
+    "absolute_covered_lines": true,
+    "absolute_exception": null,
+    "new_file_floor_lines": 50,
+    "per_file_drop_pp": 1.0,
+    "total_percent_drop_pp": 0.3
+  },
+  "total": {
+    "branch_percent": 70.8,
+    "covered_lines": 2379,
+    "line_percent": 82.1,
+    "total_lines": 2897
+  }
+}

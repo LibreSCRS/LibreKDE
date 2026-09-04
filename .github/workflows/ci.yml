@@ -20,6 +20,12 @@ on:
   pull_request:
     branches: [main]
 
+  # Manual runs. Without this a job that is deliberately not part of every pull
+  # request -- a coverage pass that takes an hour, say -- cannot be started at
+  # all: a branch that is not a pull request gets no run, and a gate that cannot
+  # be triggered is green by construction.
+  workflow_dispatch:
+
 jobs:
   format-check:
     # Self-contained: the format gate needs no KDE deps, so it runs on
@@ -214,7 +220,20 @@ jobs:
 
       - name: Build
         working-directory: LibreKDE
-        run: cmake --build build -j4
+        run: |
+          # set -o pipefail is explicit: without it `| tee` reports tee's status
+          # and a failed build becomes a green step, after which the warning
+          # check measures a log that was never produced.
+          set -o pipefail
+          LC_ALL=C cmake --build build -j4 2>&1 | tee build.log
+
+      - name: Check the warning baseline
+        # Counted by the [-Wname] tag, never by the message text: diagnostics
+        # are localised. An unknown compiler is reported, not failed -- this
+        # runner and the machine that recorded the baseline do not agree on a
+        # diagnostic set, and neither is authoritative over the other.
+        working-directory: LibreKDE
+        run: ./ci/scripts/warning-gate.py --check build.log --build-dir build
 
       - name: Check the discovered test set
         working-directory: LibreKDE
@@ -262,3 +281,184 @@ jobs:
         if: always()
         working-directory: LibreKDE
         run: ./ci/scripts/skip-ledger.sh --check ctest.log linux
+
+  coverage:
+    # Arch container: the codebase targets current KF6 / Plasma 6, which
+    # ubuntu apt does not carry at the required versions. pacman provides
+    # current ECM, Qt6, KF6 and Plasma 6 — matching the owner's Arch/Manjaro
+    # env and the LibreKDE PKGBUILD dep set (packaging/arch/PKGBUILD).
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    env:
+      # Where LibreAgent's Qt client library is installed and where LibreKDE's
+      # Configure step below points CMAKE_PREFIX_PATH.
+      AGENT_PREFIX: /opt/libreagent-clientqt
+      # LibreAgent is NOT tracked by branch here: the ref is read at run time
+      # from cmake/libreagent.pin by the step below.
+      #
+      # This was `AGENT_REF: main`, and the effect was that this job built,
+      # installed and then found a ClientQt package from the producer's TRUNK
+      # while the repo named a revision that nothing built. Two failures in
+      # one: a green run was a verdict about a combination this repo does not
+      # declare and cannot ship, and the declared pin rotted unmeasured -- it
+      # was found five commits behind, having drifted with nobody able to
+      # notice.
+      #
+      # The pin governs BOTH consumption paths now. It is the fetch branch's
+      # revision in cmake/FindOrUseLibreAgent.cmake, and it is what this job
+      # checks out to build the CONFIG package the default path finds -- so
+      # the escape hatch and the shipped path name one agent, and CI measures
+      # it. LibreKDE's own find_package(LibreAgent 4.2 ...) still enforces the
+      # required VERSION independently; this is about which revision, not
+      # which version.
+    # Not on pull_request: this pass costs an hour and the moment a
+    # function actually lands is the push to main. Manual only until one
+    # measured run says what it really costs on a hosted runner.
+    if: github.event_name == 'workflow_dispatch'
+    timeout-minutes: 120
+    steps:
+      - name: Install system dependencies
+        # Build deps from the LibreKDE PKGBUILD makedepends + the runtime KF6/
+        # Plasma/Qt packages its find_package() calls need at configure time.
+        # qt6-declarative supplies qmllint for the plasmoid QML lint step.
+        # qt6-base + dbus also cover everything LibreAgent's ClientQt-only
+        # build below needs; no additional packages are required for it.
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm --needed \
+            base-devel cmake ninja git pkgconf \
+            extra-cmake-modules \
+            qt6-base qt6-declarative qt6-tools \
+            ki18n kcoreaddons knotifications kconfig kio purpose \
+            kirigami kdbusaddons \
+            plasma-workspace libplasma \
+            gtest dbus \
+            python
+
+      - name: Generate a UTF-8 locale
+        # The bare Arch container ships only the C / C.UTF-8 locales, under which
+        # the C library's gettext (which ki18n uses to read .mo catalogs)
+        # suppresses translation. IdentityLabelTest proves labelKey→Serbian
+        # resolution end-to-end and therefore needs a real UTF-8 locale present;
+        # generate en_US.UTF-8 (the test sets LANG=en_US.UTF-8 + LANGUAGE=sr).
+        run: |
+          echo 'en_US.UTF-8 UTF-8' >> /etc/locale.gen
+          locale-gen
+
+      - uses: actions/checkout@v4
+        with:
+          path: LibreKDE
+
+      # --- LibreAgent: build the Qt client library from source + install to a
+      # prefix. This job's only LibreAgent dependency is the installable,
+      # component-filtered ClientQt CONFIG package (sonamed shared library)
+      # that LibreKDE's components now link directly — that
+      # package shape only exists once LibreAgent has actually released it, so
+      # LibreAgent must publish its component-filtered, sonamed ClientQt
+      # package before this workflow runs against a LibreKDE change; a pin
+      # naming a LibreAgent revision that predates that release would silently
+      # build the older, unfiltered, no-soname package shape instead. That is a
+      # reason to raise the pin deliberately, which is now a visible act in a
+      # reviewed commit rather than something a producer push could do to this
+      # repo overnight.
+      - name: Resolve the pinned LibreAgent revision
+        id: agent_pin
+        # Read from the pin file rather than copied into this workflow: two
+        # places holding one hash is the defect being fixed, one level up.
+        #
+        # A pin that is not 40 hex FAILS here rather than being passed on. An
+        # empty ref makes actions/checkout silently take the default branch --
+        # which is exactly the behaviour this step removes, so falling back to
+        # it on a malformed pin would reintroduce the bug at the moment the
+        # guard was most needed.
+        run: |
+          pin=$(tr -d '[:space:]' < LibreKDE/cmake/libreagent.pin)
+          case "$pin" in
+            *[!0-9a-f]* | "") echo "::error::cmake/libreagent.pin is not 40 hex: '$pin'"; exit 1 ;;
+          esac
+          [ ${#pin} -eq 40 ] || { echo "::error::cmake/libreagent.pin is ${#pin} chars, want 40"; exit 1; }
+          echo "ref=$pin" >> "$GITHUB_OUTPUT"
+          echo "LibreAgent pinned revision: $pin"
+
+      - name: Checkout LibreAgent
+        uses: actions/checkout@v4
+        with:
+          repository: LibreSCRS/LibreAgent
+          ref: ${{ steps.agent_pin.outputs.ref }}
+          path: LibreAgent
+
+      # Core OFF and LibreMiddleware disabled: this job's only reason to build
+      # LibreAgent is to obtain LibreAgent::ClientQt, and LibreKDE itself must
+      # stay LibreMiddleware-free at build time, so the sibling build it
+      # depends on is held to the same rule.
+      # CMAKE_DISABLE_FIND_PACKAGE_LibreMiddleware=ON is a deliberate backstop,
+      # not dead weight: it is a real CMake variable find_package() consults,
+      # so it turns any future accidental find_package(LibreMiddleware ...)
+      # in this configuration into a hard configure error instead of a silent
+      # success. With Core off that find_package() call is never reached at
+      # all, so CMake currently reports this variable as unused too -- that is
+      # expected here, not a sign the flag is dead.
+      # LIBREAGENT_INSTALL_WIRE_ARCHIVE=OFF mirrors LibreAgent's own packaging
+      # recipe (packaging/arch/PKGBUILD in the LibreAgent repo, not this one):
+      # Wire is linked statically into liblibrescrs-agentclient-qt.so, so the
+      # standalone archive is redundant in a ClientQt-only prefix.
+      # No BUILD_TESTING flag: two independent gates in LibreAgent's own CMake
+      # add its test binaries regardless of that variable. Root tests/ (wire +
+      # spike only) is added whenever this is the top-level project with Core
+      # or Wire enabled; client/qt/tests (the ClientQt suite) is added by a
+      # separate, unconditional `if(PROJECT_IS_TOP_LEVEL)` in
+      # client/qt/CMakeLists.txt, with no Core-or-Wire test of its own. Neither
+      # gate has an opt-out, so all three suites are configured and built as a
+      # side effect of this step either way — this job simply never runs them
+      # (no ctest call against this checkout).
+      - name: Build & install LibreAgent (ClientQt only, LM-free)
+        working-directory: LibreAgent
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DLIBREAGENT_BUILD_CORE=OFF \
+            -DLIBREAGENT_BUILD_WIRE=ON \
+            -DLIBREAGENT_BUILD_CLIENT_QT=ON \
+            -DLIBREAGENT_INSTALL_WIRE_ARCHIVE=OFF \
+            -DCMAKE_DISABLE_FIND_PACKAGE_LibreMiddleware=ON
+          cmake --build build -j4
+          cmake --install build --prefix "$AGENT_PREFIX"
+
+      # Explicit component flags pin the package contract (their CMake option
+      # defaults are already ON, but pin them so CI matches the PKGBUILD).
+
+      - name: Install gcovr
+        # Pinned: the baseline records the gcovr version it was measured with
+        # and the gate refuses to compare across versions, because the exclude
+        # semantics that decide the denominator have changed between them.
+        run: python3 -m pip install --break-system-packages 'gcovr==8.6'
+
+      - name: Configure (coverage)
+        working-directory: LibreKDE
+        run: cmake --preset coverage -DCMAKE_PREFIX_PATH="$AGENT_PREFIX"
+
+      - name: Build
+        working-directory: LibreKDE
+        run: cmake --build build-cov -j4
+
+      - name: Test
+        working-directory: LibreKDE
+        run: |
+          set +e
+          dbus-run-session -- ctest --test-dir build-cov --output-on-failure --no-tests=error > ctest.log 2>&1
+          rc=$?
+          set -e
+          cat ctest.log
+          echo "ctest rc=$rc"
+          exit "$rc"
+
+      - name: Check coverage against the baseline
+        working-directory: LibreKDE
+        # The committed baseline was measured with a different compiler than
+        # this runner uses, so the FIRST authorised run of this job is expected
+        # to refuse to compare and say so. Refusing is the design: a coverage
+        # number carries the configuration it was measured under, and comparing
+        # across configurations is how a gap becomes an artefact. Record a
+        # runner-side baseline with --update, review it in the same commit, and
+        # from then on this step is a ratchet.
+        run: ./ci/scripts/coverage-gate.py --check build-cov
