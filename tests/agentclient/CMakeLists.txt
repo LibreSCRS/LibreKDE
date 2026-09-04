@@ -157,7 +157,11 @@ set_tests_properties(ErrorTextCoverageTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFO
 # that owns a QCoreApplication (TestMain.cpp) instead of gtest_main. The
 # librekde_add_dbus_test helper, and the harness it links, live in
 # tests/support; this file is its only caller.
-librekde_add_dbus_test(FakeAgentWireShapeTest)
+#
+# FakeAgentWireShapeTest is no longer among them: it pinned the double's own
+# wire-shape mirrors and bus names, and it moved to the repository that now
+# owns the double. Pinning a fake from a repository that no longer writes it
+# would be a second opinion about someone else's file.
 
 # The shared card capability predicates, over a real AgentClient against the
 # fake. Exercises the one definition every component links, so a defect in it

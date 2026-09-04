@@ -35,7 +35,7 @@
 #include <optional>
 
 using namespace LibreKDE;
-using namespace LibreKDETest;
+using namespace LibreSCRS::AgentClient::Fakes;
 
 // The agent client library, spelled through an alias rather than pulled in
 // wholesale with a using-directive. NOT a collision fix, and the measurement

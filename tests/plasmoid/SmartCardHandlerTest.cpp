@@ -38,7 +38,7 @@
 #include <optional>
 
 using namespace LibreKDE;
-using namespace LibreKDETest;
+using namespace LibreSCRS::AgentClient::Fakes;
 using State = LibreKDE::Plasmoid::CardStateModel::State;
 using LibreKDE::Plasmoid::SmartCardHandler;
 

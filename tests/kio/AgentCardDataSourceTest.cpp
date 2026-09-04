@@ -35,7 +35,7 @@
 #include <gtest/gtest.h>
 
 using namespace LibreKDE;
-using namespace LibreKDETest;
+using namespace LibreSCRS::AgentClient::Fakes;
 
 // The agent client library, spelled through an alias rather than pulled in
 // wholesale with a using-directive. NOT a collision fix, and the measurement
@@ -178,10 +178,20 @@ TEST(AgentCardDataSource, ReadCertificatesHappyPathRoundTripsEveryCertificateFie
 {
     FakeAgent::Config cfg;
     cfg.capabilities = Client::Cap::Pki;
-    cfg.certScript = FakeCertList{FakeCert{QStringLiteral("aabbccdd11223344"), true, QStringLiteral("Pera Peric"),
-                                           QStringLiteral("MUP CA"), QStringLiteral("2030-01-01T00:00:00Z"), 0x80u,
-                                           QStringList{QStringLiteral("1.3.6.1.5.5.7.3.2")},
-                                           QStringList{QStringLiteral("Pera Peric"), QStringLiteral("MUP CA")}, 2u}};
+    // Designated rather than positional: the shared double's FakeCert carries a
+    // notBefore that the copy this repository used to keep did not, so a
+    // positional list would have slid the validity string one member sideways
+    // and still compiled if the two happened to be the same type.
+    cfg.certScript =
+        FakeCertList{FakeCert{.certId = QStringLiteral("aabbccdd11223344"),
+                              .signingCapable = true,
+                              .subjectCn = QStringLiteral("Pera Peric"),
+                              .issuerCn = QStringLiteral("MUP CA"),
+                              .notAfter = QStringLiteral("2030-01-01T00:00:00Z"),
+                              .keyUsageBits = 0x80u,
+                              .extendedKeyUsageOids = QStringList{QStringLiteral("1.3.6.1.5.5.7.3.2")},
+                              .chainSubjectCns = QStringList{QStringLiteral("Pera Peric"), QStringLiteral("MUP CA")},
+                              .trustStatus = 2u}};
     Harness h(cfg, BusNames::UniqueAndWellKnown);
     Client::AgentClient client;
     ASSERT_NE(client.card(h.cardPath()), nullptr);

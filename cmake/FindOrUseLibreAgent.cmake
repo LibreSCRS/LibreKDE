@@ -22,8 +22,18 @@ if(NOT LIBREAGENT_PIN_LENGTH EQUAL 40 OR NOT LIBREAGENT_PIN MATCHES "^[0-9a-f]+$
     message(FATAL_ERROR "cmake/libreagent.pin must hold one 40-hex commit SHA")
 endif()
 
+# The agent doubles are asked for only when this build has tests: a packager
+# building without them must not be made to require a component that exists to
+# serve a test suite. BUILD_TESTING is a real, declared option in this
+# repository (unlike the platform backend, where it is never defined and the
+# same condition would be permanently false), so the guard bites here.
+set(_lk_agent_components ClientQt)
+if(BUILD_TESTING)
+    list(APPEND _lk_agent_components ClientQtTestSupport)
+endif()
+
 if(NOT LIBREKDE_FETCH_AGENT)
-    find_package(LibreAgent 5.0 REQUIRED CONFIG COMPONENTS ClientQt)
+    find_package(LibreAgent 5.0 REQUIRED CONFIG COMPONENTS ${_lk_agent_components})
 else()
     include(FetchContent)
     # All three are mandatory: CLIENT_QT defaults OFF, and CORE defaults ON and
@@ -35,6 +45,12 @@ else()
     set(LIBREAGENT_BUILD_CLIENT_QT ON  CACHE BOOL "" FORCE)
     set(LIBREAGENT_BUILD_CORE      OFF CACHE BOOL "" FORCE)
     set(LIBREAGENT_BUILD_WIRE      ON  CACHE BOOL "" FORCE)
+    # The doubles default to the fetched project's OWN top-level status, which
+    # is false here -- so a test build has to ask for them by name on this
+    # branch too, or the target this repository's harness links never exists.
+    if(BUILD_TESTING)
+        set(LIBREAGENT_BUILD_CLIENT_QT_TEST_SUPPORT ON CACHE BOOL "" FORCE)
+    endif()
     message(STATUS "LibreAgent: building from source (FetchContent, pin ${LIBREAGENT_PIN})")
     FetchContent_Declare(LibreAgent
         GIT_REPOSITORY https://github.com/LibreSCRS/LibreAgent.git

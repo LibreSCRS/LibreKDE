@@ -21,7 +21,7 @@
 #include <optional>
 
 namespace Client = LibreSCRS::AgentClient;
-using namespace LibreKDETest;
+using namespace LibreSCRS::AgentClient::Fakes;
 using LibreKDE::Signing::chooseSigningCard;
 using LibreKDE::Signing::SigningCardSelection;
 

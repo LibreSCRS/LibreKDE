@@ -19,7 +19,7 @@
 #include <memory>
 
 namespace Client = LibreSCRS::AgentClient;
-using namespace LibreKDETest;
+using namespace LibreSCRS::AgentClient::Fakes;
 using LibreKDE::Cards::cardsWithCapability;
 using LibreKDE::Cards::hasCapability;
 

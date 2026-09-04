@@ -4,12 +4,10 @@
 # Shared D-Bus test harness. Exported as TWO separate INTERFACE libraries,
 # not one, because the two things it provides are needed independently:
 #
-#   librekde-test-support — the in-process org.librescrs.Agent double
-#     (FakeAgent.h/.cpp) and the include directory that also serves
-#     TestBus.h (header-only, so it never appears in a source list).
-#     No main() here — safe to link into a test that supplies its own
-#     entry point, as tests/plasmoid's SmartCardHandlerTest does
-#     (PlasmoidTestMain.cpp).
+#   librekde-test-support — the in-process org.librescrs.Agent double and the
+#     harness that stands it up on a private bus. No main() here — safe to
+#     link into a test that supplies its own entry point, as tests/plasmoid's
+#     SmartCardHandlerTest does (PlasmoidTestMain.cpp).
 #
 #   librekde-test-main — TestMain.cpp alone, the QCoreApplication-owning
 #     gtest entry point, for a test that does NOT supply its own main().
@@ -19,18 +17,17 @@
 # symbol at link time. Link librekde-test-support alone for a FakeAgent
 # peer under a custom main; link both for a FakeAgent peer under gtest's
 # usual entry point.
+#
+# The double itself is no longer written here. It used to be: a 2771-line copy
+# of the agent client's own FakeAgent/TestBus, which that repository had in
+# turn lifted from this one — two spellings of one bus surface, drifting apart
+# with a green suite on each side, and 616 of those lines existed on this side
+# alone. What survives of them is now in the shared double: the well-known-name
+# claim, the swapped-card-path re-mint, and the Sign() call counter. This
+# target is the seam that says which double a LibreKDE suite gets, so a suite
+# links this name and not the agent's.
 add_library(librekde-test-support INTERFACE)
-target_sources(librekde-test-support INTERFACE
-    ${CMAKE_CURRENT_SOURCE_DIR}/FakeAgent.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/FakeAgent.h
-)
-target_include_directories(librekde-test-support INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
-# FakeAgent.{cpp,h} are QDBusAbstractAdaptor subclasses (9 Q_OBJECTs) built on
-# QDBusConnection/QDBusMessage/QTimer — Qt6::DBus and Qt6::Core, and nothing
-# else. The fake declares its own wire-shape mirrors, so it includes no agent
-# client header and links no agent client: it is a bus peer, not a client
-# consumer, and stays serviceable to whichever client a suite happens to use.
-target_link_libraries(librekde-test-support INTERFACE Qt6::Core Qt6::DBus)
+target_link_libraries(librekde-test-support INTERFACE LibreAgent::ClientQtTestSupport)
 
 add_library(librekde-test-main INTERFACE)
 target_sources(librekde-test-main INTERFACE

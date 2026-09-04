@@ -194,10 +194,14 @@ jobs:
       # success. With Core off that find_package() call is never reached at
       # all, so CMake currently reports this variable as unused too -- that is
       # expected here, not a sign the flag is dead.
-      # LIBREAGENT_INSTALL_WIRE_ARCHIVE=OFF mirrors LibreAgent's own packaging
-      # recipe (packaging/arch/PKGBUILD in the LibreAgent repo, not this one):
-      # Wire is linked statically into liblibrescrs-agentclient-qt.so, so the
-      # standalone archive is redundant in a ClientQt-only prefix.
+      # LIBREAGENT_INSTALL_WIRE_ARCHIVE=ON, though Wire is linked statically
+      # into liblibrescrs-agentclient-qt.so and the standalone archive is
+      # redundant for the CLIENT: this prefix also carries the agent doubles
+      # (LibreAgent::ClientQtTestSupport), whose socket peer speaks that wire
+      # and whose symbols the shared library deliberately does not export. The
+      # doubles' imported target therefore names LibreAgent::Wire, and a prefix
+      # without it fails to configure HERE, a long way from its cause.
+      # LibreAgent's own CMake refuses the incoherent combination outright.
       # No BUILD_TESTING flag: two independent gates in LibreAgent's own CMake
       # add its test binaries regardless of that variable. Root tests/ (wire +
       # spike only) is added whenever this is the top-level project with Core
@@ -215,7 +219,7 @@ jobs:
             -DLIBREAGENT_BUILD_CORE=OFF \
             -DLIBREAGENT_BUILD_WIRE=ON \
             -DLIBREAGENT_BUILD_CLIENT_QT=ON \
-            -DLIBREAGENT_INSTALL_WIRE_ARCHIVE=OFF \
+            -DLIBREAGENT_INSTALL_WIRE_ARCHIVE=ON \
             -DCMAKE_DISABLE_FIND_PACKAGE_LibreMiddleware=ON
           cmake --build build -j4
           cmake --install build --prefix "$AGENT_PREFIX"
@@ -414,10 +418,14 @@ jobs:
       # success. With Core off that find_package() call is never reached at
       # all, so CMake currently reports this variable as unused too -- that is
       # expected here, not a sign the flag is dead.
-      # LIBREAGENT_INSTALL_WIRE_ARCHIVE=OFF mirrors LibreAgent's own packaging
-      # recipe (packaging/arch/PKGBUILD in the LibreAgent repo, not this one):
-      # Wire is linked statically into liblibrescrs-agentclient-qt.so, so the
-      # standalone archive is redundant in a ClientQt-only prefix.
+      # LIBREAGENT_INSTALL_WIRE_ARCHIVE=ON, though Wire is linked statically
+      # into liblibrescrs-agentclient-qt.so and the standalone archive is
+      # redundant for the CLIENT: this prefix also carries the agent doubles
+      # (LibreAgent::ClientQtTestSupport), whose socket peer speaks that wire
+      # and whose symbols the shared library deliberately does not export. The
+      # doubles' imported target therefore names LibreAgent::Wire, and a prefix
+      # without it fails to configure HERE, a long way from its cause.
+      # LibreAgent's own CMake refuses the incoherent combination outright.
       # No BUILD_TESTING flag: two independent gates in LibreAgent's own CMake
       # add its test binaries regardless of that variable. Root tests/ (wire +
       # spike only) is added whenever this is the top-level project with Core
@@ -435,7 +443,7 @@ jobs:
             -DLIBREAGENT_BUILD_CORE=OFF \
             -DLIBREAGENT_BUILD_WIRE=ON \
             -DLIBREAGENT_BUILD_CLIENT_QT=ON \
-            -DLIBREAGENT_INSTALL_WIRE_ARCHIVE=OFF \
+            -DLIBREAGENT_INSTALL_WIRE_ARCHIVE=ON \
             -DCMAKE_DISABLE_FIND_PACKAGE_LibreMiddleware=ON
           cmake --build build -j4
           cmake --install build --prefix "$AGENT_PREFIX"

@@ -27,7 +27,7 @@
 #include <memory>
 
 using namespace LibreKDE;
-using namespace LibreKDETest;
+using namespace LibreSCRS::AgentClient::Fakes;
 
 // The agent client library, spelled through an alias rather than pulled in
 // wholesale with a using-directive. NOT a collision fix, and the measurement
@@ -379,7 +379,11 @@ TEST(CredentialController, TransientReadErrorRecoversOnRefetch)
     using State = Credentials::CredentialController::State;
     FakeAgent::Config cfg;
     cfg.capabilities = Client::Cap::PinManagement | Client::Cap::Pki;
-    cfg.finalStatus = 2; // Error — a transient read failure
+    // The LISTING's own terminal status, scripted apart from the mutation's:
+    // the shared double separates them because the agent caches a snapshot only
+    // for a list that succeeded, so a listing dragged into a mutation's Error
+    // would leave every id unresolvable for reasons this case is not about.
+    cfg.listingFinalStatus = 2; // Error — a transient read failure
     Harness h(cfg, BusNames::UniqueAndWellKnown);
 
     auto client = std::make_shared<Client::AgentClient>();
@@ -394,7 +398,7 @@ TEST(CredentialController, TransientReadErrorRecoversOnRefetch)
     // The agent recovers: the next ListCredentials returns Ok with a record. A
     // transient error does not latch, so an explicit refresh() re-fetches.
     h.mutateConfig([](FakeAgent::Config& c) {
-        c.finalStatus = 0;
+        c.listingFinalStatus = 0;
         c.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("ok")}};
         c.credRecords = {userPinRecord()};
     });
@@ -1361,10 +1365,24 @@ TEST(CredentialController, CardRemovedMidListLandsNoCard)
 }
 
 // The subtler re-entrancy path: a verb launched from the Result state, while the
-// previous mutation's mandatory re-list is STILL in flight, must detach that re-list
-// (beginMutation's resetListState) so its terminal cannot clobber the new verb's
-// Working state. Without the detach, the stale re-list's onListFinished flips the
-// window back to Ready mid-mutation.
+// previous mutation's mandatory re-list is STILL in flight, must detach that
+// re-list (beginMutation's resetListState) so its terminal cannot flip the
+// window back to Ready underneath the new verb.
+//
+// What the verb itself does in that window is the AGENT's business, and this
+// case used to assert the wrong answer to it. The agent resolves a pinId only
+// against a COMPLETED listing, and a mutation drops the cached one; a verb
+// issued before the mandatory re-list has finished therefore draws
+// UnknownCredential, and the controller shows that refusal. The copy of the
+// agent double this repository used to keep marked its listing cache current at
+// ListCredentials METHOD ENTRY rather than at completion, so the second verb was
+// accepted here and this case asserted a Working window that no real agent
+// produces. The shared double marks it on completion, which is why the
+// expectation below is a refusal rather than sustained Working.
+//
+// The property the case exists for is unchanged and is the assertion that
+// matters: the detached re-list terminates during the window watched below and
+// must not move the controller to Ready.
 TEST(CredentialController, VerbFromResultDetachesInflightRelist)
 {
     using State = Credentials::CredentialController::State;
@@ -1398,8 +1416,13 @@ TEST(CredentialController, VerbFromResultDetachesInflightRelist)
     // With the detach, the first re-list is disconnected + reaped, so it can NEVER
     // move us to Ready. Watch across a window that covers its ~200 ms completion.
     EXPECT_FALSE(waitFor([&]() { return ctl.state() == int(State::Ready); }, 700))
-        << "a detached in-flight re-list must not clobber the new verb's Working state";
-    EXPECT_EQ(ctl.state(), int(State::Working));
+        << "a detached in-flight re-list must not clobber the new verb's window";
+
+    // And the verb's own outcome, which is a refusal: the agent cannot resolve a
+    // pinId while the mandatory re-list is still running, so it answers
+    // UnknownCredential and the controller shows the result banner. Asserted so
+    // the case says out loud which of the two windows it ends in.
+    EXPECT_EQ(ctl.state(), int(State::Result));
 }
 
 } // namespace
