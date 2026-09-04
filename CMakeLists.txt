@@ -58,9 +58,7 @@ find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS I18n CoreAddons Notificat
 
 option(LIBREKDE_BUILD_PLASMOID  "Build Plasma 6 widget"   ON)
 option(LIBREKDE_BUILD_PURPOSE   "Build Purpose plugin"    ON)
-option(LIBREKDE_BUILD_KRUNNER   "Build KRunner plugin"    OFF)
 option(LIBREKDE_BUILD_KIO       "Build card:/ KIO worker"           ON)
-option(LIBREKDE_BUILD_KWALLET   "Build KWallet backend"   OFF)
 option(LIBREKDE_BUILD_CREDENTIALS "Build the credential-management window" ON)
 
 option(BUILD_TESTING "Build tests" ON)
@@ -138,7 +136,5 @@ endif()
 message(STATUS "LibreKDE ${PROJECT_VERSION} configured")
 message(STATUS "  - plasmoid: ${LIBREKDE_BUILD_PLASMOID}")
 message(STATUS "  - purpose : ${LIBREKDE_BUILD_PURPOSE}")
-message(STATUS "  - krunner : ${LIBREKDE_BUILD_KRUNNER}")
 message(STATUS "  - kio     : ${LIBREKDE_BUILD_KIO}")
-message(STATUS "  - kwallet : ${LIBREKDE_BUILD_KWALLET}")
 message(STATUS "  - credentials: ${LIBREKDE_BUILD_CREDENTIALS}")

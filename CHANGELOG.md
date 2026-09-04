@@ -10,6 +10,13 @@ every entry below describes a change to what you get by building from source.
 
 ## Unreleased
 
+### Removed
+
+- Two build options that named components this repository does not contain:
+  `LIBREKDE_BUILD_KRUNNER` and `LIBREKDE_BUILD_KWALLET`. There is no
+  `components/krunner` and no KWallet backend here, and each option's only
+  other mention was the status line that printed its value.
+
 ### Changed
 
 - The Plasma clients no longer carry their own D-Bus client for the card
