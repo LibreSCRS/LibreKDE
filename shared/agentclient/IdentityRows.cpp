@@ -3,6 +3,8 @@
 
 #include "IdentityRows.h"
 
+#include <LibreSCRS/AgentClient/FieldOrder.h>
+#include <LibreSCRS/AgentClient/IdentityRows.h>
 #include <LibreSCRS/AgentClient/SecurityChecks.h>
 
 #include <KLocalizedString>
@@ -451,11 +453,11 @@ QString localizedFieldValue(const LibreSCRS::AgentClient::IdentityRow& row)
     }
 
     if (row.labelKey == QLatin1String("field.address_date") && !row.value.isEmpty()) {
-        if (QDate::fromString(row.value, QStringLiteral("dd.MM.yyyy")).isValid()) {
-            return row.value;
-        }
-        if (const QDate d = QDate::fromString(row.value, QStringLiteral("ddMMyyyy")); d.isValid()) {
-            return d.toString(QStringLiteral("dd.MM.yyyy"));
+        // The two-shape rule is the client library's; the word for "this is not
+        // a date" is this host's, and it is translated, which is exactly why
+        // the library returns nothing rather than a stand-in of its own.
+        if (const std::optional<QString> date = LibreSCRS::AgentClient::normalizedCardDate(row.value)) {
+            return *date;
         }
         return ki18ndc("librekde", "@item:intable identity field value (card carries no date)", "Unknown").toString();
     }
@@ -486,29 +488,19 @@ QStringList mappedGroupKeys()
 
 QStringList fieldOrderForGroup(const QString& groupKey)
 {
-    // The annex's substance is an address, and the wire delivers it sorted by
-    // key. Same order the desktop client reads it in — byte-identical twin in
-    // LibreCelik, plugins/emrtd/emrtdwidget.cpp (annexFieldOrder()); each
-    // repository pins its copy with a test, change both together.
-    if (groupKey.startsWith(QLatin1String("annex.")) && groupKey.endsWith(QLatin1String(".personal"))) {
-        return {
-            QStringLiteral("address_label"),     QStringLiteral("street"),
-            QStringLiteral("house_number"),      QStringLiteral("house_letter"),
-            QStringLiteral("entrance"),          QStringLiteral("floor"),
-            QStringLiteral("apartment_number"),  QStringLiteral("place"),
-            QStringLiteral("community"),         QStringLiteral("state"),
-            QStringLiteral("parent_given_name"), QStringLiteral("community_of_birth"),
-            QStringLiteral("state_of_birth"),    QStringLiteral("document_serial"),
-            QStringLiteral("address_date"),
-        };
-    }
-    // The annex's verdict pair reads integrity-then-authenticity, matching the
-    // desktop client's pane; the key-sorted wire would put authenticity first.
-    // Fields outside the pair keep delivery order, after the pinned two.
-    if (groupKey.startsWith(QLatin1String("annex.")) && groupKey.endsWith(QLatin1String(".security"))) {
-        return {QStringLiteral("annex_integrity"), QStringLiteral("annex_authenticity")};
-    }
-    return {};
+    // MIRROR-OF: LibreAgent/client/qt/src/FieldOrder.cpp - kept as a name of
+    // this repository's own so its pin stays an independent failure.
+    //
+    // The order itself belongs to the agent client library both desktop hosts
+    // link, and this is the one line that reaches it. It used to be a
+    // hand-written list here and a byte-identical one in the other host, each
+    // pinned by its own test and each carrying a comment asking the reader to
+    // change both together. A comment is not a mechanism.
+    //
+    // The name stays: this repository's own callers and its own pin go on
+    // saying LibreKDE::fieldOrderForGroup, which is what makes that pin a
+    // second, independent failure when the shared order moves.
+    return LibreSCRS::AgentClient::fieldOrderForGroup(groupKey);
 }
 
 QStringList mappedLabelKeys()
