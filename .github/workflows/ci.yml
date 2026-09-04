@@ -39,9 +39,27 @@ jobs:
           sudo apt-get install -y clang-format-21
 
       - name: Check clang-format
+        # The roots live in ci/format-dirs.txt, which the scope check below
+        # reads too: a directory nobody formats cannot appear without one of
+        # these two steps saying so.
+        #
+        # -print0/-0 for paths with spaces, a parenthesised extension filter so
+        # the -o cannot swallow the directory list, and -r because without it an
+        # empty result makes clang-format read stdin and hang rather than fail.
+        # One wedged job in this project cost most of a working afternoon.
         run: |
-          find components shared tests -name "*.cpp" -o -name "*.h" \
-            | xargs clang-format-21 --dry-run --Werror
+          mapfile -t dirs < <(grep -v '^#' ci/format-dirs.txt)
+          find "${dirs[@]}" \
+            \( -name '*.cpp' -o -name '*.h' -o -name '*.hpp' -o -name '*.mm' \) -print0 \
+            | xargs -0 -r clang-format-21 --dry-run --Werror
+
+      - name: Check every tracked source is reachable by the formatter
+        run: ./ci/scripts/check-format-scope.sh
+
+      - name: Check every skip carries a reason
+        # A test that skips without saying why is indistinguishable from a test
+        # that passed. Costs a second and builds nothing.
+        run: ./ci/scripts/check-skip-reasons.sh
 
   build-linux:
     # Arch container: the codebase targets current KF6 / Plasma 6, which
@@ -198,6 +216,10 @@ jobs:
         working-directory: LibreKDE
         run: cmake --build build -j4
 
+      - name: Check the discovered test set
+        working-directory: LibreKDE
+        run: ./ci/scripts/test-manifest-gate.sh --check build linux
+
       # qmllint over the plasmoid QML (Qt6 qmllint, shipped by qt6-declarative).
       # The plasmoid ships its UI as QML under package/contents/ui. On Arch the
       # Qt6 qmllint lives in $(qmake6 -query QT_INSTALL_BINS) (e.g.
@@ -206,7 +228,7 @@ jobs:
         working-directory: LibreKDE
         run: |
           QMLLINT="$(qmake6 -query QT_INSTALL_BINS)/qmllint"
-          find components/plasmoid -name "*.qml" -print0 | xargs -0 "$QMLLINT"
+          find components/plasmoid -name "*.qml" -print0 | xargs -0 -r "$QMLLINT"
 
       # offscreen for the Qt/KDE widget tests; dbus-run-session provides a
       # private session bus the agentclient D-Bus tests connect to. No
@@ -218,4 +240,25 @@ jobs:
         # --no-tests=error: without it ctest reports success when it finds no
         # tests at all, so a configuration that registered none would pass this
         # step green.
-        run: dbus-run-session -- ctest --test-dir build --output-on-failure --no-tests=error
+        run: |
+          # The pipe is removed rather than patched. The runner's default shell
+          # for a `run:` step is `bash -e {0}` WITHOUT pipefail, so
+          # `ctest ... | tee ctest.log` reports the status of tee: a failed
+          # suite showed as a green step, and a check reading that log
+          # afterwards passed too. With no pipe there is no question about what
+          # the default is. Measured: the old shape exits 0 on a ctest that
+          # fails, this one exits 1.
+          set +e
+          dbus-run-session -- ctest --test-dir build --output-on-failure --no-tests=error > ctest.log 2>&1
+          rc=$?
+          set -e
+          cat ctest.log
+          echo "ctest rc=$rc"
+          exit "$rc"
+
+      - name: Check the skip ledger
+        # always(): the ledger's whole point is the run where something did not
+        # run, including runs where something also failed.
+        if: always()
+        working-directory: LibreKDE
+        run: ./ci/scripts/skip-ledger.sh --check ctest.log linux
