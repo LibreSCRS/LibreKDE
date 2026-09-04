@@ -93,7 +93,7 @@ jobs:
       # revision in cmake/FindOrUseLibreAgent.cmake, and it is what this job
       # checks out to build the CONFIG package the default path finds -- so
       # the escape hatch and the shipped path name one agent, and CI measures
-      # it. LibreKDE's own find_package(LibreAgent 4.2 ...) still enforces the
+      # it. LibreKDE's own find_package(LibreAgent 5.0 ...) still enforces the
       # required VERSION independently; this is about which revision, not
       # which version.
     steps:
@@ -308,7 +308,7 @@ jobs:
       # revision in cmake/FindOrUseLibreAgent.cmake, and it is what this job
       # checks out to build the CONFIG package the default path finds -- so
       # the escape hatch and the shipped path name one agent, and CI measures
-      # it. LibreKDE's own find_package(LibreAgent 4.2 ...) still enforces the
+      # it. LibreKDE's own find_package(LibreAgent 5.0 ...) still enforces the
       # required VERSION independently; this is about which revision, not
       # which version.
     # Not on pull_request: this pass costs an hour and the moment a

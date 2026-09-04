@@ -27,10 +27,10 @@ every entry below describes a change to what you get by building from source.
 
   If you build or package LibreKDE, this is the change that affects you.
   Configuring with a bare `cmake -B build` no longer works: the build now needs
-  LibreAgent 4.2 or newer, installed with its `ClientQt` component, either
+  LibreAgent 5.0 or newer, installed with its `ClientQt` component, either
   where CMake already looks or named through `CMAKE_PREFIX_PATH`. The build
   section of the README has the full recipe. The plugins and executables that
-  come out link `liblibrescrs-agentclient-qt.so.4`, a versioned shared object,
+  come out link `liblibrescrs-agentclient-qt.so.5`, a versioned shared object,
   so a package needs a runtime dependency on it and LibreKDE has to be rebuilt
   when that library's major version changes.
 

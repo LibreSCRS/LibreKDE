@@ -23,7 +23,7 @@ if(NOT LIBREAGENT_PIN_LENGTH EQUAL 40 OR NOT LIBREAGENT_PIN MATCHES "^[0-9a-f]+$
 endif()
 
 if(NOT LIBREKDE_FETCH_AGENT)
-    find_package(LibreAgent 4.2 REQUIRED CONFIG COMPONENTS ClientQt)
+    find_package(LibreAgent 5.0 REQUIRED CONFIG COMPONENTS ClientQt)
 else()
     include(FetchContent)
     # All three are mandatory: CLIENT_QT defaults OFF, and CORE defaults ON and

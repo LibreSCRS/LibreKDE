@@ -55,7 +55,7 @@ ctest --test-dir build --output-on-failure
 Leave `CMAKE_PREFIX_PATH` out if the client library is already somewhere CMake
 searches — a distribution package, or `/usr/local`. Without it and without an
 installed client library, step 2 stops at
-`find_package(LibreAgent 4.2 ... COMPONENTS ClientQt)`; that is the missing
+`find_package(LibreAgent 5.0 ... COMPONENTS ClientQt)`; that is the missing
 dependency, not a broken checkout.
 
 To work on this repository and the agent's at the same time,
@@ -79,7 +79,7 @@ Always needed, whichever components you build:
 - CMake 3.24+, a C++23 compiler, and Ninja or Make
 - `git` — the version is derived from the repository's tags at configure time
 - `extra-cmake-modules` 6.0+
-- LibreAgent 4.2+, built and installed with its `ClientQt` component
+- LibreAgent 5.0+, built and installed with its `ClientQt` component
 - Qt 6.6+ development packages: Core / Gui / Qml / DBus / Test
 - KF6 6.0+ development packages: I18n / CoreAddons / Notifications / Config
 - `gettext` (`msgfmt`) — the catalogues are compiled during the build
@@ -114,7 +114,7 @@ finding; `--verbose` also prints the entry count per catalogue.
 ## Runtime dependencies
 
 - A running LibreSCRS agent (`org.librescrs.Agent`)
-- The agent's Qt client library (`liblibrescrs-agentclient-qt.so.4`)
+- The agent's Qt client library (`liblibrescrs-agentclient-qt.so.5`)
 - Qt 6.6+ (Core / Gui / Qml / DBus; Widgets + QuickControls2 for the
   credentials window)
 - KF6 6.0+ (I18n / CoreAddons / Notifications / Config; Kirigami +
