@@ -8,7 +8,7 @@ SPDX-FileCopyrightText: 2026 hirashix0
 Notable changes to LibreKDE, newest first. There is no tagged release yet, so
 every entry below describes a change to what you get by building from source.
 
-## Unreleased
+## [Unreleased] — 5.0.0
 
 ### Removed
 

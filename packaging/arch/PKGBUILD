@@ -21,10 +21,12 @@
 #     librescrs-middleware  <=  librelinux  <=  librekde
 #     librescrs-agent-client-qt  <=  librekde
 #
-# Versioning: independent SemVer (0.x until the D-Bus wire surface freezes).
+# Versioning: this component no longer carries its own 0.x SemVer. It is
+# released in lockstep with the rest of the stack, and pkgver is the first
+# line of the repository's VERSION file.
 
 pkgname=librekde
-pkgver=0.1.0
+pkgver=5.0.0
 pkgrel=1
 pkgdesc="KDE Plasma 6 integration for LibreSCRS: smart-card plasmoid, credential-management window, Purpose Sign plugin, and card:/ KIO worker"
 arch=('x86_64' 'aarch64')
@@ -63,7 +65,7 @@ makedepends=(
 source=(
     "$pkgname-$pkgver.tar.gz::https://github.com/LibreSCRS/LibreKDE/archive/refs/tags/v$pkgver.tar.gz"
 )
-# Placeholder — real sum filled at tag time with `updpkgsums`. The v0.1.0 tag
+# Placeholder — real sum filled at tag time with `updpkgsums`. The 5.0.0 tag
 # does not exist yet (repo unpublished); see README.md for the local-dogfood
 # build that needs no remote.
 sha256sums=('SKIP')
