@@ -33,6 +33,7 @@ jobs:
     # The build job runs in an Arch container, but Arch's rolling `clang` is
     # ahead of 21 and would reformat against a different major — the project
     # standard is clang-format 21, not the distro default.
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -74,11 +75,19 @@ jobs:
         # the tag's version.
         run: ci/scripts/check-release-lockstep.sh "$(head -n1 VERSION | tr -d '[:space:]')"
 
+      - name: Every job carries a time bound
+        # An unbounded job that hangs holds a runner for six hours and will
+        # not serve its log until the run is cancelled, so the failing test
+        # cannot even be named. This fails when a new job arrives without a
+        # bound, which is the only moment the omission is cheap to fix.
+        run: ci/scripts/check-job-timeouts.sh
+
   build-linux:
     # Arch container: the codebase targets current KF6 / Plasma 6, which
     # ubuntu apt does not carry at the required versions. pacman provides
     # current ECM, Qt6, KF6 and Plasma 6 — matching the owner's Arch/Manjaro
     # env and the LibreKDE PKGBUILD dep set (packaging/arch/PKGBUILD).
+    timeout-minutes: 60
     runs-on: ubuntu-latest
     container: archlinux:latest
     env:

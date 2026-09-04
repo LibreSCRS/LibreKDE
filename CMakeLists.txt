@@ -62,6 +62,13 @@ option(LIBREKDE_BUILD_KIO       "Build card:/ KIO worker"           ON)
 option(LIBREKDE_BUILD_CREDENTIALS "Build the credential-management window" ON)
 
 option(BUILD_TESTING "Build tests" ON)
+# Bound every test. ctest's built-in default is 1500 seconds, so a single
+# wedged test can hold a hosted runner for twenty-five minutes without ever
+# being named. DART_TESTING_TIMEOUT is read by the CTest module below and
+# written into DartConfiguration.tcl as the default every test inherits; it
+# has to be set BEFORE the include, which would otherwise cache 1500.
+set(DART_TESTING_TIMEOUT 300 CACHE STRING
+    "Default per-test ctest timeout, in seconds")
 include(CTest)
 
 # LibreAgent::ClientQt — the Qt client library for org.librescrs.Agent. Found
