@@ -88,6 +88,16 @@ if(LIBREKDE_BUILD_PLASMOID OR LIBREKDE_BUILD_PURPOSE)
     find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Widgets)
 endif()
 
+# Qt6::Quick is linked by the plasmoid and by its QML plugin, and it was never
+# asked for: on a machine that also builds the credential window the target
+# arrives through QuickControls2, and on a developer machine the Qt development
+# packages are all installed anyway. In a clean chroot with only what the recipe
+# declares, the target does not exist and configuration fails on a name that
+# looks like a typo. Ask for what is linked.
+if(LIBREKDE_BUILD_PLASMOID)
+    find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Quick)
+endif()
+
 add_subdirectory(shared)
 
 if(LIBREKDE_BUILD_PLASMOID)
