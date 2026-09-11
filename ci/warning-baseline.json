@@ -3,5 +3,5 @@
     "-Wdeprecated-declarations": 1,
     "-Wmissing-include-dirs": 4
   },
-  "min_compile_units": 122
+  "min_compile_units": 111
 }
