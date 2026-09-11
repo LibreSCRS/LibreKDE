@@ -1,0 +1,3 @@
+# <kind> <path>
+cmake-project     .
+plasma-metadata   components/plasmoid/package/metadata.json

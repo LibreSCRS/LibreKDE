@@ -18,7 +18,7 @@
         "Name[sr@latin]": "LibreSCRS pametna kartica",
         "Name[sr]": "LibreSCRS паметна картица",
         "ServiceTypes": ["Plasma/Applet"],
-        "Version": "0.1.0",
+        "Version": "5.0.0",
         "Website": "https://librescrs.github.io/"
     },
     "X-Plasma-API-Minimum-Version": "6.0",

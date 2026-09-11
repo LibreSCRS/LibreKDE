@@ -7,13 +7,12 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 include(GitVersion)
 
-# Default to 0.1.0 when no git tag exists yet.
-if(NOT DEFINED LIBREKDE_VERSION)
-    set(LIBREKDE_VERSION "0.1.0")
-endif()
-
+# project() takes what GitVersion.cmake derives -- the git tag in a checkout,
+# the VERSION file in a release tarball -- as in LibreLinux and LibreDarwin.
+# The block that stood here set a LIBREKDE_VERSION that GitVersion never
+# defines, so the build stamped 0.1.0 while the package label said 5.0.0.
 project(LibreKDE
-    VERSION ${LIBREKDE_VERSION}
+    VERSION ${GIT_VERSION_MAJOR}.${GIT_VERSION_MINOR}.${GIT_VERSION_PATCH}
     DESCRIPTION "KDE Plasma 6 integration for LibreSCRS smart-card middleware"
     HOMEPAGE_URL "https://librescrs.github.io/"
     LANGUAGES CXX
