@@ -11,7 +11,8 @@ library, so it depends on **`librescrs-agent-client-qt`** as well; that package
 is built from the agent library's own repository and its own dependencies are
 Qt6 and libc only, so it pulls in no part of the middleware stack.
 
-The `PKGBUILD` is **release-shaped** (it fetches the tag's source tarball).
+The `PKGBUILD` is **release-shaped**: it fetches the source tarball the release
+workflow uploads for the tag, not GitHub's auto-generated one.
 `pkgver` is the first line of the repository's `VERSION` file: this component
 no longer carries its own 0.x SemVer and is released in lockstep with the
 rest of the stack.
@@ -39,11 +40,12 @@ component**: AppStream desktop-application entries are for user-launchable
 apps, and a hidden helper is not one. The only AppStream metainfo shipped is
 the plasmoid addon (`org.librescrs.smartcard`) and the Purpose plugin's.
 
-## Release build (after the `5.0.0` tag is pushed)
+## Release build (after the `5.0.0` release is published)
 
 ```sh
 cd packaging/arch
-updpkgsums      # fills in the real sha256sum
+makepkg -g      # prints the real sha256sum; paste it into the recipe
+                # (updpkgsums does the same but needs pacman-contrib)
 makepkg -si
 ```
 
