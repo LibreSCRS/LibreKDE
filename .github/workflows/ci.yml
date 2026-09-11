@@ -36,7 +36,16 @@ jobs:
     timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
+      # fetch-tags, deliberately. The recipe check run further down decides
+      # its last arm on whether the LOCAL clone holds refs/tags/<pkgver>: with
+      # a tagless checkout it prints SKIPPED forever, so a sha256sums that is
+      # still a placeholder would outlive the release it waits for and no run
+      # would ever say so. actions/checkout fetches with --no-tags unless this
+      # is set, and a shallow fetch would not carry the tagged commit anyway.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Install clang-format-21
         run: |
@@ -75,12 +84,108 @@ jobs:
         # the tag's version.
         run: ci/scripts/check-release-lockstep.sh "$(head -n1 VERSION | tr -d '[:space:]')"
 
+      - name: Prove the version-surface check still fails when it should
+        # Both sides of the lockstep check above read VERSION, so it cannot
+        # notice a build that stamps a different number -- and for a while the
+        # build stamped 0.1.0 while every label said 5.0.0. This selftest is
+        # what keeps the check below from being a check that cannot fail.
+        run: ./ci/scripts/check-version-surfaces.selftest.sh
+
+      - name: Every surface states the version in VERSION
+        run: ./ci/scripts/check-version-surfaces.sh
+
       - name: Every job carries a time bound
         # An unbounded job that hangs holds a runner for six hours and will
         # not serve its log until the run is cancelled, so the failing test
         # cannot even be named. This fails when a new job arrives without a
         # bound, which is the only moment the omission is cheap to fix.
         run: ci/scripts/check-job-timeouts.sh
+
+      - name: Every shipped gate is wired into CI
+        # A gate nobody runs is not a gate: dup-scan.py and canonical-types.py
+        # shipped in five repositories for a whole release cycle and no
+        # workflow ever named either.
+        run: ci/scripts/check-gates-wired.sh
+
+      - name: Gate-wiring check self-test
+        run: ci/scripts/check-gates-wired.selftest.sh
+
+      - name: Canonical declaration registry
+        # Single-checkout subset of the workspace scan. The cross-repository
+        # half -- duplicate bodies between two checkouts -- needs every tree
+        # side by side, which no single repository's CI has; this half is the
+        # part one repository can prove on its own.
+        run: python3 tools/canonical-types.py --repo "$(basename "$PWD")"
+
+      - name: Duplicate bodies (this checkout)
+        run: python3 tools/dup-scan.py --repo "$(basename "$PWD")"
+
+      - name: Every first-party version floor names the major in VERSION
+        # The 4.x sweep before 5.0 searched for the token `4.2`; the floor that
+        # mattered read `4.0`, in the only executable consumer the project
+        # ships, and survived. This measures the property instead: every
+        # first-party find_package/find_dependency floor must name the major
+        # the VERSION file names. It reads VERSION and never `git describe`, so
+        # it is decidable before a tag exists -- which is the whole window in
+        # which the mistake is cheap. --min 1 is the vacuum guard: a scan that
+        # matches nothing is unmeasured, not clean.
+        run: ci/scripts/check-version-floors.sh --min 1
+
+      - name: Prove the floor gate still fails when it should
+        # Twenty cases, instant, no build. A gate nobody has seen fail is a
+        # line in a workflow file.
+        run: ./ci/scripts/check-version-floors.selftest.sh
+
+      - name: The version this tree stamps names the major in VERSION
+        # The floor gate reads VERSION and the sources, so it stays green
+        # whatever the version derivation does, and a check that configures
+        # with git switched off is measuring the one input under which a tag
+        # cannot win. Between code freeze and the tag `git describe` still
+        # answers with the PREVIOUS release, and a tree that lets it decide
+        # installs a package whose major contradicts its own VERSION, changelog
+        # and packaging. This configures the real CMakeLists against a stubbed
+        # tag, in both directions, and creates no tag anywhere.
+        run: ci/scripts/check-version-stamp.sh --verbose
+
+      - name: Prove the stamp gate still fails when it should
+        # Seven fixtures, no compiler, no build. Two of them are shapes that
+        # have really been written: the tag deciding unconditionally, and git
+        # being ignored altogether.
+        run: ./ci/scripts/check-version-stamp.selftest.sh
+      - name: The Arch recipe fetches the tarball this project publishes
+        # Two scripts, because a gate nobody proves is a gate nobody trusts:
+        # the selftest perturbs the recipe -- and the tree around it -- and
+        # requires each refusal to name its own arm, then the gate runs over
+        # the committed recipe. It prints how many cases it ran, which is the
+        # only count that cannot go stale.
+        # Neither touches the network — `git ls-remote` against these SSH
+        # remotes hangs on a developer machine, and a gate that can hang is
+        # worse than one that can fail.
+        run: |
+          ./packaging/arch/check-recipe.selftest.sh
+          ./packaging/arch/check-recipe.sh
+
+      - name: Every uploaded artefact has someone to download it
+        # An artefact whose name no download step can match is built, kept for
+        # ninety days and dropped from the release without a word: the release
+        # simply carries one asset fewer. Names only -- whether the consumer is
+        # ordered after the producer is the needs question, which this
+        # repository answers only if it carries check-release-artifacts.sh.
+        run: |
+          ./ci/scripts/check-artifact-names.selftest.sh
+          ./ci/scripts/check-artifact-names.sh
+
+      - name: The source tarball is a function of the commit
+        # The recipe carries the tarball's sha256, so a packager who rebuilds
+        # it has to get the same bytes back. Two runs, forced apart by a second
+        # boundary and a umask boundary, then the property read out of the
+        # archive: every member carries the commit's own timestamp, owner 0/0,
+        # a mode from the set --mode writes, and a place in name order rather
+        # than in the order readdir happened to return; nothing sits under
+        # .github/; and the top directory is the one the recipes cd into.
+        run: |
+          ./ci/scripts/check-tarball-determinism.selftest.sh
+          ./ci/scripts/check-tarball-determinism.sh
 
   build-linux:
     # Arch container: the codebase targets current KF6 / Plasma 6, which
@@ -246,6 +351,17 @@ jobs:
           # check measures a log that was never produced.
           set -o pipefail
           LC_ALL=C cmake --build build -j4 2>&1 | tee build.log
+
+      - name: The warning floor is still reachable
+        # warning-gate.py judges the LOG, so a tree that has LOST compile units
+        # makes it refuse every full build and blame the build. This judges the
+        # configured graph instead, so the message names the stale number.
+        working-directory: LibreKDE
+        run: ./ci/scripts/check-warning-floor.sh build
+
+      - name: Warning-floor check self-test
+        working-directory: LibreKDE
+        run: ./ci/scripts/check-warning-floor.selftest.sh
 
       - name: Check the warning baseline
         # Counted by the [-Wname] tag, never by the message text: diagnostics
@@ -537,8 +653,13 @@ jobs:
           case "${{ matrix.slug }}" in fedora43) fam=rpm ;; *) fam=deb ;; esac
           ver=$(tr -d '[:space:]' < VERSION)
           mkdir -p "$RUNNER_TEMP/librescrs-packages/out/${{ matrix.slug }}/LibreMiddleware/$fam"
+          # The slug is part of the asset name upstream: Debian 13 and
+          # Ubuntu 26.04 build .deb files with identical names, so the
+          # publisher puts the distribution into the name and a consumer that
+          # asked for "*.$fam" would fetch both and install packages built
+          # against another distribution's glibc alongside its own.
           gh release download "$ver" --repo LibreSCRS/LibreMiddleware \
-            --pattern "*.$fam" \
+            --pattern "*.${{ matrix.slug }}.$fam" \
             --dir "$RUNNER_TEMP/librescrs-packages/out/${{ matrix.slug }}/LibreMiddleware/$fam"
           mkdir -p "$RUNNER_TEMP/librescrs-packages/out/${{ matrix.slug }}/LibreAgent/$fam"
           gh release download "$ver" --repo LibreSCRS/LibreAgent \
