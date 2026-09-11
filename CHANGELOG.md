@@ -12,6 +12,17 @@ every entry below describes a change to what you get by building from source.
 
 ### Added
 
+- **Every release carries a source tarball this project built.** The Arch
+  recipe fetches that asset instead of the archive GitHub generates for a tag:
+  the generated one omits every submodule tree, and its bytes are not ours to
+  assert, so the recipe's `sha256sums` line said nothing about what was
+  actually built. The published tarball is a function of the commit — every
+  member carries the commit's own timestamp, owner `0/0` and a mode no umask
+  can widen — so a packager who rebuilds it gets the same bytes back, up to the
+  gzip implementation. It is named so that one file can serve as the `.orig`
+  for `dpkg-source`; the `deb` and `rpm` builds still build from the checkout
+  and do not consume it yet.
+
 - **Five distribution packages for the KDE integration.** The plasmoid, the
   `card:/` KIO worker, the Purpose "Sign" plugin, the credential window, and an
   architecture-independent package carrying the message catalogues and the
@@ -49,6 +60,10 @@ every entry below describes a change to what you get by building from source.
   when that library's major version changes.
 
 ### Fixed
+
+- The application now reports the version it actually is. The About window and
+  `--version` said 0.1.0, and the Plasma widget's information said 0.1.0, while the
+  package that installed them was labelled 5.0.0.
 
 - The card details no longer list three internal chip-signature checks among
   your personal data. They arrived labelled with their own internal names,
