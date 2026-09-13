@@ -103,9 +103,12 @@ jobs:
 
   source-tarball:
     # The source tarball is produced by this project, not by GitHub. GitHub's
-    # archive/refs/tags tarball omits every submodule tree and its bytes are
-    # not ours to assert; this one comes from a clone with --recurse-submodules
-    # and is byte-identical run to run -- ci/scripts/check-tarball-determinism.sh
+    # archive/refs/tags tarball is whatever the forge generates for a tag name
+    # and its bytes are not ours to assert -- packaging/arch/PKGBUILD asked for
+    # one spelled `v$pkgver`, which no tag in this repository carries, under
+    # `sha256sums=('SKIP')`, so the recipe said nothing about what it
+    # downloaded. This one comes from a clone with --recurse-submodules and is
+    # byte-identical run to run -- ci/scripts/check-tarball-determinism.sh
     # measures that on every push, up to the gzip implementation, which is the
     # one thing the script cannot make a property of the commit -- so the
     # sha256sums line in packaging/arch/PKGBUILD becomes a claim about bytes

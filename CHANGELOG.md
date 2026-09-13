@@ -14,14 +14,14 @@ every entry below describes a change to what you get by building from source.
 
 - **Every release carries a source tarball this project built.** The Arch
   recipe fetches that asset instead of the archive GitHub generates for a tag:
-  the generated one omits every submodule tree, and its bytes are not ours to
-  assert, so the recipe's `sha256sums` line said nothing about what was
-  actually built. The published tarball is a function of the commit — every
-  member carries the commit's own timestamp, owner `0/0` and a mode no umask
-  can widen — so a packager who rebuilds it gets the same bytes back, up to the
-  gzip implementation. It is named so that one file can serve as the `.orig`
-  for `dpkg-source`; the `deb` and `rpm` builds still build from the checkout
-  and do not consume it yet.
+  the generated one is whatever the forge makes of a tag name, its bytes are
+  not ours to assert, and the recipe asked for it under `sha256sums=('SKIP')`,
+  so that line said nothing about what was actually built. The published
+  tarball is a function of the commit — every member carries the commit's own
+  timestamp, owner `0/0` and a mode no umask can widen — so a packager who
+  rebuilds it gets the same bytes back, up to the gzip implementation. It is
+  named so that one file can serve as the `.orig` for `dpkg-source`; the `deb`
+  and `rpm` builds still build from the checkout and do not consume it yet.
 
 - **Five distribution packages for the KDE integration.** The plasmoid, the
   `card:/` KIO worker, the Purpose "Sign" plugin, the credential window, and an
