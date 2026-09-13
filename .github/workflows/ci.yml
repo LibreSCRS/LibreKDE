@@ -102,9 +102,9 @@ jobs:
         run: ci/scripts/check-job-timeouts.sh
 
       - name: Every shipped gate is wired into CI
-        # A gate nobody runs is not a gate: dup-scan.py and canonical-types.py
-        # shipped in five repositories for a whole release cycle and no
-        # workflow ever named either.
+        # A gate nobody runs is not a gate: this repository shipped
+        # tools/dup-scan.py and tools/canonical-types.py, both self-tested and
+        # both green, while no workflow here named either of them.
         run: ci/scripts/check-gates-wired.sh
 
       - name: Gate-wiring check self-test
@@ -132,8 +132,8 @@ jobs:
         run: ci/scripts/check-version-floors.sh --min 1
 
       - name: Prove the floor gate still fails when it should
-        # Twenty cases, instant, no build. A gate nobody has seen fail is a
-        # line in a workflow file.
+        # Every case is a text fixture: no compiler, no build. A gate nobody
+        # has seen fail is a line in a workflow file.
         run: ./ci/scripts/check-version-floors.selftest.sh
 
       - name: The version this tree stamps names the major in VERSION
@@ -202,13 +202,12 @@ jobs:
       # LibreAgent is NOT tracked by branch here: the ref is read at run time
       # from cmake/libreagent.pin by the step below.
       #
-      # This was `AGENT_REF: main`, and the effect was that this job built,
-      # installed and then found a ClientQt package from the producer's TRUNK
-      # while the repo named a revision that nothing built. Two failures in
-      # one: a green run was a verdict about a combination this repo does not
-      # declare and cannot ship, and the declared pin rotted unmeasured -- it
-      # was found five commits behind, having drifted with nobody able to
-      # notice.
+      # A branch name here would make this job build, install and then find a
+      # ClientQt package from the producer's TRUNK while the repo named a
+      # revision that nothing built. Two failures in one: a green run would be
+      # a verdict about a combination this repo does not declare and cannot
+      # ship, and the revision in cmake/libreagent.pin would rot unmeasured,
+      # free to drift with nothing here able to notice.
       #
       # The pin governs BOTH consumption paths now. It is the fetch branch's
       # revision in cmake/FindOrUseLibreAgent.cmake, and it is what this job
@@ -432,13 +431,12 @@ jobs:
       # LibreAgent is NOT tracked by branch here: the ref is read at run time
       # from cmake/libreagent.pin by the step below.
       #
-      # This was `AGENT_REF: main`, and the effect was that this job built,
-      # installed and then found a ClientQt package from the producer's TRUNK
-      # while the repo named a revision that nothing built. Two failures in
-      # one: a green run was a verdict about a combination this repo does not
-      # declare and cannot ship, and the declared pin rotted unmeasured -- it
-      # was found five commits behind, having drifted with nobody able to
-      # notice.
+      # A branch name here would make this job build, install and then find a
+      # ClientQt package from the producer's TRUNK while the repo named a
+      # revision that nothing built. Two failures in one: a green run would be
+      # a verdict about a combination this repo does not declare and cannot
+      # ship, and the revision in cmake/libreagent.pin would rot unmeasured,
+      # free to drift with nothing here able to notice.
       #
       # The pin governs BOTH consumption paths now. It is the fetch branch's
       # revision in cmake/FindOrUseLibreAgent.cmake, and it is what this job
