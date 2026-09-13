@@ -123,8 +123,8 @@ finding; `--verbose` also prints the entry count per catalogue.
 
 ## Repository
 
-LibreKDE is one of four sibling repositories under the LibreSCRS
-umbrella; see <https://librescrs.github.io/> for the project overview.
+LibreKDE is one of the LibreSCRS repositories; see
+<https://librescrs.github.io/> for the project overview.
 
 ## Licence
 

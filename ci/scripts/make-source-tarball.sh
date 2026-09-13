@@ -12,21 +12,21 @@
 # Two things this script refuses to do, both because they have already gone
 # wrong once:
 #
-#  * `git archive` does not descend into submodules, and a tree without
-#    thirdparty/curl-source fails configuration with "No download info given
-#    for 'curl_external'". So the tree comes from a clone with
-#    --recurse-submodules, with .git removed afterwards.
+#  * `git archive` does not descend into submodules, and a tree that vendors a
+#    dependency as one can fail configuration with a missing download step
+#    for it. So the tree comes from a clone with --recurse-submodules, with
+#    .git removed afterwards.
 #
-#  * `tar --exclude-vcs-ignores` honours every .gitignore in the tree. The
-#    vendored OpenSC ignores *.[0-9] while tracking a man page that matches it,
-#    and dropping that one file stopped its autotools build with a
-#    missing-target error naming a file nobody deleted. Only explicit excludes —
-#    anchored to the top directory, because an unanchored './x' matches no
-#    member name tar ever writes here and excludes nothing at all.
+#  * `tar --exclude-vcs-ignores` honours every .gitignore in the tree. A
+#    vendored dependency's own .gitignore can exclude a file its build still
+#    needs, and dropping such a file can stop the build with a missing-target
+#    error naming a file nobody deleted. Only explicit excludes — anchored to
+#    the top directory, because an unanchored './x' matches no member name
+#    tar ever writes here and excludes nothing at all.
 #
 # Any dependency that is fetched at configure time rather than carried as a
-# submodule is vendored here, at its pinned commit, so the package build never
-# reaches the network.
+# submodule is vendored, where a tree carries one, at its pinned commit, so
+# the package build never reaches the network.
 set -euo pipefail
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -98,9 +98,10 @@ mkdir -p "$outdir"
 #  * owner and group were whoever ran it;
 #  * the MODE was the caller's umask. git clone honours it, tar records what it
 #    finds, so without --mode the same commit gives two different sums: under
-#    umask 022 every member is written drwxr-xr-x/-rw-r--r--, under umask 002
-#    drwxrwxr-x/-rw-rw-r--. A packager rebuilding the tarball to check the
-#    published sum would have concluded the asset had been tampered with.
+#    umask 022 directories and regular files are written drwxr-xr-x/-rw-r--r--,
+#    under umask 002 drwxrwxr-x/-rw-rw-r--. A packager rebuilding the tarball
+#    to check the published sum would have concluded the asset had been
+#    tampered with.
 #    --mode normalises all three: 755 for anything executable or a directory,
 #    644 for the rest. It reaches symlinks too, where the stored mode is a
 #    constant either way -- measured with GNU tar 1.35 on a fixture holding

@@ -122,8 +122,8 @@ census() {  # census <tarball> <label>
     # symlink, because --mode rewrites the 0777 that lstat reports for one.
     # The premise this arm shipped with ("a symlink is stored 777 by tar
     # regardless of umask, so it belongs here too") was measured false: it
-    # holds only for a tar line WITHOUT --mode, and this stack carries one
-    # tracked symlink, in the vendored OpenSC tree, which the old set refused.
+    # holds only for a tar line WITHOUT --mode, and a tracked symlink, where
+    # a tree carries one, is stored with a mode the old set refused.
     okm=$(printf '%s\n' "$lst" | awk '{print $1}' | grep -cxE 'drwxr-xr-x|-rw-r--r--|-rwxr-xr-x|lrwxr-xr-x')
     # Matched under ANY top directory: whether the top directory is right is
     # a separate arm, and one wrong answer must not hide the other.
