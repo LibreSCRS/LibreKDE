@@ -187,6 +187,13 @@ jobs:
           ./ci/scripts/check-tarball-determinism.selftest.sh
           ./ci/scripts/check-tarball-determinism.sh
 
+      # Every self-test in this repository, by pathspec, and each one must
+      # report the cases it ran and how many proved the gate red. A self-test
+      # nothing runs proves as much as no self-test, and a runner that read only
+      # exit codes would accept `exit 0` as a body.
+      - name: Run every self-test
+        run: ./ci/scripts/run-selftests.sh
+
   build-linux:
     # Arch container: the codebase targets current KF6 / Plasma 6, which
     # ubuntu apt does not carry at the required versions. pacman provides
