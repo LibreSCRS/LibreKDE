@@ -5,8 +5,7 @@ KDE Plasma 6 clients for [LibreSCRS](https://librescrs.github.io/).
 LibreKDE is a set of thin Plasma clients of the per-user LibreSCRS
 agent, spoken to over D-Bus (`org.librescrs.Agent`). It links no
 LibreMiddleware: card I/O and secret entry live in the agent, which
-loads LibreMiddleware itself. LibreKDE is in development and
-unreleased (0.1.x).
+loads LibreMiddleware itself. LibreKDE is in development.
 
 ## Components
 
@@ -16,8 +15,6 @@ unreleased (0.1.x).
 | Credentials window (card PIN / PUK management) | implemented |
 | Purpose plugin (sign from any Qt app) | implemented |
 | KIO worker (`card://`) | implemented |
-| KRunner plugin | not started |
-| KWallet backend (scute path) | not started |
 
 The credentials window (`librescrs-credentials-kde`) is a small Kirigami
 app that manages a card's PINs and PUK (change / unblock / activate) by
