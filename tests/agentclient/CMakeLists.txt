@@ -10,8 +10,7 @@
 add_executable(ErrorTextTest ErrorTextTest.cpp)
 target_link_libraries(ErrorTextTest PRIVATE GTest::gtest_main librekde-agentclient KF6::I18n)
 target_compile_features(ErrorTextTest PRIVATE cxx_std_23)
-add_test(NAME ErrorTextTest COMMAND ErrorTextTest)
-set_tests_properties(ErrorTextTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
+gtest_discover_tests(ErrorTextTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
 
 # Total-coverage guard: walks every CredentialOutcome value and demands a
 # deliberate copy decision per outcome (localized message, or the neutral
@@ -21,8 +20,7 @@ add_executable(CredentialTextCoverageTest CredentialTextCoverageTest.cpp)
 target_link_libraries(CredentialTextCoverageTest PRIVATE GTest::gtest_main librekde-agentclient KF6::I18n)
 target_compile_features(CredentialTextCoverageTest PRIVATE cxx_std_23)
 target_compile_options(CredentialTextCoverageTest PRIVATE -Werror=switch)
-add_test(NAME CredentialTextCoverageTest COMMAND CredentialTextCoverageTest)
-set_tests_properties(CredentialTextCoverageTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
+gtest_discover_tests(CredentialTextCoverageTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
 
 # Total-coverage guard for the four closed Credentials1 record-token enums
 # (Kind/State/UnblockStyle/Recovery): -Werror=switch classifiers force a
@@ -34,8 +32,7 @@ add_executable(CredentialVocabularyCoverageTest CredentialVocabularyCoverageTest
 target_link_libraries(CredentialVocabularyCoverageTest PRIVATE GTest::gtest_main librekde-agentclient KF6::I18n)
 target_compile_features(CredentialVocabularyCoverageTest PRIVATE cxx_std_23)
 target_compile_options(CredentialVocabularyCoverageTest PRIVATE -Werror=switch)
-add_test(NAME CredentialVocabularyCoverageTest COMMAND CredentialVocabularyCoverageTest)
-set_tests_properties(CredentialVocabularyCoverageTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
+gtest_discover_tests(CredentialVocabularyCoverageTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
 
 # Identity-field label resolver — proves a frozen labelKey ("field.surname")
 # resolves to the real Serbian string end-to-end. The sr catalog is compiled
@@ -64,7 +61,6 @@ if(MSGFMT_EXECUTABLE)
     add_dependencies(IdentityLabelTest IdentityLabelTest_catalog)
     target_link_libraries(IdentityLabelTest PRIVATE GTest::gtest librekde-agentclient KF6::I18n)
     target_compile_features(IdentityLabelTest PRIVATE cxx_std_23)
-    add_test(NAME IdentityLabelTest COMMAND IdentityLabelTest)
     # LANG must name a real UTF-8 locale: ki18n resolves catalogs through the C
     # library's gettext, which suppresses translation entirely under the C /
     # POSIX / C.UTF-8 locale. LANGUAGE=sr then selects Serbian as the message
@@ -84,7 +80,7 @@ if(MSGFMT_EXECUTABLE)
     # dogfood-installed under the developer's ~/.local/share shadows the freshly
     # compiled one — the test then asserts against whatever that older install
     # happens to say instead of against this checkout.
-    set_tests_properties(IdentityLabelTest PROPERTIES
+    gtest_discover_tests(IdentityLabelTest PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=sr;LANG=en_US.UTF-8"
         ENVIRONMENT_MODIFICATION "XDG_DATA_DIRS=path_list_prepend:${_id_locale_root};XDG_DATA_HOME=set:${_id_locale_root}")
 
@@ -112,12 +108,11 @@ if(MSGFMT_EXECUTABLE)
     # The whole-catalog content scan opens the shipped .po files directly
     # (not through any build-tree copy), so it needs the checkout root.
     target_compile_definitions(LatinCatalogTest PRIVATE LIBREKDE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
-    add_test(NAME LatinCatalogTest COMMAND LatinCatalogTest)
     # Same locale-resolution rationale as IdentityLabelTest: LANGUAGE selects
     # the catalog, LANG must still name a real UTF-8 locale, and XDG_DATA_HOME
     # is pinned ahead of XDG_DATA_DIRS so a dogfood-installed librekde catalog
     # cannot shadow the freshly built one.
-    set_tests_properties(LatinCatalogTest PROPERTIES
+    gtest_discover_tests(LatinCatalogTest PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=sr@latin;LANG=en_US.UTF-8"
         ENVIRONMENT_MODIFICATION "XDG_DATA_DIRS=path_list_prepend:${_id_locale_root};XDG_DATA_HOME=set:${_id_locale_root}")
 else()
@@ -137,8 +132,7 @@ target_link_libraries(IdentityRowFoldingTest PRIVATE GTest::gtest_main librekde-
 # it includes itself must not rest on another target's public interface.
 target_link_libraries(IdentityRowFoldingTest PRIVATE LibreAgent::ClientQt)
 target_compile_features(IdentityRowFoldingTest PRIVATE cxx_std_23)
-add_test(NAME IdentityRowFoldingTest COMMAND IdentityRowFoldingTest)
-set_tests_properties(IdentityRowFoldingTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
+gtest_discover_tests(IdentityRowFoldingTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
 
 # Total-coverage guard: walks every value of the client library's ErrorCode and
 # demands a deliberate ErrorText outcome per code (localized copy vs agent
@@ -150,8 +144,7 @@ add_executable(ErrorTextCoverageTest ErrorTextCoverageTest.cpp)
 target_link_libraries(ErrorTextCoverageTest PRIVATE GTest::gtest_main librekde-agentclient KF6::I18n)
 target_compile_features(ErrorTextCoverageTest PRIVATE cxx_std_23)
 target_compile_options(ErrorTextCoverageTest PRIVATE -Werror=switch)
-add_test(NAME ErrorTextCoverageTest COMMAND ErrorTextCoverageTest)
-set_tests_properties(ErrorTextCoverageTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
+gtest_discover_tests(ErrorTextCoverageTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
 
 # D-Bus FakeAgent tests — each runs under dbus-run-session, with a custom main
 # that owns a QCoreApplication (TestMain.cpp) instead of gtest_main. The

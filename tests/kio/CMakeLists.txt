@@ -12,15 +12,13 @@ add_executable(CardTreeTest CardTreeTest.cpp)
 target_link_libraries(CardTreeTest PRIVATE GTest::gtest_main librekde-kio-core librekde-agentclient)
 target_include_directories(CardTreeTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_features(CardTreeTest PRIVATE cxx_std_23)
-add_test(NAME CardTreeTest COMMAND CardTreeTest)
-set_tests_properties(CardTreeTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
+gtest_discover_tests(CardTreeTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
 
 add_executable(CardRenderersTest CardRenderersTest.cpp)
 target_link_libraries(CardRenderersTest PRIVATE GTest::gtest_main librekde-kio-core librekde-agentclient)
 target_include_directories(CardRenderersTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_features(CardRenderersTest PRIVATE cxx_std_23)
-add_test(NAME CardRenderersTest COMMAND CardRenderersTest)
-set_tests_properties(CardRenderersTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
+gtest_discover_tests(CardRenderersTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
 
 # P0 regression: AgentCardDataSource over a live FakeAgent. Drives a read
 # and pulls the card mid-loop to exercise the card-removed-mid-read UAF window.
@@ -43,10 +41,10 @@ target_link_libraries(AgentCardDataSourceTest PRIVATE
     Qt6::Core Qt6::DBus Qt6::Gui Qt6::Test
 )
 target_compile_features(AgentCardDataSourceTest PRIVATE cxx_std_23)
-add_test(NAME AgentCardDataSourceTest COMMAND dbus-run-session -- $<TARGET_FILE:AgentCardDataSourceTest>)
+librekde_private_session_bus(AgentCardDataSourceTest)
 # A wedged test under dbus-run-session must fail in minutes, not consume the
 # runner's whole wall.
-set_tests_properties(AgentCardDataSourceTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en" TIMEOUT 120)
+gtest_discover_tests(AgentCardDataSourceTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en;${LIBREKDE_PRIVATE_BUS_ENV}" TIMEOUT 120)
 
 # Worker-logic test: subclasses CardWorkerLogic (decoupled from the
 # not-standalone-constructible KIO::WorkerBase) and runs it against the in-memory
@@ -59,5 +57,4 @@ target_link_libraries(CardWorkerTest PRIVATE
     KF6::KIOCore
 )
 target_compile_features(CardWorkerTest PRIVATE cxx_std_23)
-add_test(NAME CardWorkerTest COMMAND CardWorkerTest)
-set_tests_properties(CardWorkerTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
+gtest_discover_tests(CardWorkerTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")

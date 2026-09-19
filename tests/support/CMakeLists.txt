@@ -53,8 +53,10 @@ function(librekde_add_dbus_test name)
     target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_link_libraries(${name} PRIVATE GTest::gtest librekde-agentclient librekde-test-support librekde-test-main Qt6::Core Qt6::DBus Qt6::Test)
     target_compile_features(${name} PRIVATE cxx_std_23)
-    add_test(NAME ${name} COMMAND dbus-run-session -- $<TARGET_FILE:${name}>)
+    librekde_private_session_bus(${name})
     # A wedged test under dbus-run-session must fail in minutes, not consume
     # the runner's whole wall.
-    set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en" TIMEOUT 120)
+    gtest_discover_tests(${name} PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en;${LIBREKDE_PRIVATE_BUS_ENV}"
+        TIMEOUT 120)
 endfunction()

@@ -9,8 +9,7 @@
 add_executable(MimeFormatMapTest MimeFormatMapTest.cpp)
 target_link_libraries(MimeFormatMapTest PRIVATE GTest::gtest_main librekde-signing)
 target_compile_features(MimeFormatMapTest PRIVATE cxx_std_23)
-add_test(NAME MimeFormatMapTest COMMAND MimeFormatMapTest)
-set_tests_properties(MimeFormatMapTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
+gtest_discover_tests(MimeFormatMapTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
 
 # SignJob end-to-end against the FakeAgent. Reuses the shared FakeAgent +
 # its custom QCoreApplication-owning TestMain, run under dbus-run-session.
@@ -33,10 +32,10 @@ target_link_libraries(SignJobTest PRIVATE
     Qt6::Core Qt6::DBus Qt6::Test
 )
 target_compile_features(SignJobTest PRIVATE cxx_std_23)
-add_test(NAME SignJobTest COMMAND dbus-run-session -- $<TARGET_FILE:SignJobTest>)
+librekde_private_session_bus(SignJobTest)
 # A wedged test under dbus-run-session must fail in minutes, not consume the
 # runner's whole wall: every bus-backed test here carries an explicit timeout.
-set_tests_properties(SignJobTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en" TIMEOUT 120)
+gtest_discover_tests(SignJobTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en;${LIBREKDE_PRIVATE_BUS_ENV}" TIMEOUT 120)
 
 # Which card signs, against the FakeAgent with one and with two signing-capable
 # cards. Drives the injected chooser seam directly (a recording fake), so the
@@ -55,5 +54,5 @@ target_link_libraries(CardSelectionTest PRIVATE
     Qt6::Core Qt6::DBus Qt6::Test
 )
 target_compile_features(CardSelectionTest PRIVATE cxx_std_23)
-add_test(NAME CardSelectionTest COMMAND dbus-run-session -- $<TARGET_FILE:CardSelectionTest>)
-set_tests_properties(CardSelectionTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en" TIMEOUT 120)
+librekde_private_session_bus(CardSelectionTest)
+gtest_discover_tests(CardSelectionTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en;${LIBREKDE_PRIVATE_BUS_ENV}" TIMEOUT 120)
