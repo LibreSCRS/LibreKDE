@@ -44,10 +44,10 @@ LibreSCRS releases ≥ 4.0 are cryptographically signed.
   `gpg --verify` / `git tag -v` workflow.
 - **Release artifacts.** LibreKDE distributes no prebuilt binaries of
   its own: the Plasma components are compiled from the tag's sources
-  by distribution packaging (`packaging/arch`), which fetches the
-  source tarball this repository's release workflow uploads. The
-  components that distribute binaries sign them via Sigstore cosign
-  keyless using GitHub Actions OIDC; see
+  by distribution packaging (`packaging/{arch,debian,rpm}`), which
+  fetches the source tarball this repository's release workflow
+  uploads. The components that distribute binaries sign them via
+  Sigstore cosign keyless using GitHub Actions OIDC; see
   <https://librescrs.github.io/security/> for that end-to-end
   verification guide, including expected OIDC issuer and identity
   values.
