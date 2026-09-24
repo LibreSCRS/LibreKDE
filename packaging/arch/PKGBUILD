@@ -62,7 +62,7 @@ makedepends=(
     'librescrs-agent-client-qt' # find_package(LibreAgent 5.0 CONFIG COMPONENTS ClientQt)
                                 #   at configure time (cmake/FindOrUseLibreAgent.cmake)
 )
-options=('!lto')   # own librekde-agentclient static archive + IPO can conflict; keep it simple
+options=('!lto')   # LTO off, as the RPM spec does; not measured to be required
 source=(
     "$pkgname-$pkgver.tar.gz::https://github.com/LibreSCRS/LibreKDE/releases/download/$pkgver/librekde_$pkgver.orig.tar.gz"
 )
