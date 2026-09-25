@@ -43,7 +43,20 @@ qt_add_qml_module(credentials-core
         qml/StateMessage.qml
         qml/ResultBanner.qml
         qml/UnblockConfirmSheet.qml
+    OUTPUT_TARGETS credentials_core_generated
 )
+# A static QML module compiles its resources and its plugin initializer as
+# separate object libraries, and Qt gives each one the include directories of
+# the target it was made for -- including that target's AUTOMOC output
+# directory, which only exists once that target's moc step has run. Nothing
+# orders the two, so on a fresh tree these objects can compile first and
+# GCC's -Wmissing-include-dirs (on through KDECompilerSettings) reports a
+# directory that is not there yet. Order each one after the moc step whose
+# directory it was handed.
+foreach(generated IN LISTS credentials_core_generated)
+    string(REGEX REPLACE "(_resources_[0-9]+|_init)$" "" owner "${generated}")
+    add_dependencies(${generated} ${owner}_autogen)
+endforeach()
 target_compile_definitions(credentials-core PUBLIC
     TRANSLATION_DOMAIN="librekde" LIBREKDE_VERSION_STRING="${PROJECT_VERSION}")
 # LibreAgent::ClientQt is named here EXPLICITLY even though librekde-agentclient
