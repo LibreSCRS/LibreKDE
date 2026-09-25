@@ -1,7 +1,10 @@
 {
   "GNU-16": {
-    "-Wdeprecated-declarations": 1,
-    "-Wmissing-include-dirs": 4
-  },
-  "min_compile_units": 111
+    "min_compile_units": 118,
+    "project": {
+      "-Wdeprecated-declarations": 1
+    },
+    "system": {},
+    "system_reasons": {}
+  }
 }
