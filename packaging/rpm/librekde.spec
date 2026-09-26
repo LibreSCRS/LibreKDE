@@ -121,6 +121,7 @@ Change a PIN, unblock one with a PUK, and see how many attempts are left.
 %files credentials
 %{_bindir}/librescrs-credentials-kde
 %{_datadir}/applications/org.librescrs.credentials.desktop
+%{_mandir}/man1/librescrs-credentials-kde.1*
 
 %changelog
 * Fri Sep 04 2026 LibreSCRS <librescrs@proton.me> - 5.0.0-1

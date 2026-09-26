@@ -89,3 +89,5 @@ target_link_libraries(librescrs-credentials-kde PRIVATE
 target_compile_features(librescrs-credentials-kde PRIVATE cxx_std_23)
 install(TARGETS librescrs-credentials-kde ${KDE_INSTALL_TARGETS_DEFAULT_ARGS})
 install(FILES org.librescrs.credentials.desktop DESTINATION ${KDE_INSTALL_APPDIR})
+# The window is an executable on PATH, so it carries a manual page.
+install(FILES doc/librescrs-credentials-kde.1 DESTINATION ${KDE_INSTALL_MANDIR}/man1)
