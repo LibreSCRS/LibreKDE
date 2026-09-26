@@ -26,6 +26,14 @@ on:
       - 'deps.lock'
       - '.github/workflows/packages.yml'
   workflow_dispatch:
+    inputs:
+      refs:
+        description: >-
+          Upstream overrides of deps.lock, NAME=REF separated by spaces (e.g.
+          LibreMiddleware=main LibreAgent=main) -- to build against an
+          upstream change before it is locked. Empty builds the lock.
+        type: string
+        default: ''
 
 permissions: {}
 
@@ -52,6 +60,7 @@ jobs:
         with:
           slug: ${{ matrix.slug }}
           upstream: source
+          refs: ${{ inputs.refs }}
       - uses: LibreSCRS/ci/actions/pkg-verify@373a0f82c9af280b7a8ccc4ee30106c947394ca2
         with:
           slug: ${{ matrix.slug }}
