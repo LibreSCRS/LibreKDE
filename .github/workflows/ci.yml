@@ -68,10 +68,15 @@ jobs:
 
       # format scope, skip reasons, the workflows as data (wiring, bounds,
       # step order, one LibreSCRS/ci commit), the declaration registry and
-      # duplicate bodies, this repository's own self-tests, and deps.lock
-      # (form, reachable from the upstream main, one revision per dependency).
+      # duplicate bodies, this repository's own self-tests, deps.lock (form,
+      # reachable from the upstream main, one revision per dependency), and
+      # the release checks with the version this tree is heading for -- every
+      # version surface against VERSION, the release workflow's asset set and
+      # artefact producers, and a source tarball that is a function of the
+      # commit -- so a disagreement shows weeks before the tag rather than on
+      # a tag that cannot be taken back.
       - name: Shared gates
-        uses: LibreSCRS/ci/actions/gates@5b9410f9b0e6ab6983c39f931e118e68007c12b4
+        uses: LibreSCRS/ci/actions/gates@373a0f82c9af280b7a8ccc4ee30106c947394ca2
 
       - name: The Arch recipe fetches the signed tag of this repository
         # The recipe's self-test runs with the other self-tests in the shared
@@ -79,33 +84,6 @@ jobs:
         # reads the recipe as text and touches no network.
         run: ./packaging/arch/check-recipe.sh
 
-      # The release checks run on every push, with the version this tree is
-      # heading for, so a disagreement shows weeks before the tag rather than
-      # on a tag that cannot be taken back. The release preflight runs the
-      # same scripts with the tag's version.
-      - name: Check out the shared release checks
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          repository: LibreSCRS/ci
-          ref: 5b9410f9b0e6ab6983c39f931e118e68007c12b4
-          path: .librescrs-ci
-          persist-credentials: false
-
-      - name: Every version surface agrees with VERSION
-        # lockstep (CHANGELOG), floors (first-party find_package majors,
-        # --min 1 so a scan that matches nothing is unmeasured, not clean),
-        # stamp (the version the build stamps, configured against a stubbed
-        # tag) and surfaces (ci/version-surfaces.txt).
-        run: .librescrs-ci/scripts/check-version.sh --min 1 --verbose
-
-      - name: Every release artefact has a producer and a consumer
-        run: .librescrs-ci/scripts/check-release-artifacts.sh
-
-      - name: The release workflow checks its asset set before publishing
-        run: .librescrs-ci/scripts/check-release-assets.sh --wired
-
-      - name: The source tarball is a function of the commit
-        run: .librescrs-ci/scripts/check-tarball-determinism.sh
 
   build-linux:
     # Arch container: the codebase targets current KF6 / Plasma 6, which
@@ -183,7 +161,7 @@ jobs:
       # distribution packaging installs.
       - name: Check out LibreAgent at the revision deps.lock names
         id: deps
-        uses: LibreSCRS/ci/actions/checkout-deps@5b9410f9b0e6ab6983c39f931e118e68007c12b4
+        uses: LibreSCRS/ci/actions/checkout-deps@373a0f82c9af280b7a8ccc4ee30106c947394ca2
         with:
           root: LibreKDE
           names: LibreAgent
@@ -217,13 +195,12 @@ jobs:
       # simply never runs them (no ctest call against this checkout).
       - name: Build & install LibreAgent (ClientQt only, LM-free)
         if: steps.cache.outputs.cache-hit != 'true'
-        env:
-          LA_SRC: ${{ steps.deps.outputs.libreagent-path }}
+        working-directory: LibreAgent
         run: |
           # shellcheck disable=SC2086  # the flags split into argv on purpose
-          cmake -S "$LA_SRC" -B "$LA_SRC/build" -G Ninja $CLIENTQT_CMAKE_ARGS
-          cmake --build "$LA_SRC/build" -j4
-          cmake --install "$LA_SRC/build" --prefix "$AGENT_PREFIX"
+          cmake -B build -G Ninja $CLIENTQT_CMAKE_ARGS
+          cmake --build build -j4
+          cmake --install build --prefix "$AGENT_PREFIX"
 
       # Explicit component flags pin the package contract (their CMake option
       # defaults are already ON, but pin them so CI matches the PKGBUILD).
@@ -257,7 +234,7 @@ jobs:
       # aborts -- so the set is discovered under the same platform plugin the
       # Test step uses.
       - name: Shared gates after the build
-        uses: LibreSCRS/ci/actions/gates@5b9410f9b0e6ab6983c39f931e118e68007c12b4
+        uses: LibreSCRS/ci/actions/gates@373a0f82c9af280b7a8ccc4ee30106c947394ca2
         env:
           QT_QPA_PLATFORM: offscreen
         with:
