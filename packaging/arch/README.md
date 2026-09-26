@@ -11,8 +11,10 @@ library, so it depends on **`librescrs-agent-client-qt`** as well; that package
 is built from the agent library's own repository and its own dependencies are
 Qt6 and libc only, so it pulls in no part of the middleware stack.
 
-The `PKGBUILD` is **release-shaped**: it fetches the source tarball the release
-workflow uploads for the tag, not GitHub's auto-generated one.
+The `PKGBUILD` is **release-shaped**: it builds the signed release tag of this
+repository (`git+https://…#tag=$pkgver?signed`), and makepkg checks the tag's
+signature against `validpgpkeys` -- the release key's primary fingerprint, the
+one `KEYS` carries -- before it builds anything.
 `pkgver` is the first line of the repository's `VERSION` file: this component
 no longer carries its own 0.x SemVer and is released in lockstep with the
 rest of the stack.
@@ -40,19 +42,17 @@ component**: AppStream desktop-application entries are for user-launchable
 apps, and a hidden helper is not one. The only AppStream metainfo shipped is
 the plasmoid addon (`org.librescrs.smartcard`) and the Purpose plugin's.
 
-## Release build (after the `5.0.0` release is published)
+## Release build (after the `5.0.0` tag is published)
 
 ```sh
+gpg --import KEYS   # once, from the repository root: makepkg verifies the tag with it
 cd packaging/arch
-makepkg -g      # prints the real sha256sum; paste it into the recipe
-                # (updpkgsums does the same but needs pacman-contrib)
 makepkg -si
 ```
 
-The recipe inside a release tarball is not authoritative: its `sha256sums` are
-`SKIP`, because the asset they would name does not exist until the tag does. The
-copy on the default branch carries the checksum of the published asset; build
-from that copy, not from the one inside the tarball.
+A git source has nothing to checksum, so `sha256sums` stays `SKIP` before and
+after the tag: the signature is the check. `packaging/arch/check-recipe.sh`
+holds the source, the tag, the key and the version to the tree on every push.
 
 ## Local dogfood build (no remote, no tag — build from this checkout)
 
@@ -66,10 +66,11 @@ cd /tmp/lk-arch
 # local-git entry (a single-line `s#^source=.*#...#` would mangle the
 # multi-line array, leaving a dangling URL line + `)`). `sha256sums` is a
 # single line, so a plain `s#` substitution is correct there.
-# A git source named exactly LibreKDE-$pkgver checks out to
-# $srcdir/LibreKDE-$pkgver — matching the hardcoded `cd` lines.
+# A git source named exactly LibreKDE checks out to $srcdir/LibreKDE --
+# matching the hardcoded `cd` lines. No #tag and no ?signed: this builds the
+# working tree's HEAD, which carries no release signature.
 sed -i \
-  -e "/^source=(/,/^)/c\\source=(\"LibreKDE-\$pkgver::git+file://$REPO\")" \
+  -e "/^source=(/,/^)/c\\source=(\"LibreKDE::git+file://$REPO\")" \
   -e "s#^sha256sums=.*#sha256sums=('SKIP')#" \
   PKGBUILD
 makepkg -si

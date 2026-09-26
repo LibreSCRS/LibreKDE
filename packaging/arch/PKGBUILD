@@ -63,19 +63,20 @@ makedepends=(
                                 #   at configure time (cmake/FindOrUseLibreAgent.cmake)
 )
 options=('!lto')   # LTO off, as the RPM spec does; not measured to be required
+# The signed tag itself, not a tarball: makepkg checks the tag's signature
+# against validpgpkeys before it builds anything, so the recipe needs no
+# checksum that could only be written after the release exists. The key is the
+# release key's primary fingerprint, the one KEYS carries (the tag is signed by
+# a subkey; makepkg matches the primary). packaging/arch/check-recipe.sh holds
+# all three -- this repository, the tag, the key -- to the tree.
 source=(
-    "$pkgname-$pkgver.tar.gz::https://github.com/LibreSCRS/LibreKDE/releases/download/$pkgver/librekde_$pkgver.orig.tar.gz"
+    "git+https://github.com/LibreSCRS/LibreKDE.git#tag=$pkgver?signed"
 )
-# Placeholder — the real sum is filled at tag time with `makepkg -g` (pacman's
-# own tool; `updpkgsums` needs pacman-contrib). The 5.0.0 release does not
-# exist yet, and the sum is of the tarball the release workflow uploads, so it
-# cannot be computed before it. packaging/arch/check-recipe.sh turns a
-# remaining SKIP into an error the moment the tag exists; see README.md for the
-# local-dogfood build that needs no remote at all.
-sha256sums=('SKIP')
+validpgpkeys=('6B05889AC9A6A7188DF639B06F27A989C2031D16')  # LibreSCRS release key
+sha256sums=('SKIP')  # a git source has no archive to checksum; the signature is the check
 
 build() {
-    cd "$srcdir/LibreKDE-$pkgver"
+    cd "$srcdir/LibreKDE"
     # Explicit component flags (their CMake defaults are already ON, but pin
     # them so the package contract does not silently drift):
     #   LIBREKDE_BUILD_KIO         — card:/ KIO worker
@@ -94,14 +95,14 @@ build() {
 }
 
 check() {
-    cd "$srcdir/LibreKDE-$pkgver"
+    cd "$srcdir/LibreKDE"
     # KDE/Qt tests need offscreen Qt; the D-Bus client tests spin a private
     # bus via dbus-run-session (dbus is a makedepend).
     QT_QPA_PLATFORM=offscreen ctest --test-dir build --output-on-failure -j4
 }
 
 package() {
-    cd "$srcdir/LibreKDE-$pkgver"
+    cd "$srcdir/LibreKDE"
     DESTDIR="$pkgdir" cmake --install build
     # cmake --install lays down the plasmoid package, the credential-management
     # window (bin/librescrs-credentials-kde + its NoDisplay .desktop under
