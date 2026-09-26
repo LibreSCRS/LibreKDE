@@ -59,7 +59,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - id: pre
-        uses: LibreSCRS/ci/actions/release-preflight@ac199ae69bc187a8571c9f29763503c1a966ea2c
+        uses: LibreSCRS/ci/actions/release-preflight@261a41fb5b6dc060ab18e0ead6dd2b065755ed8e
         with:
           mode: ${{ inputs.mode || (github.ref_type == 'tag' && 'publish' || 'rehearse') }}
           version-min: '1'
@@ -78,7 +78,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           repository: LibreSCRS/ci
-          ref: ac199ae69bc187a8571c9f29763503c1a966ea2c
+          ref: 261a41fb5b6dc060ab18e0ead6dd2b065755ed8e
           path: .ci
           persist-credentials: false
       - name: Deterministic source tarball
@@ -108,13 +108,13 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: LibreSCRS/ci/actions/pkg-build@ac199ae69bc187a8571c9f29763503c1a966ea2c
+      - uses: LibreSCRS/ci/actions/pkg-build@261a41fb5b6dc060ab18e0ead6dd2b065755ed8e
         id: build
         with:
           slug: ${{ matrix.slug }}
           upstream: ${{ github.ref_type == 'tag' && 'release' || 'source' }}
           version: ${{ github.ref_type == 'tag' && needs.preflight.outputs.version || '' }}
-      - uses: LibreSCRS/ci/actions/pkg-verify@ac199ae69bc187a8571c9f29763503c1a966ea2c
+      - uses: LibreSCRS/ci/actions/pkg-verify@261a41fb5b6dc060ab18e0ead6dd2b065755ed8e
         with:
           slug: ${{ matrix.slug }}
           packages: ${{ steps.build.outputs.art }}/${{ matrix.slug }}
@@ -148,7 +148,7 @@ jobs:
           pattern: 'packages-*'
           merge-multiple: true
           path: artifacts
-      - uses: LibreSCRS/ci/actions/release-seal@ac199ae69bc187a8571c9f29763503c1a966ea2c
+      - uses: LibreSCRS/ci/actions/release-seal@261a41fb5b6dc060ab18e0ead6dd2b065755ed8e
         with:
           mode: ${{ needs.preflight.outputs.mode }}
           version: ${{ needs.preflight.outputs.version }}
@@ -173,7 +173,7 @@ jobs:
         with:
           name: sealed
           path: artifacts
-      - uses: LibreSCRS/ci/actions/release-publish@ac199ae69bc187a8571c9f29763503c1a966ea2c
+      - uses: LibreSCRS/ci/actions/release-publish@261a41fb5b6dc060ab18e0ead6dd2b065755ed8e
         with:
           mode: ${{ needs.preflight.outputs.mode }}
           version: ${{ needs.preflight.outputs.version }}

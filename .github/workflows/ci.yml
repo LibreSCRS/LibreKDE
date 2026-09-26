@@ -66,7 +66,7 @@ jobs:
       # reachable from the upstream main, one revision per dependency), and
       # the Arch recipe building this repository's signed tag.
       - name: Shared gates
-        uses: LibreSCRS/ci/actions/gates@ac199ae69bc187a8571c9f29763503c1a966ea2c
+        uses: LibreSCRS/ci/actions/gates@261a41fb5b6dc060ab18e0ead6dd2b065755ed8e
         with:
           gates: check-workflows check-skip-reasons check-version deps-lock check-recipe
 
@@ -146,7 +146,7 @@ jobs:
       # distribution packaging installs.
       - name: Check out LibreAgent at the revision deps.lock names
         id: deps
-        uses: LibreSCRS/ci/actions/checkout-deps@ac199ae69bc187a8571c9f29763503c1a966ea2c
+        uses: LibreSCRS/ci/actions/checkout-deps@261a41fb5b6dc060ab18e0ead6dd2b065755ed8e
         with:
           root: LibreKDE
           names: LibreAgent
@@ -218,7 +218,7 @@ jobs:
       # tests ci/test-floor.txt names. Discovery is PRE_TEST, so listing runs
       # the Qt test binaries, which need the offscreen platform plugin.
       - name: Shared gates after the build
-        uses: LibreSCRS/ci/actions/gates@ac199ae69bc187a8571c9f29763503c1a966ea2c
+        uses: LibreSCRS/ci/actions/gates@261a41fb5b6dc060ab18e0ead6dd2b065755ed8e
         env:
           QT_QPA_PLATFORM: offscreen
         with:
