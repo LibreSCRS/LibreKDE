@@ -13,7 +13,7 @@ option(LIBREKDE_FETCH_AGENT "Build LibreAgent from source instead of find_packag
 # build against different agents, which is exactly the confusion the hatch
 # exists to avoid.
 # The revision -- and the URL -- are the LibreAgent row of deps.lock
-# (`<name> <url> <commit> <main|version>`), which `bump-deps` writes and
+# (`<name> <url> <commit>`), which `bump-deps` writes and
 # `bump-deps check` holds (form, reachable from upstream main, same revision
 # as every other consumer, and in CI: the tree actually built == the row).
 # This file only reads the row. CMAKE_CONFIGURE_DEPENDS makes a bumped lock
