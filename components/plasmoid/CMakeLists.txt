@@ -14,7 +14,14 @@ ecm_qt_declare_logging_category(PlasmoidLogging_SRCS
 # NO_GENERATE_PLUGIN_SOURCE + CLASS_NAME: we hand-write the engine-extension
 # plugin (EngineInit) so initializeEngine() can register the card-photo image
 # provider, rather than using the no-op plugin qt_add_qml_module would emit.
+#
+# STATIC: the backing library has exactly one consumer, the QML plugin, so it
+# is linked into that plugin instead of being installed as a shared library of
+# its own. An unversioned liblibrekde-plasmoid.so in the public library
+# directory looked like a library other software could link, with no SONAME to
+# keep that promise; there is nothing to promise, so there is no such file.
 qt_add_qml_module(librekde-plasmoid
+    STATIC
     URI org.librescrs.smartcard
     VERSION 1.0
     SOURCES
@@ -29,16 +36,18 @@ qt_add_qml_module(librekde-plasmoid
     OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml/org/librescrs/smartcard
 )
 
-# The QML engine-extension plugin (separate, hidden-visibility `.so`) calls the
-# backing library's installCardPhotoProvider(). Generate the proper export/import
-# macro (LIBREKDE_PLASMOID_EXPORT) so the symbol is exported when building the lib
-# and imported (not "defined-here"/protected) when consumed from the plugin —
-# required under KDE's -fvisibility=hidden + -mno-direct-extern-access.
+# The QML engine-extension plugin calls the backing library's
+# installCardPhotoProvider(). The backing library is static and linked into the
+# plugin, so the call never crosses a shared-object boundary: the export macro
+# (LIBREKDE_PLASMOID_EXPORT) is generated empty, and the objects are
+# position-independent because they end up inside a shared object.
 include(GenerateExportHeader)
 generate_export_header(librekde-plasmoid
     BASE_NAME librekde_plasmoid
     EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/librekde_plasmoid_export.h
 )
+target_compile_definitions(librekde-plasmoid PUBLIC LIBREKDE_PLASMOID_STATIC_DEFINE)
+set_target_properties(librekde-plasmoid PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 target_sources(librekde-plasmoidplugin PRIVATE
     src/EngineInit.h src/EngineInit.cpp
@@ -106,19 +115,9 @@ target_compile_features(librekde-plasmoid PRIVATE cxx_std_23)
 
 plasma_install_package(${CMAKE_CURRENT_SOURCE_DIR}/package org.librescrs.smartcard)
 
-# The backing library (SmartCardHandler + state classifier + the C++ QML types)
-# is the QML plugin's link dependency, resolved at runtime via the plugin's
-# RUNPATH (KDE_INSTALL_LIBDIR). This plasmoid is QML-only — metadata.json declares
-# no C++ Applet — so plasmashell never dlopens it as an applet; it belongs in the
-# libdir next to where the plugin looks for it, NOT under plasma/applets (where
-# the plugin's RUNPATH would never find it → "plugin ... not found").
-install(TARGETS librekde-plasmoid
-    DESTINATION ${KDE_INSTALL_LIBDIR}
-)
-
-# qt_add_qml_module materialises two outputs: the main `librekde-plasmoid`
-# library (already installed above) and the QML plugin shim
-# `librekde-plasmoidplugin.so` + its `qmldir` / `*.qmltypes` metadata.
+# qt_add_qml_module materialises two outputs: the static backing library
+# `librekde-plasmoid` (linked into the plugin, not installed) and the QML
+# plugin `liblibrekde-plasmoidplugin.so` + its `qmldir` / `*.qmltypes` metadata.
 # The QML engine resolves `import org.librescrs.smartcard` by walking
 # QML2_IMPORT_PATH; install the plugin shim + metadata under
 # ${KDE_INSTALL_QMLDIR}/org/librescrs/smartcard/ matching that URI.

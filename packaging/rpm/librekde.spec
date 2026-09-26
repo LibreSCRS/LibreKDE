@@ -107,7 +107,6 @@ Change a PIN, unblock one with a PUK, and see how many attempts are left.
 
 %files plasmoid
 %{_datadir}/plasma/plasmoids/org.librescrs.smartcard/
-%{_libdir}/liblibrekde-plasmoid.so
 %{_datadir}/locale/*/LC_MESSAGES/plasma_applet_org.librescrs.smartcard.mo
 # %{_qt6_prefix} is the install prefix, not the QML root: it resolved to /usr/qml,
 # a directory nothing creates. The QML root follows the library directory.

@@ -1,8 +1,7 @@
 usr/share/plasma/plasmoids/org.librescrs.smartcard/
 usr/lib/*/qt6/qml/org/librescrs/smartcard/
-# The applet's own C++ library and its message catalogue. Both are named
-# plasma_applet_* or liblibrekde-plasmoid rather than following the package
-# name, so a catch-all would have been the only way to miss them -- which is why
-# there is no catch-all anywhere in these lists.
-usr/lib/*/liblibrekde-plasmoid.so
+# The applet's message catalogue is named plasma_applet_* rather than after the
+# package, so a catch-all would have been the only way to miss it -- which is
+# why there is no catch-all anywhere in these lists. The applet's C++ code is
+# the QML plugin above; it has no shared library of its own.
 usr/share/locale/*/LC_MESSAGES/plasma_applet_org.librescrs.smartcard.mo
