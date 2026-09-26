@@ -51,7 +51,7 @@ Summary:        Shared data for the LibreSCRS KDE integration
 BuildArch:      noarch
 
 %description common
-Message catalogues and AppStream metadata shared by the other packages.
+Message catalogs and AppStream metadata shared by the other packages.
 
 %package plasmoid
 Summary:        LibreSCRS smart-card plasmoid for KDE Plasma 6

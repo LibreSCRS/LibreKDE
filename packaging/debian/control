@@ -34,7 +34,7 @@ Architecture: all
 Multi-Arch: foreign
 Depends: ${misc:Depends}
 Description: Shared data for the LibreSCRS KDE integration
- Message catalogues and AppStream metadata shared by the plasmoid, the KIO
+ Message catalogs and AppStream metadata shared by the plasmoid, the KIO
  worker, the Purpose plugin and the credential window.
 
 Package: librekde-plasmoid
