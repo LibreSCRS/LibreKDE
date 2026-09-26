@@ -1,7 +1,0 @@
-# SPDX-License-Identifier: LGPL-2.1-or-later
-#
-# Scripts CI really runs, but not under a name any workflow spells out, and
-# scripts that are deliberately hand-run. One path per line, then the reason.
-# The wiring rule of check-workflows (LibreSCRS/ci) treats every line here as
-# a reachability root, so what these scripts call counts as run too. A path that stops being tracked fails.
-packaging/ci/verify-installed.sh  run by LibreSCRS/ci scripts/pkg-gate.sh (G3) inside the pkg-build action, in a fresh container of the slug's image

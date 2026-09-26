@@ -67,7 +67,7 @@ options=('!lto')   # LTO off, as the RPM spec does; not measured to be required
 # against validpgpkeys before it builds anything, so the recipe needs no
 # checksum that could only be written after the release exists. The key is the
 # release key's primary fingerprint, the one KEYS carries (the tag is signed by
-# a subkey; makepkg matches the primary). packaging/arch/check-recipe.sh holds
+# a subkey; makepkg matches the primary). check-recipe (LibreSCRS/ci) holds
 # all three -- this repository, the tag, the key -- to the tree.
 source=(
     "git+https://github.com/LibreSCRS/LibreKDE.git#tag=$pkgver?signed"

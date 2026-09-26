@@ -51,8 +51,9 @@ makepkg -si
 ```
 
 A git source has nothing to checksum, so `sha256sums` stays `SKIP` before and
-after the tag: the signature is the check. `packaging/arch/check-recipe.sh`
-holds the source, the tag, the key and the version to the tree on every push.
+after the tag: the signature is the check. The shared `check-recipe` gate
+(LibreSCRS/ci) holds the source, the tag, the key and the version to the tree
+on every push.
 
 ## Local dogfood build (no remote, no tag — build from this checkout)
 
