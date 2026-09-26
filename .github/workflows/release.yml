@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 name: Release
 
-# A release of LibreKDE publishes the deterministic source tarball the
-# packaging recipes build from, Debian/Ubuntu and Fedora packages, SHA256SUMS
+# A release of LibreKDE publishes the deterministic source tarball of the
+# tagged tree, Debian/Ubuntu and Fedora packages, SHA256SUMS
 # over all of it and one cosign bundle per file. There is no openSUSE package:
 # Tumbleweed's Plasma libraries carry no stable ABI to build against.
 #
@@ -14,11 +14,21 @@ name: Release
 # from the deps.lock revisions in a rehearsal.
 #
 # A dispatch runs `rehearse` by default and may run on any ref; `publish` is
-# refused on anything but a tag.
+# refused on anything but a tag. A branch push that changes what decides the
+# packages rehearses the whole release: that is the one path to a package, and
+# a push that does not touch packaging builds none. (GitHub does not apply path
+# filters to tag pushes, so every tag runs.)
 
 on:
   push:
     tags: ['[0-9]+.[0-9]+.[0-9]+*']
+    branches: [main, 'ci/**']
+    paths:
+      - 'packaging/**'
+      - 'CMakeLists.txt'
+      - 'cmake/**'
+      - 'deps.lock'
+      - '.github/workflows/release.yml'
   workflow_dispatch:
     inputs:
       mode:
@@ -49,9 +59,9 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - id: pre
-        uses: LibreSCRS/ci/actions/release-preflight@373a0f82c9af280b7a8ccc4ee30106c947394ca2
+        uses: LibreSCRS/ci/actions/release-preflight@bd36eee50ba085ef4f052ea2767cff910e2e62e7
         with:
-          mode: ${{ inputs.mode || 'publish' }}
+          mode: ${{ inputs.mode || (github.ref_type == 'tag' && 'publish' || 'rehearse') }}
           version-min: '1'
 
   source-tarball:
@@ -65,8 +75,14 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          repository: LibreSCRS/ci
+          ref: bd36eee50ba085ef4f052ea2767cff910e2e62e7
+          path: .ci
+          persist-credentials: false
       - name: Deterministic source tarball
-        run: ci/scripts/make-source-tarball.sh out
+        run: .ci/scripts/make-source-tarball --name librekde --out out
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: tarball-artifacts
@@ -92,17 +108,18 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: LibreSCRS/ci/actions/pkg-build@373a0f82c9af280b7a8ccc4ee30106c947394ca2
+      - uses: LibreSCRS/ci/actions/pkg-build@bd36eee50ba085ef4f052ea2767cff910e2e62e7
         id: build
         with:
           slug: ${{ matrix.slug }}
           upstream: ${{ github.ref_type == 'tag' && 'release' || 'source' }}
           version: ${{ github.ref_type == 'tag' && needs.preflight.outputs.version || '' }}
-      - uses: LibreSCRS/ci/actions/pkg-verify@373a0f82c9af280b7a8ccc4ee30106c947394ca2
+      - uses: LibreSCRS/ci/actions/pkg-verify@bd36eee50ba085ef4f052ea2767cff910e2e62e7
         with:
           slug: ${{ matrix.slug }}
           packages: ${{ steps.build.outputs.art }}/${{ matrix.slug }}
           report: ${{ runner.temp }}/pkg-report
+          hook: packaging/ci/verify-installed.sh
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: packages-${{ matrix.slug }}
@@ -131,7 +148,7 @@ jobs:
           pattern: 'packages-*'
           merge-multiple: true
           path: artifacts
-      - uses: LibreSCRS/ci/actions/release-seal@373a0f82c9af280b7a8ccc4ee30106c947394ca2
+      - uses: LibreSCRS/ci/actions/release-seal@bd36eee50ba085ef4f052ea2767cff910e2e62e7
         with:
           mode: ${{ needs.preflight.outputs.mode }}
           version: ${{ needs.preflight.outputs.version }}
@@ -156,7 +173,7 @@ jobs:
         with:
           name: sealed
           path: artifacts
-      - uses: LibreSCRS/ci/actions/release-publish@373a0f82c9af280b7a8ccc4ee30106c947394ca2
+      - uses: LibreSCRS/ci/actions/release-publish@bd36eee50ba085ef4f052ea2767cff910e2e62e7
         with:
           mode: ${{ needs.preflight.outputs.mode }}
           version: ${{ needs.preflight.outputs.version }}
