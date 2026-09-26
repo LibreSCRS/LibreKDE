@@ -234,23 +234,13 @@ jobs:
       # Where LibreAgent's Qt client library is installed and where LibreKDE's
       # Configure step below points CMAKE_PREFIX_PATH.
       AGENT_PREFIX: /opt/libreagent-clientqt
-      # LibreAgent is NOT tracked by branch here: the ref is read at run time
-      # from cmake/libreagent.pin by the step below.
-      #
-      # A branch name here would make this job build, install and then find a
-      # ClientQt package from the producer's TRUNK while the repo named a
-      # revision that nothing built. Two failures in one: a green run would be
-      # a verdict about a combination this repo does not declare and cannot
-      # ship, and the revision in cmake/libreagent.pin would rot unmeasured,
-      # free to drift with nothing here able to notice.
-      #
-      # The pin governs BOTH consumption paths now. It is the fetch branch's
-      # revision in cmake/FindOrUseLibreAgent.cmake, and it is what this job
-      # checks out to build the CONFIG package the default path finds -- so
-      # the escape hatch and the shipped path name one agent, and CI measures
-      # it. LibreKDE's own find_package(LibreAgent 5.0 ...) still enforces the
-      # required VERSION independently; this is about which revision, not
-      # which version.
+      # LibreAgent is NOT tracked by branch here: the revision is the
+      # LibreAgent row of deps.lock, which the checkout-deps step below checks
+      # out and proves (HEAD of the checkout == the row). The same row is the
+      # fetch branch's revision in cmake/FindOrUseLibreAgent.cmake, so the
+      # escape hatch and the shipped path name one agent. LibreKDE's own
+      # find_package(LibreAgent 5.0 ...) still enforces the required VERSION;
+      # this is about which revision, not which version.
     steps:
       - name: Install system dependencies
         # Build deps from the LibreKDE PKGBUILD makedepends + the runtime KF6/
@@ -296,31 +286,12 @@ jobs:
       # reason to raise the pin deliberately, which is now a visible act in a
       # reviewed commit rather than something a producer push could do to this
       # repo overnight.
-      - name: Resolve the pinned LibreAgent revision
-        id: agent_pin
-        # Read from the pin file rather than copied into this workflow: two
-        # places holding one hash is the defect being fixed, one level up.
-        #
-        # A pin that is not 40 hex FAILS here rather than being passed on. An
-        # empty ref makes actions/checkout silently take the default branch --
-        # which is exactly the behaviour this step removes, so falling back to
-        # it on a malformed pin would reintroduce the bug at the moment the
-        # guard was most needed.
-        run: |
-          pin=$(tr -d '[:space:]' < LibreKDE/cmake/libreagent.pin)
-          case "$pin" in
-            *[!0-9a-f]* | "") echo "::error::cmake/libreagent.pin is not 40 hex: '$pin'"; exit 1 ;;
-          esac
-          [ ${#pin} -eq 40 ] || { echo "::error::cmake/libreagent.pin is ${#pin} chars, want 40"; exit 1; }
-          echo "ref=$pin" >> "$GITHUB_OUTPUT"
-          echo "LibreAgent pinned revision: $pin"
-
-      - name: Checkout LibreAgent
-        uses: actions/checkout@v4
+      - name: Check out LibreAgent at the revision deps.lock names
+        uses: LibreSCRS/ci/actions/checkout-deps@5b9410f9b0e6ab6983c39f931e118e68007c12b4
         with:
-          repository: LibreSCRS/LibreAgent
-          ref: ${{ steps.agent_pin.outputs.ref }}
-          path: LibreAgent
+          root: LibreKDE
+          names: LibreAgent
+          path: .
 
       # Core OFF and LibreMiddleware disabled: this job's only reason to build
       # LibreAgent is to obtain LibreAgent::ClientQt, and LibreKDE itself must
@@ -473,23 +444,13 @@ jobs:
       # Where LibreAgent's Qt client library is installed and where LibreKDE's
       # Configure step below points CMAKE_PREFIX_PATH.
       AGENT_PREFIX: /opt/libreagent-clientqt
-      # LibreAgent is NOT tracked by branch here: the ref is read at run time
-      # from cmake/libreagent.pin by the step below.
-      #
-      # A branch name here would make this job build, install and then find a
-      # ClientQt package from the producer's TRUNK while the repo named a
-      # revision that nothing built. Two failures in one: a green run would be
-      # a verdict about a combination this repo does not declare and cannot
-      # ship, and the revision in cmake/libreagent.pin would rot unmeasured,
-      # free to drift with nothing here able to notice.
-      #
-      # The pin governs BOTH consumption paths now. It is the fetch branch's
-      # revision in cmake/FindOrUseLibreAgent.cmake, and it is what this job
-      # checks out to build the CONFIG package the default path finds -- so
-      # the escape hatch and the shipped path name one agent, and CI measures
-      # it. LibreKDE's own find_package(LibreAgent 5.0 ...) still enforces the
-      # required VERSION independently; this is about which revision, not
-      # which version.
+      # LibreAgent is NOT tracked by branch here: the revision is the
+      # LibreAgent row of deps.lock, which the checkout-deps step below checks
+      # out and proves (HEAD of the checkout == the row). The same row is the
+      # fetch branch's revision in cmake/FindOrUseLibreAgent.cmake, so the
+      # escape hatch and the shipped path name one agent. LibreKDE's own
+      # find_package(LibreAgent 5.0 ...) still enforces the required VERSION;
+      # this is about which revision, not which version.
     # Not on pull_request: this pass costs an hour and the moment a
     # function actually lands is the push to main. Manual only until one
     # measured run says what it really costs on a hosted runner.
@@ -540,31 +501,12 @@ jobs:
       # reason to raise the pin deliberately, which is now a visible act in a
       # reviewed commit rather than something a producer push could do to this
       # repo overnight.
-      - name: Resolve the pinned LibreAgent revision
-        id: agent_pin
-        # Read from the pin file rather than copied into this workflow: two
-        # places holding one hash is the defect being fixed, one level up.
-        #
-        # A pin that is not 40 hex FAILS here rather than being passed on. An
-        # empty ref makes actions/checkout silently take the default branch --
-        # which is exactly the behaviour this step removes, so falling back to
-        # it on a malformed pin would reintroduce the bug at the moment the
-        # guard was most needed.
-        run: |
-          pin=$(tr -d '[:space:]' < LibreKDE/cmake/libreagent.pin)
-          case "$pin" in
-            *[!0-9a-f]* | "") echo "::error::cmake/libreagent.pin is not 40 hex: '$pin'"; exit 1 ;;
-          esac
-          [ ${#pin} -eq 40 ] || { echo "::error::cmake/libreagent.pin is ${#pin} chars, want 40"; exit 1; }
-          echo "ref=$pin" >> "$GITHUB_OUTPUT"
-          echo "LibreAgent pinned revision: $pin"
-
-      - name: Checkout LibreAgent
-        uses: actions/checkout@v4
+      - name: Check out LibreAgent at the revision deps.lock names
+        uses: LibreSCRS/ci/actions/checkout-deps@5b9410f9b0e6ab6983c39f931e118e68007c12b4
         with:
-          repository: LibreSCRS/LibreAgent
-          ref: ${{ steps.agent_pin.outputs.ref }}
-          path: LibreAgent
+          root: LibreKDE
+          names: LibreAgent
+          path: .
 
       # Core OFF and LibreMiddleware disabled: this job's only reason to build
       # LibreAgent is to obtain LibreAgent::ClientQt, and LibreKDE itself must
