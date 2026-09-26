@@ -16,7 +16,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # ci/** as well: a change to the gates is proved on a runner before it
+    # reaches main.
+    branches: [main, 'ci/**']
   pull_request:
     branches: [main]
 
