@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# The test floor: every command ctest registers, counted by its executable's
+# basename, must still register at least this many tests. Recorded from the
+# census the shared test-floor gate printed on the first build. Every gtest
+# case here is launched through cmake (PRE_TEST discovery), so the first row
+# counts them all; the second is CatalogReconcile.
+cmake 338
+python3.14 1
