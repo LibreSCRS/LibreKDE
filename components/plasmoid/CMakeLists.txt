@@ -34,7 +34,18 @@ qt_add_qml_module(librekde-plasmoid
     CLASS_NAME LibreKDE__Plasmoid__EngineInit
     NO_GENERATE_PLUGIN_SOURCE
     OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml/org/librescrs/smartcard
+    OUTPUT_TARGETS librekde_plasmoid_generated
 )
+# A static QML module compiles its resources and its plugin initializer as
+# separate object libraries with the include directories of the target they
+# were made for -- including that target's AUTOMOC output directory, which
+# exists only once its moc step has run. Order each one after the moc step
+# whose directory it was handed, or -Wmissing-include-dirs reports it on a
+# fresh tree (the same ordering as the credentials module).
+foreach(generated IN LISTS librekde_plasmoid_generated)
+    string(REGEX REPLACE "(_resources_[0-9]+|_init)$" "" owner "${generated}")
+    add_dependencies(${generated} ${owner}_autogen)
+endforeach()
 
 # The QML engine-extension plugin calls the backing library's
 # installCardPhotoProvider(). The backing library is static and linked into the
