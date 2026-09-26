@@ -1,5 +1,4 @@
 # <kind> <path>
 cmake-project     .
 plasma-metadata   components/plasmoid/package/metadata.json
-debian-changelog  packaging/debian/changelog
 rpm-spec-version  packaging/rpm/librekde.spec

@@ -124,6 +124,6 @@ Change a PIN, unblock one with a PUK, and see how many attempts are left.
 %{_datadir}/applications/org.librescrs.credentials.desktop
 
 %changelog
-* Fri Sep 04 2026 LibreSCRS <packages@librescrs.org> - 5.0.0-1
+* Fri Sep 04 2026 LibreSCRS <librescrs@proton.me> - 5.0.0-1
 - Five binary packages, replacing a recipe that packaged two of them and named
   the wrong dependency for all of them.

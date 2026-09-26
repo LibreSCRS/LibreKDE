@@ -10,9 +10,14 @@
 # release that exists. Changing what the workflow publishes without changing
 # this file fails the release before it is created.
 #
-# This repository publishes no binary packages in 5.0.0: the job behind the
-# PACKAGE_JOB_ENABLED variable builds them, but nothing publishes them, and
-# turning the variable on before LibreAgent publishes .deb/.rpm assets makes
-# every consumer red, not green.
-librekde_*.orig.tar.gz     the deterministic source tarball the packaging recipes fetch
-*.sigstore.json            cosign keyless signature bundle, one per asset
+# The packages are built per distribution in that distribution's container,
+# and the slug is part of the name: Debian 13 and Ubuntu 26.04 would otherwise
+# publish .deb files with identical names. No openSUSE Tumbleweed package: its
+# Plasma libraries carry no stable ABI to build against.
+librekde_*.orig.tar.gz     the deterministic source tarball of the tagged tree
+*.debian13.deb             binary packages built in a Debian 13 container
+*.ubuntu2604.deb           binary packages built in an Ubuntu 26.04 LTS container
+*.fedora43.rpm             binary packages built in a Fedora 43 container
+*.fedora44.rpm             binary packages built in a Fedora 44 container
+SHA256SUMS                 checksums over every other asset in this release
+*.sigstore.json            cosign signature bundle, one per asset
