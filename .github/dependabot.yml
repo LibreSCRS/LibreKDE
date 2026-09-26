@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Every action in the workflows is pinned by commit; this is what moves the
+# pins, one reviewed pull request at a time. LibreSCRS/ci is included: its
+# pin has to be the same commit in every reference, and check-workflows
+# refuses a workflow where it is not.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
