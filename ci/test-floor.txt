@@ -1,8 +1,29 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# The test floor: every command ctest registers, counted by its executable's
-# basename, must still register at least this many tests. Recorded from the
-# census the shared test-floor gate printed on the first build. Every gtest
-# case here is launched through cmake (PRE_TEST discovery), so the first row
-# counts them all; the second is CatalogReconcile.
-cmake 338
-python3.14 1
+# The test floor: each test binary (or the script a test runs) must still
+# register at least this many tests. Recorded from the census the shared
+# test-floor gate printed on a full build; raise a row in the change that
+# adds tests to that binary.
+AgentCardDataSourceTest 19
+CardRenderersTest 14
+CardSelectionTest 11
+CardStateModelTest 10
+CardTreeTest 8
+CardWorkerTest 15
+CardsTest 7
+CredentialControllerTest 37
+CredentialGuidanceLocaleTest 3
+CredentialModelTest 8
+CredentialTextCoverageTest 5
+CredentialVocabularyCoverageTest 5
+CredentialsE2ETest 4
+ErrorTextCoverageTest 4
+ErrorTextTest 9
+IdentityLabelTest 31
+IdentityRowFoldingTest 11
+LatinCatalogTest 6
+MimeFormatMapTest 17
+SignJobTest 17
+SmartCardHandlerTest 95
+appstreamtest.cmake 1
+check-catalogs.py 1
+identity-render-fence.cmake 1
