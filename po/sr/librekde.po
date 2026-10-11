@@ -85,7 +85,7 @@ msgstr "Акредитиви картице"
 msgid "Manage the PINs and signing key on your smart card"
 msgstr "Управљајте ПИН-овима и кључем за потписивање на вашој паметној картици"
 
-#: components/credentials/src/main.cpp:41
+#: components/credentials/src/main.cpp:42
 #, kde-format
 msgid "Reader object path to bind"
 msgstr "Путања објекта читача за повезивање"
