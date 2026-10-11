@@ -29,7 +29,8 @@ int main(int argc, char** argv)
 
     KAboutData about(QStringLiteral("librescrs-credentials"), i18nc("@title", "Card Credentials"),
                      QStringLiteral(LIBREKDE_VERSION_STRING),
-                     i18n("Manage the PINs and signing key on your smart card"), KAboutLicense::GPL_V3);
+                     i18n("Manage the PINs and signing key on your smart card"), KAboutLicense::LGPL_V2_1);
+    about.setLicense(KAboutLicense::LGPL_V2_1, KAboutLicense::OrLaterVersions);
     about.setDesktopFileName(QStringLiteral("org.librescrs.credentials"));
     KAboutData::setApplicationData(about);
 
