@@ -44,6 +44,10 @@ every entry below describes a change to what you get by building from source.
 
 ### Changed
 
+- Built against the agent client whose certificates carry the card's
+  per-operation consent rule (a new trailing member of the D-Bus certificate
+  result); no visible change.
+
 - The Plasma clients no longer carry their own D-Bus client for the card
   agent. Card access, the transport and the wire value types now come from the
   agent project's Qt client library, and LibreKDE keeps only the part that
