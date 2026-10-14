@@ -44,6 +44,10 @@ every entry below describes a change to what you get by building from source.
 
 ### Changed
 
+- Built against the agent client whose certificates carry each key's ID, type,
+  size and key-agreement capability (new trailing members of the D-Bus
+  certificate result); no visible change.
+
 - Built against the agent client whose certificates carry the card's
   per-operation consent rule (a new trailing member of the D-Bus certificate
   result); no visible change.
