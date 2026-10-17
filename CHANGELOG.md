@@ -34,6 +34,12 @@ every entry below describes a change to what you get by building from source.
   of the five artefacts, leaving the KIO worker, the Purpose plugin and every
   message catalogue unpackaged.
 
+- **One package name installs all of it.** `librekde` is a metapackage that
+  depends on the five packages above, each at exactly its own version, so
+  `apt install librekde` or `dnf install librekde` brings in the plasmoid, the
+  KIO worker, the Purpose plugin, the credential window and the data they
+  share. Each part can still be installed on its own.
+
 
 ### Removed
 

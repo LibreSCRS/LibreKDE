@@ -73,3 +73,15 @@ Depends: ${shlibs:Depends}, ${misc:Depends},
          liblibrescrs-agentclient-qt5 (>= 5.0)
 Description: Credential-management window for LibreSCRS cards
  Change a PIN, unblock one with a PUK, and see how many attempts are left.
+
+Package: librekde
+Architecture: all
+Depends: ${misc:Depends},
+         librekde-common (= ${binary:Version}),
+         librekde-plasmoid (= ${binary:Version}),
+         librekde-kio (= ${binary:Version}),
+         librekde-purpose (= ${binary:Version}),
+         librekde-credentials (= ${binary:Version})
+Description: LibreSCRS integration for KDE Plasma (metapackage)
+ Installs the smart-card plasmoid, the credential window, the Purpose
+ "Sign" plugin and the card:/ KIO worker.

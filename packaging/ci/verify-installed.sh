@@ -6,6 +6,37 @@ set -uo pipefail
 fail=0
 check() { if [ "$2" -eq 0 ]; then echo "PASS $1"; else echo "FAIL $1"; fail=1; fi; }
 
+# The librekde metapackage pins every part to exactly its own build. Read from
+# the package files before anything is installed: an install proves only that
+# the dependencies resolve, and a ">=" or a wrong version resolves just as well.
+PARTS="librekde-common librekde-plasmoid librekde-kio librekde-purpose librekde-credentials"
+meta="" n=0
+for f in /pkg/*."${FAMILY:-deb}"; do
+  [ -f "$f" ] || continue
+  if [ "${FAMILY:-deb}" = deb ]; then nm=$(dpkg-deb -f "$f" Package 2>/dev/null)
+  else nm=$(rpm -qp --qf '%{NAME}' "$f" 2>/dev/null); fi
+  if [ "$nm" = librekde ]; then meta="$f"; n=$((n + 1)); fi
+done
+if [ "$n" -ne 1 ]; then
+  [ "$n" -eq 0 ] && echo "  no librekde package under /pkg"
+  check "V0 exactly one librekde metapackage (counted $n)" 1
+else
+  if [ "${FAMILY:-deb}" = deb ]; then
+    ver=$(dpkg-deb -f "$meta" Version)
+    # "name (op version)" -> "name op version", one per line.
+    deps=$(dpkg-deb -f "$meta" Depends | tr ',' '\n' \
+      | sed -E 's/^[[:space:]]*([^[:space:](]+)[[:space:]]*\(([<>=]+)[[:space:]]*([^)]*[^[:space:])])[[:space:]]*\)[[:space:]]*$/\1 \2 \3/; s/^[[:space:]]+//; s/[[:space:]]+$//')
+  else
+    ver=$(rpm -qp --qf '%{VERSION}-%{RELEASE}' "$meta" 2>/dev/null)
+    deps=$(rpm -qp --requires "$meta" 2>/dev/null | sed -E 's/[[:space:]]+$//')
+  fi
+  echo "  $(basename "$meta") $ver depends on:"; nl=$'\n'; echo "    ${deps//$nl/$nl    }"
+  for p in $PARTS; do
+    grep -Fxq "$p = $ver" <<<"$deps"
+    check "V0 librekde depends on '$p = $ver'" $?
+  done
+fi
+
 if [ "${FAMILY:-deb}" = deb ]; then
   export DEBIAN_FRONTEND=noninteractive
   # The base container is not a machine. Ubuntu's image ships

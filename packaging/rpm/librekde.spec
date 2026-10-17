@@ -39,12 +39,22 @@ BuildRequires:  python3
 # the Qt client library, and that is what its version floor applies to.
 BuildRequires:  librescrs-agent-client-qt-devel >= 5.0
 
+# The main package is a metapackage: it owns no file and installs every part,
+# each at exactly this build.
+Requires:       %{name}-common = %{version}-%{release}
+Requires:       %{name}-plasmoid = %{version}-%{release}
+Requires:       %{name}-kio = %{version}-%{release}
+Requires:       %{name}-purpose = %{version}-%{release}
+Requires:       %{name}-credentials = %{version}-%{release}
+
 %description
-Plasma 6 integration for LibreSCRS: a system-tray plasmoid, a card:/ KIO
+Plasma 6 integration for LibreSCRS: a system-tray widget, a card:/ KIO
 worker, a Purpose "Sign" plugin and a credential-management window.
 
-The plasmoid, the KIO worker and the Purpose plugin are compiled objects that
+The widget, the KIO worker and the Purpose plugin are compiled objects that
 live in system plugin directories, so no bundle format can deliver them.
+
+This package installs all four, with the data they share.
 
 %package common
 Summary:        Shared data for the LibreSCRS KDE integration
@@ -99,6 +109,8 @@ Change a PIN, unblock one with a PUK, and see how many attempts are left.
 %cmake_install
 %find_lang librekde || :
 
+%files
+
 %files common
 %license LICENSE
 %{_datadir}/locale/*/LC_MESSAGES/librekde.mo
@@ -127,3 +139,4 @@ Change a PIN, unblock one with a PUK, and see how many attempts are left.
 * Fri Sep 04 2026 LibreSCRS <librescrs@proton.me> - 5.0.0-1
 - Five binary packages, replacing a recipe that packaged two of them and named
   the wrong dependency for all of them.
+- A librekde metapackage that installs all five.
