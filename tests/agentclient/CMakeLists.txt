@@ -10,7 +10,8 @@
 add_executable(ErrorTextTest ErrorTextTest.cpp)
 target_link_libraries(ErrorTextTest PRIVATE GTest::gtest_main librekde-agentclient KF6::I18n)
 target_compile_features(ErrorTextTest PRIVATE cxx_std_23)
-gtest_discover_tests(ErrorTextTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
+libreagent_gtest_discover_tests(ErrorTextTest
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
 
 # Total-coverage guard: walks every CredentialOutcome value and demands a
 # deliberate copy decision per outcome (localized message, or the neutral
@@ -20,7 +21,8 @@ add_executable(CredentialTextCoverageTest CredentialTextCoverageTest.cpp)
 target_link_libraries(CredentialTextCoverageTest PRIVATE GTest::gtest_main librekde-agentclient KF6::I18n)
 target_compile_features(CredentialTextCoverageTest PRIVATE cxx_std_23)
 target_compile_options(CredentialTextCoverageTest PRIVATE -Werror=switch)
-gtest_discover_tests(CredentialTextCoverageTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
+libreagent_gtest_discover_tests(CredentialTextCoverageTest
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
 
 # Total-coverage guard for the four closed Credentials1 record-token enums
 # (Kind/State/UnblockStyle/Recovery): -Werror=switch classifiers force a
@@ -32,7 +34,8 @@ add_executable(CredentialVocabularyCoverageTest CredentialVocabularyCoverageTest
 target_link_libraries(CredentialVocabularyCoverageTest PRIVATE GTest::gtest_main librekde-agentclient KF6::I18n)
 target_compile_features(CredentialVocabularyCoverageTest PRIVATE cxx_std_23)
 target_compile_options(CredentialVocabularyCoverageTest PRIVATE -Werror=switch)
-gtest_discover_tests(CredentialVocabularyCoverageTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
+libreagent_gtest_discover_tests(CredentialVocabularyCoverageTest
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
 
 # Identity-field label resolver — proves a frozen labelKey ("field.surname")
 # resolves to the real Serbian string end-to-end. The sr catalog is compiled
@@ -80,7 +83,7 @@ if(MSGFMT_EXECUTABLE)
     # dogfood-installed under the developer's ~/.local/share shadows the freshly
     # compiled one — the test then asserts against whatever that older install
     # happens to say instead of against this checkout.
-    gtest_discover_tests(IdentityLabelTest PROPERTIES
+    libreagent_gtest_discover_tests(IdentityLabelTest
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=sr;LANG=en_US.UTF-8"
         ENVIRONMENT_MODIFICATION "XDG_DATA_DIRS=path_list_prepend:${_id_locale_root};XDG_DATA_HOME=set:${_id_locale_root}")
 
@@ -112,7 +115,7 @@ if(MSGFMT_EXECUTABLE)
     # the catalog, LANG must still name a real UTF-8 locale, and XDG_DATA_HOME
     # is pinned ahead of XDG_DATA_DIRS so a dogfood-installed librekde catalog
     # cannot shadow the freshly built one.
-    gtest_discover_tests(LatinCatalogTest PROPERTIES
+    libreagent_gtest_discover_tests(LatinCatalogTest
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=sr@latin;LANG=en_US.UTF-8"
         ENVIRONMENT_MODIFICATION "XDG_DATA_DIRS=path_list_prepend:${_id_locale_root};XDG_DATA_HOME=set:${_id_locale_root}")
 else()
@@ -132,7 +135,8 @@ target_link_libraries(IdentityRowFoldingTest PRIVATE GTest::gtest_main librekde-
 # it includes itself must not rest on another target's public interface.
 target_link_libraries(IdentityRowFoldingTest PRIVATE LibreAgent::ClientQt)
 target_compile_features(IdentityRowFoldingTest PRIVATE cxx_std_23)
-gtest_discover_tests(IdentityRowFoldingTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
+libreagent_gtest_discover_tests(IdentityRowFoldingTest
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
 
 # Total-coverage guard: walks every value of the client library's ErrorCode and
 # demands a deliberate ErrorText outcome per code (localized copy vs agent
@@ -144,7 +148,8 @@ add_executable(ErrorTextCoverageTest ErrorTextCoverageTest.cpp)
 target_link_libraries(ErrorTextCoverageTest PRIVATE GTest::gtest_main librekde-agentclient KF6::I18n)
 target_compile_features(ErrorTextCoverageTest PRIVATE cxx_std_23)
 target_compile_options(ErrorTextCoverageTest PRIVATE -Werror=switch)
-gtest_discover_tests(ErrorTextCoverageTest PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
+libreagent_gtest_discover_tests(ErrorTextCoverageTest
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
 
 # D-Bus FakeAgent tests — each runs under dbus-run-session, with a custom main
 # that owns a QCoreApplication (TestMain.cpp) instead of gtest_main. The

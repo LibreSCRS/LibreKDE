@@ -30,7 +30,7 @@ target_link_libraries(CredentialModelTest PRIVATE
     Qt6::Core Qt6::Gui Qt6::Test KF6::I18n
 )
 target_compile_features(CredentialModelTest PRIVATE cxx_std_23)
-gtest_discover_tests(CredentialModelTest PROPERTIES
+libreagent_gtest_discover_tests(CredentialModelTest
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
 
 add_executable(CredentialControllerTest
@@ -45,9 +45,9 @@ target_compile_features(CredentialControllerTest PRIVATE cxx_std_23)
 librekde_private_session_bus(CredentialControllerTest)
 # A wedged test under dbus-run-session must fail in minutes, not consume the
 # runner's whole wall: every bus-backed test here carries an explicit timeout.
-gtest_discover_tests(CredentialControllerTest PROPERTIES
+libreagent_gtest_discover_tests(CredentialControllerTest
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en;${LIBREKDE_PRIVATE_BUS_ENV}"
-    TIMEOUT 120)
+    PROPERTIES TIMEOUT 120)
 
 # Capstone E2E — the full credential-lifecycle flow (list → manage → result →
 # mandatory re-list) over the real private session bus, asserting the agent-side
@@ -63,9 +63,9 @@ target_link_libraries(CredentialsE2ETest PRIVATE
 )
 target_compile_features(CredentialsE2ETest PRIVATE cxx_std_23)
 librekde_private_session_bus(CredentialsE2ETest)
-gtest_discover_tests(CredentialsE2ETest PROPERTIES
+libreagent_gtest_discover_tests(CredentialsE2ETest
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en;${LIBREKDE_PRIVATE_BUS_ENV}"
-    TIMEOUT 120)
+    PROPERTIES TIMEOUT 120)
 
 # Credential guidance/state resolver — proves the two frozen guidance keys the
 # agent emits (librescrs.pin.blocked.issuer / .keyActivation.issuer) and a state
@@ -106,7 +106,7 @@ if(MSGFMT_EXECUTABLE)
     # XDG_DATA_HOME here makes the newly built catalog the highest-priority hit;
     # KF6 / system catalogs still resolve through the untouched system
     # XDG_DATA_DIRS.
-    gtest_discover_tests(CredentialGuidanceLocaleTest PROPERTIES
+    libreagent_gtest_discover_tests(CredentialGuidanceLocaleTest
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=sr;LANG=en_US.UTF-8"
         ENVIRONMENT_MODIFICATION "XDG_DATA_DIRS=path_list_prepend:${_cred_locale_root};XDG_DATA_HOME=set:${_cred_locale_root}")
 else()

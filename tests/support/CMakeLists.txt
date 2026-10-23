@@ -56,7 +56,7 @@ function(librekde_add_dbus_test name)
     librekde_private_session_bus(${name})
     # A wedged test under dbus-run-session must fail in minutes, not consume
     # the runner's whole wall.
-    gtest_discover_tests(${name} PROPERTIES
+    libreagent_gtest_discover_tests(${name}
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en;${LIBREKDE_PRIVATE_BUS_ENV}"
-        TIMEOUT 120)
+        PROPERTIES TIMEOUT 120)
 endfunction()

@@ -16,7 +16,7 @@ target_link_libraries(CardStateModelTest
     PRIVATE GTest::gtest_main Qt6::Core LibreAgent::ClientQt
 )
 target_compile_features(CardStateModelTest PRIVATE cxx_std_23)
-gtest_discover_tests(CardStateModelTest PROPERTIES
+libreagent_gtest_discover_tests(CardStateModelTest
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
 
 # SmartCardHandler driven by the FakeAgent over a private session bus (the
@@ -62,6 +62,6 @@ target_compile_features(SmartCardHandlerTest PRIVATE cxx_std_23)
 librekde_private_session_bus(SmartCardHandlerTest)
 # A wedged test under dbus-run-session must fail in minutes, not consume the
 # runner's whole wall.
-gtest_discover_tests(SmartCardHandlerTest PROPERTIES
+libreagent_gtest_discover_tests(SmartCardHandlerTest
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en;${LIBREKDE_PRIVATE_BUS_ENV}"
-    TIMEOUT 120)
+    PROPERTIES TIMEOUT 120)
