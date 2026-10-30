@@ -80,13 +80,13 @@ msgstr "Није могуће сачувати фотографију у %1."
 #: components/plasmoid/package/contents/ui/UnknownCardState.qml:30
 msgctxt "@action:button open card in LibreCelik"
 msgid "Open in LibreCelik"
-msgstr "Отвори у LibreCelik-у"
+msgstr "Отвори у Слободном Челику"
 
 #: components/plasmoid/package/contents/ui/CardActionBar.qml:160
 #: components/plasmoid/package/contents/ui/ErrorState.qml:54
 msgctxt "@info:whatsthis open in librecelik button"
 msgid "Opens this card in LibreCelik for full details."
-msgstr "Отвара ову картицу у LibreCelik-у за потпуне детаље."
+msgstr "Отвара ову картицу у Слободном Челику за потпуне детаље."
 
 # --- CardDetail.qml -------------------------------------------------------
 #: components/plasmoid/package/contents/ui/CardActionBar.qml:169
@@ -148,7 +148,7 @@ msgstr "Није могуће прочитати ову картицу"
 #: components/plasmoid/package/contents/ui/ErrorState.qml:33
 msgctxt "@info plasmoid error placeholder fallback explanation"
 msgid "Open LibreCelik for more details."
-msgstr "Отворите LibreCelik за више детаља."
+msgstr "Отворите Слободни Челик за више детаља."
 
 # --- HybridState.qml ------------------------------------------------------
 #: components/plasmoid/package/contents/ui/HybridState.qml:17
