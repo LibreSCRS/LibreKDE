@@ -20,6 +20,12 @@ ecm_qt_declare_logging_category(PlasmoidLogging_SRCS
 # its own. An unversioned liblibrekde-plasmoid.so in the public library
 # directory looked like a library other software could link, with no SONAME to
 # keep that promise; there is nothing to promise, so there is no such file.
+#
+# The plugin is created here, as a MODULE, before qt_add_qml_module sees it:
+# left to the command, a plugin takes the type of its backing target, so a
+# STATIC backing library yields a static plugin -- a .a the QML engine cannot
+# load, and `import org.librescrs.smartcard` fails with "plugin not found".
+add_library(librekde-plasmoidplugin MODULE)
 qt_add_qml_module(librekde-plasmoid
     STATIC
     URI org.librescrs.smartcard
@@ -42,6 +48,12 @@ qt_add_qml_module(librekde-plasmoid
 # exists only once its moc step has run. Order each one after the moc step
 # whose directory it was handed, or -Wmissing-include-dirs reports it on a
 # fresh tree (the same ordering as the credentials module).
+get_target_property(plasmoid_plugin_type librekde-plasmoidplugin TYPE)
+if(NOT plasmoid_plugin_type STREQUAL "MODULE_LIBRARY")
+    message(FATAL_ERROR "librekde-plasmoidplugin is ${plasmoid_plugin_type}; "
+        "the QML engine loads only a MODULE_LIBRARY plugin")
+endif()
+
 foreach(generated IN LISTS librekde_plasmoid_generated)
     string(REGEX REPLACE "(_resources_[0-9]+|_init)$" "" owner "${generated}")
     add_dependencies(${generated} ${owner}_autogen)
