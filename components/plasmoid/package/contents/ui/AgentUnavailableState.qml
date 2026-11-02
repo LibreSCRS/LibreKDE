@@ -38,7 +38,16 @@ ColumnLayout {
             Layout.alignment: Qt.AlignCenter
             text: i18nc("@action:button start smart card service", "Start service")
             icon.name: "system-run"
+            enabled: !smartCard.agentStarting
             onClicked: smartCard.startAgent()
+            Accessible.name: text
+        }
+        PlasmaComponents.Label {
+            visible: smartCard.agentStartFailed
+            Layout.alignment: Qt.AlignCenter
+            color: Kirigami.Theme.negativeTextColor
+            text: i18nc("@info plasmoid agent start failed", "The service could not be started.")
+            Accessible.role: Accessible.AlertMessage
             Accessible.name: text
         }
         PlasmaComponents.Label {
@@ -80,7 +89,7 @@ ColumnLayout {
         Layout.alignment: Qt.AlignCenter
         text: i18nc("@action:button open online installation help", "Installation help")
         icon.name: "help-contents"
-        onClicked: Qt.openUrlExternally("https://librescrs.github.io/")
+        onClicked: Qt.openUrlExternally(root.smartCard.installHelpUrl)
         Accessible.name: text
     }
 

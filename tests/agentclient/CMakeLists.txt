@@ -152,7 +152,7 @@ libreagent_gtest_discover_tests(ErrorTextCoverageTest
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
 
 # D-Bus FakeAgent tests — each runs under dbus-run-session, with a custom main
-# that owns a QCoreApplication (TestMain.cpp) instead of gtest_main. The
+# that owns a QCoreApplication (librekde-test-main) instead of gtest_main. The
 # librekde_add_dbus_test helper, and the harness it links, live in
 # tests/support; this file is its only caller.
 #
@@ -169,3 +169,8 @@ librekde_add_dbus_test(CardsTest)
 # includes the client library's own headers, and a test's dependency on headers
 # it includes itself must not rest on another target's public interface.
 target_link_libraries(CardsTest PRIVATE LibreAgent::ClientQt)
+
+# The shared reader label, over a real AgentClient against the fake: the one
+# label the plasmoid, the credentials window and the card:/ worker all show.
+librekde_add_dbus_test(ReadersTest)
+target_link_libraries(ReadersTest PRIVATE LibreAgent::ClientQt)

@@ -43,11 +43,11 @@ target_link_libraries(AgentCardDataSourceTest PRIVATE
     Qt6::Core Qt6::DBus Qt6::Gui Qt6::Test
 )
 target_compile_features(AgentCardDataSourceTest PRIVATE cxx_std_23)
-librekde_private_session_bus(AgentCardDataSourceTest)
+libreagent_private_session_bus(AgentCardDataSourceTest)
 # A wedged test under dbus-run-session must fail in minutes, not consume the
 # runner's whole wall.
 libreagent_gtest_discover_tests(AgentCardDataSourceTest
-    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en;${LIBREKDE_PRIVATE_BUS_ENV}"
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en;${LIBREAGENT_PRIVATE_BUS_ENV}"
     PROPERTIES TIMEOUT 120)
 
 # Worker-logic test: subclasses CardWorkerLogic (decoupled from the

@@ -260,12 +260,24 @@ TEST(CardRenderers, IdentityTxtHoldsOneHeaderPerGroupUnderEveryRowOrder)
 TEST(CardRenderers, InfoTxtListsCapabilities)
 {
     CardPresence p{QStringLiteral("Gemalto"), QStringLiteral("/card/0"), Client::Cap::Pki | Client::Cap::IdentityData,
-                   QStringLiteral("Can")};
+                   QStringLiteral("Can"), QString()};
     const QString txt = renderInfoTxt(p);
     EXPECT_TRUE(txt.contains(QStringLiteral("Reader: Gemalto")));
     EXPECT_TRUE(txt.contains(QStringLiteral("PKI")));
     EXPECT_TRUE(txt.contains(QStringLiteral("Identity")));
     EXPECT_TRUE(txt.contains(QStringLiteral("Can")));
+}
+
+// info.txt names the reader by its label, as every other surface does; the raw
+// PC/SC name stays only in the path segment the worker lists it under.
+TEST(CardRenderers, InfoTxtNamesTheReaderByItsLabel)
+{
+    CardPresence p{QStringLiteral("HID Global OMNIKEY 5422 Smartcard Reader (IM0O2C00NF10456904) 00 00"),
+                   QStringLiteral("/card/0"), Client::Cap::Pki, QStringLiteral("None"),
+                   QStringLiteral("OMNIKEY 5422 — contact")};
+    const QString txt = renderInfoTxt(p);
+    EXPECT_TRUE(txt.contains(QStringLiteral("Reader: OMNIKEY 5422 — contact\n"))) << txt.toStdString();
+    EXPECT_FALSE(txt.contains(QStringLiteral("IM0O2C00NF10456904"))) << txt.toStdString();
 }
 
 // eMRTD + PIN-management edges: a passport (IdentityData|EmrtdCrypto) lists eMRTD,
@@ -274,19 +286,19 @@ TEST(CardRenderers, InfoTxtListsCapabilities)
 TEST(CardRenderers, InfoTxtListsEmrtdAndPinManagementCapabilities)
 {
     CardPresence passport{QStringLiteral("NFC"), QStringLiteral("/card/0"),
-                          Client::Cap::IdentityData | Client::Cap::EmrtdCrypto, QStringLiteral("Mrz")};
+                          Client::Cap::IdentityData | Client::Cap::EmrtdCrypto, QStringLiteral("Mrz"), QString()};
     const QString ptxt = renderInfoTxt(passport);
     EXPECT_TRUE(ptxt.contains(QStringLiteral("Identity"))) << ptxt.toStdString();
     EXPECT_TRUE(ptxt.contains(QStringLiteral("eMRTD"))) << ptxt.toStdString();
     EXPECT_FALSE(ptxt.contains(QStringLiteral("PKI"))) << ptxt.toStdString();
 
     CardPresence pinCard{QStringLiteral("R"), QStringLiteral("/card/1"), Client::Cap::Pki | Client::Cap::PinManagement,
-                         QStringLiteral("None")};
+                         QStringLiteral("None"), QString()};
     const QString ptxt2 = renderInfoTxt(pinCard);
     EXPECT_TRUE(ptxt2.contains(QStringLiteral("PIN management"))) << ptxt2.toStdString();
 
     // An empty capability set renders the "none" sentinel and "None" pre-read auth.
-    CardPresence empty{QStringLiteral("E"), QStringLiteral("/card/2"), Client::Cap::None, QString()};
+    CardPresence empty{QStringLiteral("E"), QStringLiteral("/card/2"), Client::Cap::None, QString(), QString()};
     const QString etxt = renderInfoTxt(empty);
     EXPECT_TRUE(etxt.contains(QStringLiteral("Capabilities: none"))) << etxt.toStdString();
     EXPECT_TRUE(etxt.contains(QStringLiteral("Pre-read authentication: None"))) << etxt.toStdString();

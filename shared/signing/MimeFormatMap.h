@@ -5,23 +5,22 @@
 #include <QString>
 
 /// @file
-/// @brief Pure MIME → AdES {format, packaging} choice + signed-output naming.
+/// @brief Pure MIME → AdES {format, packaging} choice.
 ///
 /// The format/packaging *vocabulary* and the ASiC-S exclusion are canonical in
 /// the broker contract and surfaced as the `Card1.Sign` `options` wire
 /// strings (agent `Card1.xml`): format ∈ {auto,pades,cades,xades,jades,asice},
 /// packaging ∈ {auto,enveloped,detached}. This map only fixes the client-side
-/// MIME→format *choice* and derives the output filename. It links
-/// nothing — it is a pure value transform, unit-tested in
-/// isolation against the FakeAgent-driven Job tests.
+/// MIME→format *choice*; the output filename is the agent client library's
+/// `signedOutputPath()`, the one rule every client uses. It links nothing — it
+/// is a pure value transform, unit-tested in isolation.
 
 namespace LibreKDE {
 
 /// @brief The signing choice for one input MIME type.
 ///
 /// `format`/`packaging` are the exact `Card1.Sign` wire strings (NOT a private
-/// enum) so the Job forwards them straight into the `options` map. `enveloped`
-/// distinguishes the in-place vs side-signature output-naming rule.
+/// enum) so the Job forwards them straight into the `options` map.
 struct SignChoice
 {
     QString format;    ///< pades|cades|xades|jades|asice (wire vocabulary).
@@ -33,7 +32,7 @@ struct SignChoice
     }
 };
 
-/// @brief Pure MIME→format map + output-name derivation.
+/// @brief Pure MIME→format map.
 namespace MimeFormatMap {
 
 /// @brief Resolve a source MIME type to its AdES signing choice:
@@ -41,7 +40,7 @@ namespace MimeFormatMap {
 ///        XAdES detached; application/json → JAdES detached;
 ///        application/vnd.etsi.asic-e+zip → ASiC-E detached; everything else →
 ///        CAdES detached. Never returns `auto` — the client picks a concrete
-///        format from the MIME so the output name is deterministic.
+///        format from the MIME so the request and the output name agree.
 [[nodiscard]] SignChoice resolve(const QString& mimeType);
 
 /// @brief Resolve an explicit AdES @p format string (the wire vocabulary:
@@ -53,13 +52,6 @@ namespace MimeFormatMap {
 ///        packaging mismatched with a cross-family format. An unknown format
 ///        falls back to detached (the agent validates the vocabulary).
 [[nodiscard]] SignChoice resolveFormat(const QString& format);
-
-/// @brief Derive the signed-artifact filename next to @p inputName:
-///        enveloped → `name-signed.<ext>`; CAdES detached → `name.<ext>.p7s`;
-///        detached XAdES → `name.<ext>.xml`; detached JAdES → `name.<ext>.json`.
-///        @p inputName is a bare filename (no directory); the Job joins it with
-///        the input's directory.
-[[nodiscard]] QString outputName(const QString& inputName, const SignChoice& choice);
 
 } // namespace MimeFormatMap
 

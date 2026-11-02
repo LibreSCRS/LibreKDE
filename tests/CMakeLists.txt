@@ -27,32 +27,17 @@ set(CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)
 # whatever session bus the runner is on. The guard is required because
 # cmake_policy(SET CMP0158 ...) is an error on CMake 3.24 through 3.28, which
 # this project still declares as its minimum. The behaviour is asserted too, by
-# PrivateSessionBusTest.cpp below, because this line cannot fail.
+# the case libreagent_private_session_bus() compiles into every such suite,
+# because this line cannot fail.
 if(POLICY CMP0158)
     cmake_policy(SET CMP0158 OLD)
 endif()
 
-find_program(DBUS_RUN_SESSION dbus-run-session REQUIRED)
-
-# An address no bus can be listening on. ctest hands it to every bus-backed test
-# in both variables below; dbus-run-session overwrites DBUS_SESSION_BUS_ADDRESS
-# with the bus it starts, so the two are equal exactly when the wrapper did not
-# run -- which is what PrivateSessionBusTest.cpp asserts against.
-set(LIBREKDE_PRIVATE_BUS_SENTINEL "unix:path=/nonexistent/librescrs-no-private-bus")
-set(LIBREKDE_PRIVATE_BUS_ENV
-    "LIBRESCRS_OUTER_BUS=${LIBREKDE_PRIVATE_BUS_SENTINEL};DBUS_SESSION_BUS_ADDRESS=${LIBREKDE_PRIVATE_BUS_SENTINEL}")
-set(LIBREKDE_PRIVATE_BUS_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/support/PrivateSessionBusTest.cpp")
-
-# Wraps <tgt> in its own session bus and compiles in the case that says so. The
-# suite name carries the target's name because every bus-backed binary gets this
-# case, and ctest entries are named after the case alone.
-function(librekde_private_session_bus tgt)
-    set_target_properties(${tgt} PROPERTIES
-        CROSSCOMPILING_EMULATOR "${DBUS_RUN_SESSION};--")
-    target_sources(${tgt} PRIVATE "${LIBREKDE_PRIVATE_BUS_SOURCE}")
-    target_compile_definitions(${tgt} PRIVATE
-        LIBRESCRS_PRIVATE_BUS_SUITE=${tgt}PrivateSessionBus)
-endfunction()
+# Every bus-backed suite is wrapped with libreagent_private_session_bus(<tgt>)
+# and registers its cases with ENVIRONMENT "${LIBREAGENT_PRIVATE_BUS_ENV}": the
+# agent client's own helper, so a suite here gets the same private bus every
+# consumer of the client does — one with no service directory of the machine's,
+# so an agent installed on the machine is never started in the middle of a suite.
 
 # Source gate rather than a unit test: it fences off the two identity-render
 # defects that are introduced by writing a line, not by a value flowing
@@ -89,6 +74,20 @@ add_test(NAME CatalogReconcile
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_subdirectory(support)
+
+# A session bus on which the agent is installed but not running: what a fresh
+# login on a packaged system leaves, and what the shared harness cannot produce
+# (its agent is always already on the bus). The bus's only service directory
+# holds the agent's activation file, naming LkActivatableAgent; nothing on that
+# bus answers to the agent's name until something starts it. Register the
+# target's cases with ENVIRONMENT "${LIBREAGENT_PRIVATE_BUS_ENV}".
+set(_agent_start_dir "${CMAKE_CURRENT_BINARY_DIR}/agent-start")
+file(GENERATE OUTPUT "${_agent_start_dir}/services/org.librescrs.Agent.service"
+     CONTENT "[D-BUS Service]\nName=org.librescrs.Agent\nExec=$<TARGET_FILE:LkActivatableAgent>\n")
+function(librekde_activatable_agent_bus tgt)
+    libreagent_private_session_bus(${tgt} SERVICE_DIR "${_agent_start_dir}/services")
+    add_dependencies(${tgt} LkActivatableAgent)
+endfunction()
 add_subdirectory(agentclient)
 if(LIBREKDE_BUILD_PLASMOID)
     add_subdirectory(plasmoid)

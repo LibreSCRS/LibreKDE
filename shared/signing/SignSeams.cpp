@@ -13,7 +13,6 @@
 #include <QLabel>
 #include <QList>
 #include <QLocale>
-#include <QMessageBox>
 #include <QString>
 #include <QStringList>
 #include <QVBoxLayout>
@@ -107,17 +106,6 @@ LibreKDE::CertChooser widgetCertChooser()
             return std::nullopt;
         }
         return cands.at(*idx).id;
-    };
-}
-
-LibreKDE::OverwriteConfirmer widgetOverwriteConfirmer()
-{
-    return [](const QString& outputPath) -> bool {
-        const auto answer = QMessageBox::question(
-            nullptr, i18nc("@title:window", "Overwrite Signed File?"),
-            i18nc("@info", "The file %1 already exists. Overwrite it with the new signature?", outputPath),
-            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-        return answer == QMessageBox::Yes;
     };
 }
 

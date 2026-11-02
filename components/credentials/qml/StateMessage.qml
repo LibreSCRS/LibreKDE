@@ -30,16 +30,17 @@ Kirigami.PlaceholderMessage {
     visible: true
     text: switch (root.uiState) {
     case CredentialController.AgentUnavailable:
-        return i18n("The smart-card service isn't running.")
+        return root.controller.agentInstalled ? i18n("The smart-card service isn't running.")
+                                              : i18n("The smart-card service isn't installed.")
     case CredentialController.NoCard:
         // Name the reader to insert into when one is bound —
         // after a card removal the binding survives, so the name is available.
         // plainDisplay: the reader name is hardware/agent-derived and
         // PlaceholderMessage's internals render AutoText (no textFormat knob) —
         // neutralize markup-looking names (hostile-device hardening).
-        return root.controller.readerName.length > 0
+        return root.controller.readerLabel.length > 0
             ? i18nc("@info %1 is the reader name", "Insert the card in reader %1.",
-                    root.controller.plainDisplay(root.controller.readerName))
+                    root.controller.plainDisplay(root.controller.readerLabel))
             : i18n("Insert the card in the reader.")
     case CredentialController.NotManageable:
         return i18n("This card doesn't support credential management here.")
@@ -59,8 +60,28 @@ Kirigami.PlaceholderMessage {
     // arrives (the controller clears the notice on the next card bind).
     explanation: root.uiState === CredentialController.NoCard ? root.controller.removalNotice : ""
 
-    // The window-side escape hatch for a stalled / CAN-prompting read.
-    helpfulAction: root.uiState === CredentialController.Loading ? cancelReadAction : null
+    // The window-side escape hatch for a stalled / CAN-prompting read, and the
+    // next step when there is no agent to talk to.
+    helpfulAction: {
+        if (root.uiState === CredentialController.Loading)
+            return cancelReadAction
+        if (root.uiState === CredentialController.AgentUnavailable)
+            return root.controller.agentInstalled ? startServiceAction : installHelpAction
+        return null
+    }
+    Kirigami.Action {
+        id: startServiceAction
+        text: i18nc("@action:button start smart card service", "Start service")
+        icon.name: "system-run"
+        enabled: !root.controller.agentStarting
+        onTriggered: root.controller.startAgent()
+    }
+    Kirigami.Action {
+        id: installHelpAction
+        text: i18nc("@action:button open online installation help", "Installation help")
+        icon.name: "help-contents"
+        onTriggered: Qt.openUrlExternally(root.controller.installHelpUrl)
+    }
     Kirigami.Action {
         id: cancelReadAction
         text: i18nc("@action:button", "Cancel")

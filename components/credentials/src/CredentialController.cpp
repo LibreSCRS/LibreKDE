@@ -69,6 +69,16 @@ void CredentialController::wireClient()
     connect(m_client.get(), &Client::AgentClient::readersChanged, this, &CredentialController::refresh);
     connect(m_client.get(), &Client::AgentClient::cardChanged, this, [this](const QString&) { refresh(); });
     connect(m_client.get(), &Client::AgentClient::availabilityChanged, this, [this](bool) { refresh(); });
+    connect(m_client.get(), &Client::AgentClient::agentStartFinished, this, [this](Client::AgentStartResult) {
+        // Every answer ends the start this window asked for; reaching the agent
+        // has already re-resolved through availabilityChanged.
+        if (!m_agentStarting) {
+            return;
+        }
+        m_agentStarting = false;
+        Q_EMIT agentStartingChanged();
+        refresh();
+    });
 }
 
 void CredentialController::bindReader(const QString& readerId)
@@ -102,6 +112,35 @@ void CredentialController::bindReader(const QString& readerId)
     refresh();
 }
 
+bool CredentialController::agentInstalled() const
+{
+    return m_client && m_client->agentState() != Client::AgentState::Missing;
+}
+
+QString CredentialController::installHelpUrl()
+{
+    return Client::AgentClient::installHelpUrl();
+}
+
+void CredentialController::startAgent()
+{
+    // The start waits for the agent in local event loops, and what they deliver
+    // re-binds the view the action lives in; run under the trigger, that would
+    // pull the view out from under its own handler. The client library runs it
+    // from the event loop instead and answers with agentStartFinished. A second
+    // trigger before then starts nothing.
+    if (m_agentStarting) {
+        return;
+    }
+    if (!m_client) {
+        refresh();
+        return;
+    }
+    m_agentStarting = true;
+    Q_EMIT agentStartingChanged();
+    m_client->requestAgentStartLater();
+}
+
 void CredentialController::refresh()
 {
     // Availability first: an unreachable agent is a client-level state, not a
@@ -109,7 +148,7 @@ void CredentialController::refresh()
     if (!m_client || !m_client->isAvailable()) {
         m_resolvedReaderId.clear();
         bindCard(nullptr);
-        setReaderName({});
+        setReaderLabel({});
         transitionTo(State::AgentUnavailable);
         return;
     }
@@ -141,13 +180,16 @@ void CredentialController::refresh()
         // Unbound with no fallback target: no card to manage anywhere.
         m_resolvedReaderId.clear();
         bindCard(nullptr);
-        setReaderName({});
+        setReaderLabel({});
         transitionTo(State::NoCard);
         return;
     }
 
     m_resolvedReaderId = reader->id();
-    setReaderName(reader->name());
+    // Shown, never matched on: the binding is m_readerId / m_resolvedReaderId.
+    // A relabel reaches here as a change of this reader (cardChanged), so the
+    // label follows the agent's.
+    setReaderLabel(Readers::readerLabel(*reader));
     bindCard(reader->card());
     classify();
 }
@@ -616,7 +658,7 @@ void CredentialController::onMutationDone(Client::AgentOperation* op)
             // credential vocabulary. Compose it with the shared rule, which
             // consults both and can never return empty — rather than the credential
             // vocabulary's one generic sentence, which names neither axis.
-            return LibreKDE::ErrorText::forOutcome(errorCode, op->callError(), op->messageFallback());
+            return LibreKDE::ErrorText::forOutcome(errorCode, op->callError(), op->messageKey(), op->messageFallback());
         }
         return LibreKDE::CredentialText::outcomeMessage(effective, m_pendingPresentedKind, result.retriesLeft);
     }();
@@ -768,13 +810,13 @@ void CredentialController::transitionTo(State next)
     Q_EMIT stateChanged();
 }
 
-void CredentialController::setReaderName(const QString& name)
+void CredentialController::setReaderLabel(const QString& label)
 {
-    if (m_readerName == name) {
+    if (m_readerLabel == label) {
         return;
     }
-    m_readerName = name;
-    Q_EMIT readerNameChanged();
+    m_readerLabel = label;
+    Q_EMIT readerLabelChanged();
 }
 
 } // namespace LibreKDE::Credentials

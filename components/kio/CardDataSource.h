@@ -2,7 +2,8 @@
 // SPDX-FileCopyrightText: 2026 hirashix0
 #pragma once
 
-#include <LibreSCRS/AgentClient/Types.h> // LibreSCRS::AgentClient::CertificateInfo
+#include <LibreSCRS/AgentClient/AgentClient.h> // LibreSCRS::AgentClient::AgentState
+#include <LibreSCRS/AgentClient/Types.h>       // LibreSCRS::AgentClient::CertificateInfo
 
 #include <QByteArray>
 #include <QList>
@@ -40,6 +41,9 @@ struct CardPresence
     QString cardId;                 ///< Opaque agent card id (handle for the I/O methods).
     std::uint32_t capabilities = 0; ///< Card capability bitfield (LibreSCRS::AgentClient::Cap::*).
     QString preReadAuth;            ///< Pre-read auth wire token ("None"/"Can"/"Mrz").
+    /// The label the reader is shown under in `info.txt` (the agent's, as
+    /// every other surface shows it); empty = show readerName. Never a key.
+    QString readerLabel;
 };
 
 /// @brief How a read finished, mapped from the agent op's terminal status. The
@@ -135,6 +139,11 @@ public:
     /// @brief Export a certificate's raw DER (the agent's public-data surface —
     ///        no consent, no lease). @p certId is a `CertificateInfo::id`.
     [[nodiscard]] virtual CertDerResult getCertificateDer(const QString& cardId, const QString& certId) = 0;
+
+    /// @brief Whether there is an agent to ask, as the agent client library
+    ///        last learned it — NO I/O. Lets `card:/` tell "no agent" apart
+    ///        from "no card".
+    [[nodiscard]] virtual LibreSCRS::AgentClient::AgentState agentState() const = 0;
 };
 
 } // namespace LibreKDE

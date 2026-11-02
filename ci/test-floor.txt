@@ -3,27 +3,31 @@
 # register at least this many tests. Recorded from the census the shared
 # test-floor gate printed on a full build; raise a row in the change that
 # adds tests to that binary.
-AgentCardDataSourceTest 19
-CardRenderersTest 14
+AgentCardDataSourceTest 20
+AgentControlClickTest 4
+AgentStartTest 4
+CardRenderersTest 15
 CardSelectionTest 11
 CardStateModelTest 10
 CardTreeTest 8
-CardWorkerTest 15
+CardWorkerTest 16
 CardsTest 7
-CredentialControllerTest 37
+CredentialAgentStartTest 3
+CredentialControllerTest 39
 CredentialGuidanceLocaleTest 3
 CredentialModelTest 8
 CredentialTextCoverageTest 5
 CredentialVocabularyCoverageTest 5
 CredentialsE2ETest 4
-ErrorTextCoverageTest 4
-ErrorTextTest 9
+ErrorTextCoverageTest 5
+ErrorTextTest 13
 IdentityLabelTest 31
 IdentityRowFoldingTest 11
 LatinCatalogTest 6
-MimeFormatMapTest 17
-SignJobTest 17
-SmartCardHandlerTest 95
+MimeFormatMapTest 10
+ReadersTest 4
+SignJobTest 19
+SmartCardHandlerTest 99
 appstreamtest.cmake 1
 check-catalogs.py 1
 identity-render-fence.cmake 1

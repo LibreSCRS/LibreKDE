@@ -48,7 +48,7 @@ Kirigami.FormLayout {
         Layout.preferredWidth: Kirigami.Units.gridUnit * 18
         editable: true
 
-        // The model carries a FRIENDLY display label (`text`) plus the RAW
+        // The model carries the reader's display label (`text`) plus the RAW
         // reader name (`value`) the binding is actually keyed on. The field and
         // dropdown show the short, distinguishable label; cfg_boundReaderName
         // always stores the raw name (or "" for Auto), so a stored binding stays
@@ -156,7 +156,7 @@ Kirigami.FormLayout {
             }
         }
 
-        // Dropdown items show the friendly label with the FULL raw reader name on
+        // Dropdown items show the display label with the FULL raw reader name on
         // hover, so two similar readers are always tellable apart while picking.
         delegate: QQC2.ItemDelegate {
             id: readerItem

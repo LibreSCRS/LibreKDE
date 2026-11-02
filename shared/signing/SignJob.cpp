@@ -16,18 +16,14 @@
 
 #include <KLocalizedString>
 
-#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QList>
 #include <QMimeDatabase>
 #include <QPointer>
-#include <QSaveFile>
 
-#include <cerrno>
 #include <fcntl.h>
 #include <optional>
-#include <unistd.h>
 #include <utility>
 
 // Short local spelling for the agent client library, whose value types this
@@ -91,7 +87,6 @@ struct SignJob::Private
     QString mimeType;
     QString formatOverride;
     CertChooser chooser;
-    OverwriteConfirmer overwriteConfirmer;
 
     // Settled together, once, in start(): `signOptions` is derived from
     // `choice`, so anything that reassigns one must reassign the other or the
@@ -106,7 +101,7 @@ struct SignJob::Private
 };
 
 SignJob::SignJob(Client::AgentCard* card, QString inputPath, QString mimeType, QString formatOverride,
-                 CertChooser chooser, OverwriteConfirmer overwriteConfirmer, QObject* parent)
+                 CertChooser chooser, QObject* parent)
     : QObject(parent), d(std::make_unique<Private>())
 {
     d->card = card;
@@ -114,7 +109,6 @@ SignJob::SignJob(Client::AgentCard* card, QString inputPath, QString mimeType, Q
     d->mimeType = std::move(mimeType);
     d->formatOverride = std::move(formatOverride);
     d->chooser = std::move(chooser);
-    d->overwriteConfirmer = std::move(overwriteConfirmer);
 }
 
 SignJob::~SignJob() = default;
@@ -213,7 +207,7 @@ void SignJob::onCertificatesFinished()
         // carries ErrorCode::None and reports its reason on callError()
         // instead; forOutcome() renders that as localized copy, and guarantees
         // a banner a user can read even when the terminal carried no message.
-        fail(ErrorText::forOutcome(op->errorCode(), op->callError(), op->messageFallback()));
+        fail(ErrorText::forOutcome(op->errorCode(), op->callError(), op->messageKey(), op->messageFallback()));
         return;
     }
 
@@ -307,7 +301,7 @@ void SignJob::onSignFinished()
 
     if (op->status() != Client::OperationStatus::Ok) {
         // Both failure axes — same reasoning as onCertificatesFinished above.
-        fail(ErrorText::forOutcome(op->errorCode(), op->callError(), op->messageFallback()));
+        fail(ErrorText::forOutcome(op->errorCode(), op->callError(), op->messageKey(), op->messageFallback()));
         return;
     }
 
@@ -329,79 +323,41 @@ void SignJob::onSignFinished()
         return;
     }
 
-    // Derive the output path next to the input. The input is never
-    // modified in place — even enveloped output lands under a derived name.
-    // TODO: honour the agent's default output folder (the DefaultLocation
-    // property on the agent's configuration interface) once the client
-    // consumes it; until then output is written alongside the input.
-    const QFileInfo inInfo(d->inputPath);
-    const QString outName = MimeFormatMap::outputName(inInfo.fileName(), d->choice);
-    const QString outPath = inInfo.absoluteDir().filePath(outName);
-
-    // Copy the agent's artifact fd into the output file. Read from the artifact
-    // fd (the agent retains no copy) and write the destination. Rewind first:
-    // the sealed-memfd contract is seekable, but if the seek ever fails we'd be
-    // signing from mid-stream — fail loudly rather than write a truncated file.
-    const int srcFd = artifact.get();
-    if (::lseek(srcFd, 0, SEEK_SET) == static_cast<off_t>(-1)) {
-        fail(ErrorText::forCode(Client::ErrorCode::CommunicationError, QString()));
-        return;
-    }
-
-    // Write via QSaveFile: it stages bytes in a temp sibling and only swaps it in
-    // on commit() (atomic rename). A mid-write crash therefore leaves any existing
-    // good output untouched, instead of a half-written truncated file — fixing the
-    // exists()→confirm→WriteOnly|Truncate TOCTOU/destruction window.
-    QSaveFile out(outPath);
-    if (!out.open(QIODevice::WriteOnly)) {
-        fail(i18nc("@info:status sign failed to write output", "Could not write the signed file %1.", outName));
-        return;
-    }
-    char buf[64 * 1024];
-    bool writeOk = true;
-    for (;;) {
-        ssize_t n = 0;
-        do {
-            n = ::read(srcFd, buf, sizeof(buf));
-        } while (n < 0 && errno == EINTR); // EINTR is a retry, not a failure.
-        if (n < 0) {
-            writeOk = false; // a real read error
-            break;
-        }
-        if (n == 0) {
-            break; // EOF
-        }
-        // QSaveFile::write loops over its QFileDevice buffer internally; a short
-        // return is a genuine write error (out of space / closed), not EINTR.
-        if (out.write(buf, n) != n) {
-            writeOk = false;
-            break;
-        }
-    }
-    if (!writeOk) {
-        out.cancelWriting(); // discard the staged temp; the existing file is untouched.
-        fail(i18nc("@info:status sign failed to write output", "Could not write the signed file %1.", outName));
-        return;
-    }
-
-    // The overwrite confirmation lives here, immediately before commit():
-    // QSaveFile::commit() overwrites unconditionally, so the existence check + the
-    // injected OverwriteConfirmer must gate it. (The staged temp is discarded if
-    // the user declines, leaving any existing output intact.)
-    if (QFile::exists(outPath)) {
-        const bool ok = d->overwriteConfirmer && d->overwriteConfirmer(outPath);
-        if (!ok) {
-            out.cancelWriting();
-            fail(i18nc("@info:status user declined overwriting the output",
-                       "Signing was cancelled to avoid overwriting %1.", outName));
+    // The name every client of the agent gives this signature, next to the
+    // input, never an existing file. The input is never modified in place —
+    // even an enveloped signature lands under a derived name. The client
+    // library claims the name exclusively and commits the bytes over the claim
+    // in one step, so neither someone else's file nor a half-written signature
+    // ever sits under that name. The last name asked for is the one a write
+    // failure names.
+    QString lastName;
+    const auto written = Client::writeSignedFile(artifact.get(), [this, &lastName] {
+        lastName = Client::signedOutputPath(d->inputPath, d->signOptions.format, d->signOptions.packaging);
+        return lastName;
+    });
+    if (!written) {
+        switch (written.error()) {
+        case Client::SignedFileError::UnreadableArtifact:
+            fail(ErrorText::forCode(Client::ErrorCode::CommunicationError, QString()));
             return;
+        case Client::SignedFileError::NoFreeName:
+            fail(i18nc("@info:status sign failed: every name for the output is taken",
+                       "There is no free name left for the signed copy of %1.", QFileInfo(d->inputPath).fileName()));
+            return;
+        case Client::SignedFileError::EmptyArtifact:
+            // Nothing failed to write: there was nothing to write.
+            fail(i18nc("@info:status sign failed: the signature arrived with no content",
+                       "The signature for %1 came back empty, so no signed file was saved.",
+                       QFileInfo(d->inputPath).fileName()));
+            return;
+        case Client::SignedFileError::WriteFailed:
+            break;
         }
-    }
-
-    if (!out.commit()) {
-        fail(i18nc("@info:status sign failed to write output", "Could not write the signed file %1.", outName));
+        fail(i18nc("@info:status sign failed to write output", "Could not write the signed file %1.",
+                   QFileInfo(lastName).fileName()));
         return;
     }
+    const QString outPath = *written;
 
     d->outputPath = outPath;
     if (d->emitted) {

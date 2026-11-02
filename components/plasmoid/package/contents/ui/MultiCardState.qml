@@ -38,12 +38,16 @@ ColumnLayout {
                 id: readerChip
                 required property string modelData
                 Layout.fillWidth: true
-                // Friendly, distinguishable label (short model + contact/
-                // contactless). plainDisplay: the label is still hardware/agent-
-                // derived and the PC3 button renders AutoText (verified) —
-                // neutralize markup-looking names. Selection uses the EXACT raw
-                // name (modelData), never the display label.
-                text: multiRoot.smartCard.plainDisplay(multiRoot.smartCard.readerDisplayName(modelData))
+                // The agent's label (model + contact/contactless). plainDisplay:
+                // the label is still hardware/agent-derived and the PC3 button
+                // renders AutoText (verified) — neutralize markup-looking names.
+                // Selection uses the EXACT raw name (modelData), never the
+                // display label. The roster is read so a relabel, which leaves
+                // the names as they were, still re-renders the chip.
+                text: {
+                    multiRoot.smartCard.availableReaderNames;
+                    return multiRoot.smartCard.plainDisplay(multiRoot.smartCard.readerDisplayName(modelData));
+                }
                 // Breeze ships no smartcard-named icon; auth-sim is the stock
                 // chip-card device glyph (verified present).
                 icon.name: "auth-sim"

@@ -42,10 +42,10 @@ Kirigami.ApplicationWindow {
             spacing: 0
 
             QQC2.Label {
-                visible: controller.readerName.length > 0
+                visible: controller.readerLabel.length > 0
                 text: visible
                     ? i18nc("@info:status the reader whose card this window manages",
-                            "Reader: %1", controller.readerName)
+                            "Reader: %1", controller.readerLabel)
                     : ""
                 // The reader name is hardware/agent-derived; a plain Label's
                 // default AutoText would promote a tag-looking name to

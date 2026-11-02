@@ -59,9 +59,61 @@ target_link_libraries(SmartCardHandlerTest
             KF6::I18n KF6::CoreAddons KF6::KIOGui KF6::Service LibreKDELogging
 )
 target_compile_features(SmartCardHandlerTest PRIVATE cxx_std_23)
-librekde_private_session_bus(SmartCardHandlerTest)
+libreagent_private_session_bus(SmartCardHandlerTest)
 # A wedged test under dbus-run-session must fail in minutes, not consume the
 # runner's whole wall.
 libreagent_gtest_discover_tests(SmartCardHandlerTest
-    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en;${LIBREKDE_PRIVATE_BUS_ENV}"
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en;${LIBREAGENT_PRIVATE_BUS_ENV}"
+    PROPERTIES TIMEOUT 120)
+
+# "Start service" against a session bus on which the agent is installed but not
+# running (librekde_activatable_agent_bus, tests/CMakeLists.txt).
+add_executable(AgentStartTest
+    start/AgentStartTest.cpp
+    ${CMAKE_SOURCE_DIR}/components/plasmoid/src/CardStateModel.cpp
+    ${CMAKE_SOURCE_DIR}/components/plasmoid/src/SmartCardHandler.cpp
+    ${CMAKE_SOURCE_DIR}/components/plasmoid/src/CardPhotoStore.cpp
+    ${CMAKE_SOURCE_DIR}/components/plasmoid/src/CardPhotoProvider.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/PlasmoidTestMain.cpp
+    ${PlasmoidTestLogging_SRCS}
+)
+target_include_directories(AgentStartTest PRIVATE
+    ${CMAKE_SOURCE_DIR}/components/plasmoid/src
+    ${CMAKE_CURRENT_BINARY_DIR}
+    ${CMAKE_BINARY_DIR}/components/plasmoid
+)
+target_link_libraries(AgentStartTest
+    PRIVATE GTest::gtest LibreAgent::ClientQt librekde-agentclient librekde-test-support librekde-signing
+            Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::DBus Qt6::Test
+            KF6::I18n KF6::CoreAddons KF6::KIOGui KF6::Service LibreKDELogging
+)
+target_compile_features(AgentStartTest PRIVATE cxx_std_23)
+librekde_activatable_agent_bus(AgentStartTest)
+libreagent_gtest_discover_tests(AgentStartTest
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en;${LIBREAGENT_PRIVATE_BUS_ENV}"
+    PROPERTIES TIMEOUT 120)
+
+# "Start service" and "Refresh" clicked in the widget's own QML (CardDetail.qml
+# and the state components it loads), through this build's org.librescrs.smartcard
+# plugin, on the same activatable-agent bus. It compiles none of the component's
+# sources: the plugin is the component, as plasmashell loads it.
+add_executable(AgentControlClickTest
+    start/AgentControlClickTest.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/PlasmoidTestMain.cpp
+)
+target_compile_definitions(AgentControlClickTest PRIVATE
+    LIBREKDE_QML_IMPORT_DIR="${CMAKE_BINARY_DIR}/qml"
+    LIBREKDE_PLASMOID_UI_DIR="${CMAKE_SOURCE_DIR}/components/plasmoid/package/contents/ui"
+)
+target_link_libraries(AgentControlClickTest
+    PRIVATE GTest::gtest librekde-test-support Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::DBus Qt6::Test
+)
+target_compile_features(AgentControlClickTest PRIVATE cxx_std_23)
+add_dependencies(AgentControlClickTest librekde-plasmoidplugin)
+librekde_activatable_agent_bus(AgentControlClickTest)
+# QT_FORCE_STDERR_LOGGING: the QML engine aborts the process when a button is
+# destroyed under its own signal handler, and without a terminal Qt sends that
+# one line to the journal, leaving the test log with an abort and no reason.
+libreagent_gtest_discover_tests(AgentControlClickTest
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en;QT_FORCE_STDERR_LOGGING=1;${LIBREAGENT_PRIVATE_BUS_ENV}"
     PROPERTIES TIMEOUT 120)

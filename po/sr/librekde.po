@@ -16,34 +16,34 @@ msgstr ""
 "Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
 "n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
 
-#: components/credentials/src/CredentialController.cpp:465
+#: components/credentials/src/CredentialController.cpp:507
 #, kde-format
 msgctxt "unblock sheet: %1 PUK name, %2/%3 remaining/total unblocks"
 msgid "%1: %2 of %3 unblocks left"
 msgstr "%1: %2 од %3 деблокирања"
 
-#: components/credentials/src/CredentialController.cpp:471
+#: components/credentials/src/CredentialController.cpp:513
 #, kde-format
 msgctxt "unblock sheet: %1 PUK name, %2 remaining unblocks"
 msgid "%1: %2 unblocks left"
 msgstr "%1: %2 деблокирања"
 
-#: components/credentials/src/CredentialController.cpp:662
+#: components/credentials/src/CredentialController.cpp:704
 #, kde-format
 msgid "The card's credentials changed; the list was refreshed."
 msgstr "Акредитиви картице су се променили; листа је освежена."
 
-#: components/credentials/src/CredentialController.cpp:670
+#: components/credentials/src/CredentialController.cpp:712
 #, kde-format
 msgid "Please wait a moment before trying again."
 msgstr "Сачекајте тренутак пре поновног покушаја."
 
-#: components/credentials/src/CredentialController.cpp:686
+#: components/credentials/src/CredentialController.cpp:728
 #, kde-format
 msgid "The card refused the request."
 msgstr "Картица је одбила захтев."
 
-#: components/credentials/src/CredentialController.cpp:710
+#: components/credentials/src/CredentialController.cpp:752
 #, kde-format
 msgid "The action could not be started."
 msgstr "Радњу није могуће покренути."
@@ -311,51 +311,51 @@ msgstr "Сервис паметних картица није доступан."
 msgid "Could not read the card."
 msgstr "Није могуће прочитати картицу."
 
-#: components/plasmoid/src/SmartCardHandler.cpp:1021
+# --- shared/agentclient/Readers.cpp (reader labels) -----------------------
+#: shared/agentclient/Readers.cpp:28
 #, kde-format
 msgctxt "@item reader label: <model> on the contactless interface"
 msgid "%1 — contactless"
 msgstr "%1 — бесконтактни"
 
-# --- SmartCardHandler.cpp -------------------------------------------------
-#: components/plasmoid/src/SmartCardHandler.cpp:1024
+#: shared/agentclient/Readers.cpp:24
 #, kde-format
 msgctxt "@item reader label: <model> on the contact interface"
 msgid "%1 — contact"
 msgstr "%1 — контактни"
 
 # --- components/plasmoid/src/SmartCardHandler.cpp --
-#: components/plasmoid/src/SmartCardHandler.cpp:1568
+#: components/plasmoid/src/SmartCardHandler.cpp:1403
 #, kde-format
 msgctxt "@info:status reading data from the card"
 msgid "Reading card…"
 msgstr "Читам картицу…"
 
-#: components/plasmoid/src/SmartCardHandler.cpp:1570
+#: components/plasmoid/src/SmartCardHandler.cpp:1405
 #, kde-format
 msgctxt "@info:status waiting for PIN/CAN in the secure prompt"
 msgid "Waiting for input…"
 msgstr "Чекам унос…"
 
-#: components/plasmoid/src/SmartCardHandler.cpp:1572
+#: components/plasmoid/src/SmartCardHandler.cpp:1407
 #, kde-format
 msgctxt "@info:status verifying the entered secret on the card"
 msgid "Verifying…"
 msgstr "Проверавам…"
 
-#: components/plasmoid/src/SmartCardHandler.cpp:1574
+#: components/plasmoid/src/SmartCardHandler.cpp:1409
 #, kde-format
 msgctxt "@info:status producing the signature on the card"
 msgid "Signing…"
 msgstr "Потписујем…"
 
-#: components/plasmoid/src/SmartCardHandler.cpp:1576
+#: components/plasmoid/src/SmartCardHandler.cpp:1411
 #, kde-format
 msgctxt "@info:status attaching a trusted timestamp"
 msgid "Adding timestamp…"
 msgstr "Додајем временски жиг…"
 
-#: components/plasmoid/src/SmartCardHandler.cpp:1582
+#: components/plasmoid/src/SmartCardHandler.cpp:1417
 #, kde-format
 msgctxt "@info:status generic in-progress card operation"
 msgid "Working…"
@@ -498,13 +498,13 @@ msgstr "Ова радња није доступна на овој картици
 
 # --- shared/agentclient/ErrorText.cpp (ki18nd, no context) ------------------
 #: shared/agentclient/CredentialText.cpp:84
-#: shared/agentclient/ErrorText.cpp:122
+#: shared/agentclient/ErrorText.cpp:116
 #, kde-format
 msgid "The card was removed before the operation finished."
 msgstr "Картица је извађена пре него што је операција завршена."
 
 #: shared/agentclient/CredentialText.cpp:86
-#: shared/agentclient/ErrorText.cpp:166
+#: shared/agentclient/ErrorText.cpp:153
 #, kde-format
 msgid "The entry window closed before a code was entered. Try again."
 msgstr ""
@@ -536,13 +536,25 @@ msgstr "Операција није завршена."
 #     "before it could be carried out" faintly implied the request might have
 #     gone through later, which is untrue when the two sides simply speak
 #     different versions.
-#: shared/agentclient/ErrorText.cpp:23
+#: shared/agentclient/ErrorText.cpp:25
 #, kde-format
 msgctxt "@info:status the operation failed without reporting any reason"
 msgid "The operation did not finish, and no reason was reported."
 msgstr "Операција није завршена, а разлог није пријављен."
 
-#: shared/agentclient/ErrorText.cpp:54
+#: shared/agentclient/ErrorText.cpp:189
+#, kde-format
+msgctxt "@info:status the operation was cancelled"
+msgid "The operation was cancelled."
+msgstr "Операција је отказана."
+
+#: shared/agentclient/ErrorText.cpp:194
+#, kde-format
+msgctxt "@info:status the installed PIN entry helper is older than the smart-card service"
+msgid "The secure entry prompt is out of date. Update the smart-card service."
+msgstr "Безбедни упит за унос је застарео. Ажурирајте сервис за паметне картице."
+
+#: shared/agentclient/ErrorText.cpp:56
 #, kde-format
 msgctxt "@info:status the smart-card service could not be reached at all"
 msgid ""
@@ -552,13 +564,13 @@ msgstr ""
 "Сервис за паметне картице није доступан. Проверите да ли је инсталиран и "
 "покренут."
 
-#: shared/agentclient/ErrorText.cpp:58
+#: shared/agentclient/ErrorText.cpp:60
 #, kde-format
 msgctxt "@info:status the smart-card service did not answer in time"
 msgid "The smart-card service did not answer in time. Try again."
 msgstr "Сервис за паметне картице није одговорио на време. Покушајте поново."
 
-#: shared/agentclient/ErrorText.cpp:67
+#: shared/agentclient/ErrorText.cpp:69
 #, kde-format
 msgctxt ""
 "@info:status the system denied this application access to the smart-card "
@@ -566,7 +578,7 @@ msgctxt ""
 msgid "Permission to use the smart-card service was denied."
 msgstr "Приступ сервису за паметне картице је одбијен."
 
-#: shared/agentclient/ErrorText.cpp:83
+#: shared/agentclient/ErrorText.cpp:85
 #, kde-format
 msgctxt ""
 "@info:status the request was rejected before any work on it started; do not "
@@ -575,7 +587,7 @@ msgctxt ""
 msgid "This request was refused before any work on it started."
 msgstr "Овај захтев је одбијен пре него што је ишта урађено."
 
-#: shared/agentclient/ErrorText.cpp:87
+#: shared/agentclient/ErrorText.cpp:89
 #, kde-format
 msgctxt ""
 "@info:status the connection to the smart-card service broke during the "
@@ -583,7 +595,7 @@ msgctxt ""
 msgid "The connection to the smart-card service was lost. Try again."
 msgstr "Веза са сервисом за паметне картице је прекинута. Покушајте поново."
 
-#: shared/agentclient/ErrorText.cpp:91
+#: shared/agentclient/ErrorText.cpp:93
 #, kde-format
 msgctxt "@info:status the smart-card service's reply could not be understood"
 msgid ""
@@ -593,82 +605,82 @@ msgstr ""
 "Сервис за паметне картице је одговорио на начин који овај програм не разуме. "
 "Могуће је да су различитих верзија."
 
-#: shared/agentclient/ErrorText.cpp:124
+#: shared/agentclient/ErrorText.cpp:118
 #, kde-format
 msgid "The PIN or access code entered was incorrect."
 msgstr "Унети ПИН или приступни код није исправан."
 
-#: shared/agentclient/ErrorText.cpp:126
+#: shared/agentclient/ErrorText.cpp:120
 #, kde-format
 msgid "The card credential is blocked. Unblock it before retrying."
 msgstr "Акредитив картице је блокиран. Деблокирајте га пре поновног покушаја."
 
-#: shared/agentclient/ErrorText.cpp:128
+#: shared/agentclient/ErrorText.cpp:122
 #, kde-format
 msgid "Communication with the card reader failed."
 msgstr "Комуникација са читачем картица није успела."
 
-#: shared/agentclient/ErrorText.cpp:130
+#: shared/agentclient/ErrorText.cpp:124
 #, kde-format
 msgid "The data read from the card could not be interpreted."
 msgstr "Подаци прочитани са картице не могу да се протумаче."
 
-#: shared/agentclient/ErrorText.cpp:132
+#: shared/agentclient/ErrorText.cpp:126
 #, kde-format
 msgid "This card is not supported."
 msgstr "Ова картица није подржана."
 
-#: shared/agentclient/ErrorText.cpp:134
+#: shared/agentclient/ErrorText.cpp:128
 #, kde-format
 msgid "Authentication with the card failed."
 msgstr "Аутентификација са картицом није успела."
 
-#: shared/agentclient/ErrorText.cpp:136
+#: shared/agentclient/ErrorText.cpp:130
 #, kde-format
 msgid "The secure entry prompt could not be shown."
 msgstr "Није могуће приказати безбедни упит за унос."
 
-#: shared/agentclient/ErrorText.cpp:138
+#: shared/agentclient/ErrorText.cpp:132
 #, kde-format
 msgid "This card does not support the requested operation."
 msgstr "Ова картица не подржава тражену операцију."
 
-#: shared/agentclient/ErrorText.cpp:140
+#: shared/agentclient/ErrorText.cpp:134
 #, kde-format
 msgid "The operation timed out."
 msgstr "Време за операцију је истекло."
 
-#: shared/agentclient/ErrorText.cpp:142
+#: shared/agentclient/ErrorText.cpp:136
 #, kde-format
 msgid "The selected certificate could not be found on the card."
 msgstr "Изабрани сертификат није пронађен на картици."
 
-#: shared/agentclient/ErrorText.cpp:144
+#: shared/agentclient/ErrorText.cpp:138
 #, kde-format
 msgid "More than one key matched the selection."
 msgstr "Више од једног кључа одговара избору."
 
-#: shared/agentclient/ErrorText.cpp:146
+#: shared/agentclient/ErrorText.cpp:140
 #, kde-format
 msgid "The signing certificate has expired."
 msgstr "Сертификат за потписивање је истекао."
 
-#: shared/agentclient/ErrorText.cpp:148
+#: shared/agentclient/ErrorText.cpp:142
 #, kde-format
 msgid "The certificate chain could not be completed."
 msgstr "Ланац сертификата није могуће употпунити."
 
-#: shared/agentclient/ErrorText.cpp:150
+#: shared/agentclient/ErrorText.cpp:144
 #, kde-format
 msgid "The timestamp authority is unreachable."
 msgstr "Ауторитет за временски жиг није доступан."
 
-#: shared/agentclient/ErrorText.cpp:160
+#: shared/agentclient/ErrorText.cpp:148
 #, kde-format
 msgid "The signing engine reported an error."
 msgstr "Механизам за потписивање је пријавио грешку."
 
-#: shared/agentclient/ErrorText.cpp:163
+#: shared/agentclient/ErrorText.cpp:150
 #, kde-format
 msgid ""
 "The document you tried to sign is invalid or could not be read. Check the "
@@ -677,7 +689,7 @@ msgstr ""
 "Документ који сте покушали да потпишете је неисправан или се не може "
 "прочитати. Проверите датотеку."
 
-#: shared/agentclient/ErrorText.cpp:169
+#: shared/agentclient/ErrorText.cpp:156
 #, kde-format
 msgid ""
 "The signing service is not set up correctly — its security module could not "
@@ -686,7 +698,7 @@ msgstr ""
 "Услуга за потписивање није исправно подешена — њен безбедносни модул није "
 "могуће учитати. Проверите инсталацију."
 
-#: shared/agentclient/ErrorText.cpp:173
+#: shared/agentclient/ErrorText.cpp:160
 #, kde-format
 msgid "Too many signing requests. Try again shortly."
 msgstr "Превише захтева за потписивање. Покушајте поново ускоро."
@@ -1299,50 +1311,38 @@ msgid "Unknown"
 msgstr "Непознато"
 
 # --- shared/signing/SignSeams.cpp -------------------------------------------
-#: shared/signing/SignSeams.cpp:104
+#: shared/signing/SignSeams.cpp:103
 #, kde-format
 msgctxt "@title:window"
 msgid "Choose a Signing Certificate"
 msgstr "Избор сертификата за потписивање"
 
-#: shared/signing/SignSeams.cpp:105
+#: shared/signing/SignSeams.cpp:104
 #, kde-format
 msgctxt "@label:listbox"
 msgid "This card has several signing certificates. Choose one:"
 msgstr "Ова картица има више сертификата за потписивање. Изаберите један:"
 
-#: shared/signing/SignSeams.cpp:117
-#, kde-format
-msgctxt "@title:window"
-msgid "Overwrite Signed File?"
-msgstr "Преписати потписани фајл?"
-
-#: shared/signing/SignSeams.cpp:118
-#, kde-format
-msgctxt "@info"
-msgid "The file %1 already exists. Overwrite it with the new signature?"
-msgstr "Фајл %1 већ постоји. Преписати га новим потписом?"
-
-#: shared/signing/SignSeams.cpp:142
+#: shared/signing/SignSeams.cpp:130
 #, kde-format
 msgctxt "@title:window"
 msgid "Choose a Card to Sign With"
 msgstr "Избор картице за потписивање"
 
-#: shared/signing/SignSeams.cpp:143
+#: shared/signing/SignSeams.cpp:131
 #, kde-format
 msgctxt "@label:listbox"
 msgid "More than one card can sign. Choose one:"
 msgstr "Више картица може да потпише. Изаберите једну:"
 
 # --- shared/signing/SignJob.cpp --------------------------------------------
-#: shared/signing/SignJob.cpp:144
+#: shared/signing/SignJob.cpp:138
 #, kde-format
 msgctxt "@info:status sign failed"
 msgid "No smart card is available for signing."
 msgstr "Ниједна паметна картица није доступна за потписивање."
 
-#: shared/signing/SignJob.cpp:152
+#: shared/signing/SignJob.cpp:146
 #, kde-format
 msgctxt "@info:status card has no PKI capability"
 msgid "This card does not support signing."
@@ -1351,43 +1351,48 @@ msgstr "Ова картица не подржава потписивање."
 #. i18n. (The generic
 #. ErrorText::CapabilityMissing is "the requested operation"; here we know
 #. the operation is signing, so we phrase it precisely.)
-#: shared/signing/SignJob.cpp:234
+#: shared/signing/SignJob.cpp:228
 #, kde-format
 msgctxt "@info:status no signing certificate on the card"
 msgid "This card does not support signing."
 msgstr "Ова картица не подржава потписивање."
 
-#: shared/signing/SignJob.cpp:244
+#: shared/signing/SignJob.cpp:238
 #, kde-format
 msgctxt "@info:status user cancelled the certificate chooser"
 msgid "Signing was cancelled."
 msgstr "Потписивање је отказано."
 
-#: shared/signing/SignJob.cpp:272
+#: shared/signing/SignJob.cpp:266
 #, kde-format
 msgctxt "@info:status sign failed, card removed during selection"
 msgid "The smart card was removed before signing could start."
 msgstr ""
 "Паметна картица је извађена пре него што је потписивање могло да почне."
 
-#: shared/signing/SignJob.cpp:280
+#: shared/signing/SignJob.cpp:274
 #, kde-format
 msgctxt "@info:status sign failed to open input"
 msgid "Could not open the file to sign."
 msgstr "Није могуће отворити фајл за потписивање."
 
-#: shared/signing/SignJob.cpp:357 shared/signing/SignJob.cpp:383
-#: shared/signing/SignJob.cpp:402
+#: shared/signing/SignJob.cpp:356
 #, kde-format
 msgctxt "@info:status sign failed to write output"
 msgid "Could not write the signed file %1."
 msgstr "Није могуће уписати потписани фајл %1."
 
-#: shared/signing/SignJob.cpp:396
+#: shared/signing/SignJob.cpp:345
 #, kde-format
-msgctxt "@info:status user declined overwriting the output"
-msgid "Signing was cancelled to avoid overwriting %1."
-msgstr "Потписивање је отказано да се не би преписао фајл %1."
+msgctxt "@info:status sign failed: every name for the output is taken"
+msgid "There is no free name left for the signed copy of %1."
+msgstr "Нема слободног имена за потписану копију фајла %1."
+
+#: shared/signing/SignJob.cpp:350
+#, kde-format
+msgctxt "@info:status sign failed: the signature arrived with no content"
+msgid "The signature for %1 came back empty, so no signed file was saved."
+msgstr "Потпис за %1 је стигао празан, па потписани фајл није сачуван."
 
 #: components/credentials/qml/CredentialDelegate.qml:151
 msgctxt "@action:button change a PIN"
@@ -1437,7 +1442,7 @@ msgid "Operation in progress"
 msgstr "Операција је у току"
 
 #: components/credentials/qml/Dashboard.qml:107
-#: components/credentials/qml/StateMessage.qml:66
+#: components/credentials/qml/StateMessage.qml:87
 #: components/credentials/qml/UnblockConfirmSheet.qml:43
 msgctxt "@action:button"
 msgid "Cancel"
@@ -1459,32 +1464,53 @@ msgctxt "@info:status the reader whose card this window manages"
 msgid "Reader: %1"
 msgstr "Читач: %1"
 
+#: components/credentials/qml/StateMessage.qml:34
+msgid "The smart-card service isn't installed."
+msgstr "Сервис за паметне картице није инсталиран."
+
+#: components/kio/CardWorkerLogic.cpp:238
+#, kde-format
+msgctxt "@info %1 is the address of the installation guide"
+msgid "The smart-card service isn't installed. To install it, see %1"
+msgstr "Сервис за паметне картице није инсталиран. Упутство за инсталацију: %1"
+
+#: components/credentials/qml/StateMessage.qml:74
+msgctxt "@action:button start smart card service"
+msgid "Start service"
+msgstr "Покрени сервис"
+
+#: components/credentials/qml/StateMessage.qml:81
+msgctxt "@action:button open online installation help"
+msgid "Installation help"
+msgstr "Помоћ за инсталацију"
+
+#: components/kio/CardWorkerLogic.cpp:234
 #: components/credentials/qml/StateMessage.qml:33
 msgid "The smart-card service isn't running."
 msgstr "Сервис за паметне картице није покренут."
 
-#: components/credentials/qml/StateMessage.qml:41
+#: components/credentials/qml/StateMessage.qml:42
 msgctxt "@info %1 is the reader name"
 msgid "Insert the card in reader %1."
 msgstr "Убаците картицу у читач %1."
 
-#: components/credentials/qml/StateMessage.qml:43
+#: components/credentials/qml/StateMessage.qml:44
 msgid "Insert the card in the reader."
 msgstr "Убаците картицу у читач."
 
-#: components/credentials/qml/StateMessage.qml:45
+#: components/credentials/qml/StateMessage.qml:46
 msgid "This card doesn't support credential management here."
 msgstr "Ова картица не подржава управљање акредитивима овде."
 
-#: components/credentials/qml/StateMessage.qml:47
+#: components/credentials/qml/StateMessage.qml:48
 msgid "Reading credentials…"
 msgstr "Читам акредитиве…"
 
-#: components/credentials/qml/StateMessage.qml:49
+#: components/credentials/qml/StateMessage.qml:50
 msgid "No manageable credentials on this card."
 msgstr "Нема акредитива за управљање на овој картици."
 
-#: components/credentials/qml/StateMessage.qml:51
+#: components/credentials/qml/StateMessage.qml:52
 msgid ""
 "The card's credentials couldn't be read. Try removing and reinserting the "
 "card."

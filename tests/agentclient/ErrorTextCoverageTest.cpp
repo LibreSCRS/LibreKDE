@@ -29,13 +29,21 @@
 // pin. What is pinned is that every enumerator has its own localized copy, and
 // that the composed entry point never returns an empty string anywhere in the two
 // enums' cross-product.
+//
+// The third axis is the agent's message keys. The client library names the keys
+// a client phrases itself (`kLocalizedMessageKeys`) and obliges every client to
+// carry a sentence for each; that list, not one kept here, is what is walked.
 
 #include "ErrorText.h"
 
+#include <LibreSCRS/AgentClient/FailureCopy.h>
+
 #include <gtest/gtest.h>
 
+#include <QLatin1StringView>
 #include <QSet>
 #include <QString>
+#include <cstddef>
 #include <cstdint>
 #include <iterator>
 #include <optional>
@@ -56,7 +64,6 @@ using LibreSCRS::AgentClient::ErrorCode;
 enum class Kind {
     Localized,     // ErrorText phrases this code itself (ki18n)
     AgentFallback, // ErrorText passes the agent-authored msgFallback through
-    PreferFallback // ErrorText returns the agent msgFallback when present, else its own generic
 };
 
 // NO default case: with -Werror=switch an enumerator appended to the client
@@ -86,11 +93,8 @@ constexpr std::optional<Kind> expectedKindFor(ErrorCode code) noexcept
     case ErrorCode::EngineUnavailable:
     case ErrorCode::InvalidDocument:
     case ErrorCode::EntryExpired:
-        return Kind::Localized;
     case ErrorCode::SigningEngineError:
-        // The catch-all engine code defers to the agent's message when present
-        // (a specific cause beats a wrong generic), else its own generic.
-        return Kind::PreferFallback;
+        return Kind::Localized;
     }
     return std::nullopt; // past the enumerated tail (used to probe beyond it)
 }
@@ -126,8 +130,9 @@ static_assert(kClassifiedCount == static_cast<std::uint32_t>(ErrorCode::EntryExp
 // --- the second axis: CallError ---------------------------------------------
 
 enum class CallKind {
-    OwnCopy,    // forOutcome renders this classification's own localized copy
-    NotAFailure // CallError::None — resolution continues past the call-error arm
+    OwnCopy,         // forOutcome renders this classification's own localized copy
+    AnsweredRefusal, // the agent refused the request: its message wins, own copy without one
+    NotAFailure      // CallError::None — resolution continues past the call-error arm
 };
 
 // NO default case, same as expectedKindFor above: with -Werror=switch an
@@ -141,11 +146,12 @@ constexpr std::optional<CallKind> expectedCallKindFor(CallError call) noexcept
         return CallKind::NotAFailure;
     case CallError::AgentUnavailable:
     case CallError::Timeout:
+    case CallError::TransportFailure:
+        return CallKind::OwnCopy;
     case CallError::AccessDenied:
     case CallError::InvalidArguments:
-    case CallError::TransportFailure:
     case CallError::ProtocolError:
-        return CallKind::OwnCopy;
+        return CallKind::AnsweredRefusal;
     }
     return std::nullopt; // not a CallError value (used to probe past the end)
 }
@@ -164,6 +170,26 @@ constexpr std::uint8_t kCallErrorCount = callErrorCount();
 
 static_assert(kCallErrorCount == static_cast<std::uint8_t>(CallError::ProtocolError) + 1u,
               "classification switch out of step with CallError's tail; move this anchor to the new last enumerator");
+
+// --- the third axis: message keys ------------------------------------------
+
+// The keys that name exactly the failure one code names, each with that code.
+// Such a key shows the code's sentence, and only that code's: a key paired with
+// the wrong code would read to a user as a different failure. Every key not
+// listed here must have a sentence of its own.
+std::optional<ErrorCode> codeSharedBy(const QString& key)
+{
+    if (key == QLatin1StringView("op.card_removed")) {
+        return ErrorCode::CardRemoved;
+    }
+    if (key == QLatin1StringView("op.entry_expired")) {
+        return ErrorCode::EntryExpired;
+    }
+    if (key == QLatin1StringView("op.watchdog_timeout")) {
+        return ErrorCode::WatchdogTimeout;
+    }
+    return std::nullopt;
+}
 
 // Two values past the taxonomy's tail, standing in for a code an agent newer
 // than this build can already send (the client library passes such a value
@@ -211,14 +237,6 @@ TEST(ErrorTextCoverage, EveryEnumeratedCodeHasADeliberateOutcome)
                                       << " is classified AgentFallback but forCode returned its own copy — "
                                          "reclassify it Localized here";
             break;
-        case Kind::PreferFallback:
-            // A present agent message wins...
-            EXPECT_EQ(text, sentinel) << "code " << value
-                                      << " is classified PreferFallback but forCode ignored the agent message";
-            // ...but an EMPTY fallback must still yield a non-empty own generic.
-            EXPECT_FALSE(LibreKDE::ErrorText::forCode(code, QString()).isEmpty())
-                << "code " << value << " is PreferFallback but has no generic for the empty-fallback case";
-            break;
         }
     }
 }
@@ -233,12 +251,13 @@ TEST(ErrorTextCoverage, FirstValueBeyondTheTailFallsBack)
     EXPECT_EQ(LibreKDE::ErrorText::forCode(static_cast<ErrorCode>(kClassifiedCount), sentinel), sentinel);
 }
 
-// Every transport-failure classification must carry its OWN copy: non-empty,
-// distinct from every sibling and from the generic, and preferred over the raw
-// fallback string that rides along on these routes (bus text, or one of the
-// client's own English diagnostics). Sharing copy between two classifications
-// would be indistinguishable to a user, so it is a failure here, not a
-// stylistic remark.
+// Every call-failure classification must carry its OWN copy: non-empty and
+// distinct from every sibling and from the generic. A call that never reached
+// the agent prefers that copy over the string riding along (bus text, or one of
+// the client's own English diagnostics); a refusal the agent answered keeps the
+// agent's reason, which is the only record of why. Sharing copy between two
+// classifications would be indistinguishable to a user, so it is a failure
+// here, not a stylistic remark.
 TEST(ErrorTextCoverage, EveryCallErrorHasItsOwnLocalizedCopy)
 {
     const QString sentinel = QStringLiteral("__raw_transport_string_sentinel__");
@@ -250,30 +269,36 @@ TEST(ErrorTextCoverage, EveryCallErrorHasItsOwnLocalizedCopy)
         ASSERT_TRUE(kind.has_value()) << "call error " << static_cast<int>(value) << " lost its classification";
 
         switch (*kind) {
-        case CallKind::OwnCopy: {
-            const QString text = LibreKDE::ErrorText::forOutcome(ErrorCode::None, call, sentinel);
+        case CallKind::OwnCopy:
+        case CallKind::AnsweredRefusal: {
+            const QString text = LibreKDE::ErrorText::forOutcome(ErrorCode::None, call, QString(), QString());
             EXPECT_FALSE(text.isEmpty()) << "call error " << static_cast<int>(value) << " rendered nothing";
-            EXPECT_NE(text, sentinel) << "call error " << static_cast<int>(value)
-                                      << " surfaced the raw transport string instead of localized copy — phrase it in "
-                                         "the ErrorText.cpp call-error switch";
             EXPECT_FALSE(seen.contains(text))
                 << "call error " << static_cast<int>(value)
                 << " shares its copy with another classification; a user cannot tell the two apart";
             seen.insert(text);
-            // The copy is the classification's own, not the fallback dressed up:
-            // an empty fallback must render the identical string.
-            EXPECT_EQ(LibreKDE::ErrorText::forOutcome(ErrorCode::None, call, QString()), text);
+            const QString withMessage = LibreKDE::ErrorText::forOutcome(ErrorCode::None, call, QString(), sentinel);
+            if (*kind == CallKind::OwnCopy) {
+                // The request never reached the agent: the string riding along
+                // is bus or diagnostic text, never shown in place of the copy.
+                EXPECT_EQ(withMessage, text) << "call error " << static_cast<int>(value)
+                                             << " surfaced the raw transport string instead of localized copy";
+            } else {
+                // The agent answered and said why: its words are the record.
+                EXPECT_EQ(withMessage, sentinel)
+                    << "call error " << static_cast<int>(value) << " dropped the agent's own reason for refusing";
+            }
             break;
         }
         case CallKind::NotAFailure:
             // None must not consume the fallback — resolution continues past it.
-            EXPECT_EQ(LibreKDE::ErrorText::forOutcome(ErrorCode::None, call, sentinel), sentinel)
+            EXPECT_EQ(LibreKDE::ErrorText::forOutcome(ErrorCode::None, call, QString(), sentinel), sentinel)
                 << "CallError::None swallowed the agent-authored message";
             break;
         }
     }
 
-    const QString generic = LibreKDE::ErrorText::forOutcome(ErrorCode::None, CallError::None, QString());
+    const QString generic = LibreKDE::ErrorText::forOutcome(ErrorCode::None, CallError::None, QString(), QString());
     EXPECT_FALSE(generic.isEmpty()) << "the generic floor rendered nothing";
     EXPECT_FALSE(seen.contains(generic)) << "the generic reuses a call error's copy, so an unclassified failure is "
                                             "indistinguishable from that classification";
@@ -298,7 +323,7 @@ TEST(ErrorTextCoverage, ForOutcomeIsNeverBlankAnywhereInTheCrossProduct)
         for (std::uint8_t callValue = 0; callValue < kCallErrorCount + kProbesBeyondCallTail; ++callValue) {
             const auto call = static_cast<CallError>(callValue);
             for (const QString& fallback : kBlankish) {
-                EXPECT_FALSE(LibreKDE::ErrorText::forOutcome(code, call, fallback).trimmed().isEmpty())
+                EXPECT_FALSE(LibreKDE::ErrorText::forOutcome(code, call, QString(), fallback).trimmed().isEmpty())
                     << "blank banner at code " << codeValue << ", call error " << static_cast<int>(callValue)
                     << ", fallback \"" << fallback.toStdString() << '"';
                 ++points;
@@ -311,4 +336,54 @@ TEST(ErrorTextCoverage, ForOutcomeIsNeverBlankAnywhereInTheCrossProduct)
     EXPECT_EQ(points,
               (kClassifiedCount + kProbesBeyondTail) * (kCallErrorCount + kProbesBeyondCallTail) * kFallbackShapes);
     EXPECT_GT(points, 0u);
+}
+
+// A key the client library adds to `kLocalizedMessageKeys` is reported as that
+// key alone: the agent's English line does not ride along. A key this client has
+// no sentence for therefore reads as the generic failure with nothing below it,
+// which is the whole report lost, so it fails here instead.
+//
+// Some keys name exactly the failure a code names and share that code's
+// sentence (codeSharedBy). Every other key is a sentence of its own, neither a
+// code's nor another key's: two alike would read to a user as one failure.
+TEST(ErrorTextCoverage, EveryLocalizedMessageKeyHasItsOwnSentence)
+{
+    const auto& keys = LibreSCRS::AgentClient::kLocalizedMessageKeys;
+    const QString generic = LibreKDE::ErrorText::forOutcome(ErrorCode::None, CallError::None, QString(), QString());
+
+    QSet<QString> codeSentences;
+    for (std::uint32_t value = 0; value < kClassifiedCount; ++value) {
+        const QString text = LibreKDE::ErrorText::forCode(static_cast<ErrorCode>(value), QString());
+        if (!text.isEmpty()) {
+            codeSentences.insert(text);
+        }
+    }
+
+    QSet<QString> ownSentences;
+    std::size_t walked = 0;
+    for (const QLatin1StringView key : keys) {
+        const QString name(key);
+        const QString text = LibreKDE::ErrorText::forOutcome(ErrorCode::None, CallError::None, name, QString());
+        EXPECT_FALSE(text.trimmed().isEmpty()) << "message key " << name.toStdString() << " rendered nothing";
+        EXPECT_NE(text, generic) << "message key " << name.toStdString()
+                                 << " has no sentence in this client and reads as the generic failure";
+        if (const auto code = codeSharedBy(name)) {
+            EXPECT_EQ(text, LibreKDE::ErrorText::forCode(*code, QString()))
+                << "message key " << name.toStdString() << " does not read as the code it names, code "
+                << static_cast<std::uint32_t>(*code);
+        } else {
+            EXPECT_FALSE(codeSentences.contains(text))
+                << "message key " << name.toStdString()
+                << " reads as some code's sentence; pair it with that code in codeSharedBy or phrase it on its own";
+            EXPECT_FALSE(ownSentences.contains(text))
+                << "message key " << name.toStdString()
+                << " shares its sentence with another key; a user cannot tell the two apart";
+            ownSentences.insert(text);
+        }
+        ++walked;
+    }
+
+    // Guards the walk itself, as in the cross-product above.
+    EXPECT_EQ(walked, keys.size());
+    EXPECT_GT(walked, 0u);
 }

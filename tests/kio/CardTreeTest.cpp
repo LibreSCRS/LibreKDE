@@ -19,7 +19,7 @@ using namespace LibreKDETest;
 namespace {
 CardPresence presence(const QString& reader, const QString& path, std::uint32_t caps, const QString& preAuth)
 {
-    return CardPresence{reader, path, caps, preAuth};
+    return CardPresence{reader, path, caps, preAuth, QString()};
 }
 } // namespace
 

@@ -156,7 +156,35 @@ TEST(CredentialController, NotManageableWithoutPinMgmtBit)
 
     ASSERT_TRUE(waitFor([&]() { return ctl.state() == int(Credentials::CredentialController::State::NotManageable); }));
     EXPECT_EQ(ctl.state(), int(Credentials::CredentialController::State::NotManageable));
-    EXPECT_EQ(ctl.readerName(), QStringLiteral("Fake"));
+    EXPECT_EQ(ctl.readerLabel(), QStringLiteral("Fake"));
+}
+
+// The window names the reader by the label the plasmoid and the agent's own
+// prompts use, never by the raw PC/SC name, and follows the agent's relabel.
+TEST(CredentialController, TheReaderIsShownUnderTheAgentsLabelAndFollowsARelabel)
+{
+    const QString raw = QStringLiteral(
+        "HID Global OMNIKEY 5422 Smartcard Reader [OMNIKEY 5422 Smartcard Reader] (IM0O2C00NF10456904) 00 00");
+    FakeAgent::Config cfg;
+    cfg.capabilities = Client::Cap::IdentityData;
+    cfg.readerName = raw;
+    cfg.readerModel = QStringLiteral("OMNIKEY 5422");
+    cfg.readerInterface = QStringLiteral("contact");
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+
+    auto client = std::make_shared<Client::AgentClient>();
+    ASSERT_TRUE(client->isAvailable());
+
+    Credentials::CredentialController ctl(client);
+    ctl.bindReader(h.readerPath());
+    ASSERT_TRUE(waitFor([&]() { return !ctl.readerLabel().isEmpty(); }));
+    EXPECT_EQ(ctl.readerLabel(), QStringLiteral("OMNIKEY 5422 — contact"));
+
+    QSignalSpy relabelled(&ctl, &Credentials::CredentialController::readerLabelChanged);
+    h.emitReaderRelabelled(QStringLiteral("OMNIKEY 5422 (4569)"), QStringLiteral("contactless"));
+    ASSERT_TRUE(waitFor([&]() { return ctl.readerLabel() == QStringLiteral("OMNIKEY 5422 (4569) — contactless"); }))
+        << "label is still " << ctl.readerLabel().toStdString();
+    EXPECT_GE(relabelled.count(), 1);
 }
 
 // One scripted ListCredentials record — a plain operational User PIN.
@@ -310,7 +338,22 @@ TEST(CredentialController, AgentUnavailableWhenServiceVanishes)
     ASSERT_TRUE(
         waitFor([&]() { return ctl.state() == int(Credentials::CredentialController::State::AgentUnavailable); }));
     EXPECT_EQ(ctl.state(), int(Credentials::CredentialController::State::AgentUnavailable));
-    EXPECT_TRUE(ctl.readerName().isEmpty());
+    EXPECT_TRUE(ctl.readerLabel().isEmpty());
+}
+
+// With no agent on the bus and nothing able to start one, the window says the
+// service is not installed (and links the installation guide) rather than that
+// it is not running — the client library's answer, not a guess.
+TEST(CredentialController, NoAgentOnTheBusReadsAsNotInstalled)
+{
+    auto client = std::make_shared<Client::AgentClient>();
+    ASSERT_FALSE(client->isAvailable());
+
+    Credentials::CredentialController ctl(client);
+    ASSERT_TRUE(
+        waitFor([&]() { return ctl.state() == int(Credentials::CredentialController::State::AgentUnavailable); }));
+    EXPECT_FALSE(ctl.agentInstalled());
+    EXPECT_EQ(ctl.installHelpUrl(), Client::AgentClient::installHelpUrl());
 }
 
 // An unbound controller with a live agent and NO card anywhere rests in NoCard,
@@ -347,7 +390,7 @@ TEST(CredentialController, UnboundFallsBackToFirstReaderWithCard)
     Credentials::CredentialController ctl(client); // never bindReader()
     ASSERT_TRUE(waitFor([&]() { return ctl.state() == int(State::Ready); }))
         << "with no --reader bound, the window must fall back to the first reader with a card";
-    EXPECT_EQ(ctl.readerName(), QStringLiteral("Fake"));
+    EXPECT_EQ(ctl.readerLabel(), QStringLiteral("Fake"));
 }
 
 // A STALE --reader (a path that doesn't resolve) falls back to
@@ -368,7 +411,7 @@ TEST(CredentialController, StaleReaderPathFallsBackToFirstReaderWithCard)
     ctl.bindReader(QStringLiteral("/org/librescrs/Agent/reader/99")); // nonexistent
     ASSERT_TRUE(waitFor([&]() { return ctl.state() == int(State::Ready); }))
         << "a stale --reader path must fall back to the first reader with a card";
-    EXPECT_EQ(ctl.readerName(), QStringLiteral("Fake"));
+    EXPECT_EQ(ctl.readerLabel(), QStringLiteral("Fake"));
 }
 
 // A transient read failure (the list op finishes Error) lands on ReadFailed — NOT
@@ -1058,7 +1101,7 @@ TEST(CredentialController, CtorDoesNotProbeBeforeExplicitBindTarget)
     // …then the explicit target is bound.
     ctl.bindReader(reader2);
     ASSERT_TRUE(waitFor([&]() { return ctl.state() == int(State::Ready); }));
-    EXPECT_EQ(ctl.readerName(), QStringLiteral("Fake2")) << "the explicit target wins, not the fallback";
+    EXPECT_EQ(ctl.readerLabel(), QStringLiteral("Fake2")) << "the explicit target wins, not the fallback";
     EXPECT_EQ(h.operationCount(), 1) << "exactly ONE ListCredentials — the target card's; zero on the non-target card "
                                         "(the deferred first classify must not double-list either)";
 }
@@ -1097,7 +1140,7 @@ TEST(CredentialController, RetargetMidListCancelsAbandonedAgentSideOp)
     ASSERT_TRUE(waitFor([&]() { return h.cancelledOperationCount() >= 1; }))
         << "the abandoned in-flight list must be cancelled agent-side (prompt dismissal)";
     ASSERT_TRUE(waitFor([&]() { return ctl.state() == int(State::Ready); }));
-    EXPECT_EQ(ctl.readerName(), QStringLiteral("Fake2"));
+    EXPECT_EQ(ctl.readerLabel(), QStringLiteral("Fake2"));
 }
 
 // Re-targeting the window to an EMPTY reader while a mutation is in flight must
@@ -1268,7 +1311,7 @@ TEST(CredentialController, RegistryEventDuringMutationDoesNotRetargetBinding)
 
     Credentials::CredentialController ctl(client); // never bindReader() — fallback binding
     ASSERT_TRUE(waitFor([&]() { return ctl.state() == int(State::Ready); }));
-    ASSERT_EQ(ctl.readerName(), QStringLiteral("Fake2"));
+    ASSERT_EQ(ctl.readerLabel(), QStringLiteral("Fake2"));
 
     // Launch a verb, held in flight long enough for the registry event to race it.
     h.mutateConfig([](FakeAgent::Config& c) { c.operationDelayMs = 400; });
@@ -1282,11 +1325,11 @@ TEST(CredentialController, RegistryEventDuringMutationDoesNotRetargetBinding)
     EXPECT_FALSE(waitFor([&]() { return h.cancelledOperationCount() > 0; }, 300))
         << "a registry event mid-mutation must not cancel the user's in-flight verb";
     EXPECT_EQ(ctl.state(), int(State::Working)) << "the Working scrim survives the registry event";
-    EXPECT_EQ(ctl.readerName(), QStringLiteral("Fake2")) << "the binding stays pinned to the mutating card";
+    EXPECT_EQ(ctl.readerLabel(), QStringLiteral("Fake2")) << "the binding stays pinned to the mutating card";
 
     // The mutation lands normally; its mandatory re-list runs on the SAME card.
     ASSERT_TRUE(waitFor([&]() { return ctl.state() == int(State::Ready); }));
-    EXPECT_EQ(ctl.readerName(), QStringLiteral("Fake2"));
+    EXPECT_EQ(ctl.readerLabel(), QStringLiteral("Fake2"));
     EXPECT_EQ(h.cancelledOperationCount(), 0);
     EXPECT_FALSE(ctl.resultMessage().isEmpty()) << "the verb's own result banner rendered (not a cancel)";
 }
@@ -1336,7 +1379,7 @@ TEST(CredentialController, StaleRebindDuringMutationExitsWorking)
     // window converges on a live, actionable dashboard.
     ASSERT_TRUE(waitFor([&]() { return ctl.state() == int(State::Ready); }))
         << "the stale re-bind's fallback re-classification must settle back to Ready";
-    EXPECT_EQ(ctl.readerName(), QStringLiteral("Fake")) << "the fallback re-resolved to the same reader";
+    EXPECT_EQ(ctl.readerLabel(), QStringLiteral("Fake")) << "the fallback re-resolved to the same reader";
 }
 
 // The mid-LIST variant: pulling the card while the credential list is being read

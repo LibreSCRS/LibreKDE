@@ -42,6 +42,14 @@ public:
         ++m_ioCalls;
         return m_der; // default NotAvailable
     }
+    [[nodiscard]] LibreSCRS::AgentClient::AgentState agentState() const override
+    {
+        return m_agentState;
+    }
+    void setAgentState(LibreSCRS::AgentClient::AgentState state)
+    {
+        m_agentState = state;
+    }
 
     /// @brief Count of CARD-READ calls (readIdentity/readCertificates/getPhoto/
     ///        getCertificateDer). listReadersWithCards is NOT counted — it is the
@@ -78,6 +86,7 @@ private:
     LibreKDE::CertListResult m_certs;
     LibreKDE::PhotoResult m_photo;
     LibreKDE::CertDerResult m_der;
+    LibreSCRS::AgentClient::AgentState m_agentState = LibreSCRS::AgentClient::AgentState::Ready;
     int m_ioCalls = 0;
     int m_listCalls = 0;
 };

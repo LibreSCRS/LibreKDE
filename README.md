@@ -56,7 +56,7 @@ installed client library, step 2 stops at
 dependency, not a broken checkout.
 
 To work on this repository and the agent's at the same time,
-`-DLIBREKDE_FETCH_AGENT=ON` builds the client library from source as part of
+`-DLIBRESCRS_AGENT_FROM_SOURCE=ON` builds the client library from source as part of
 this build instead of finding an installed one. It clones the agent at configure
 time, so it needs network access, and it needs CMake 3.28 or newer where
 everything else here needs 3.24.

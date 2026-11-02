@@ -30,9 +30,13 @@ namespace LibreKDE {
 /// `CertChooser` (none → `CapabilityMissing`) → open the input read-only →
 /// `AgentCard::sign(certId, fd, options)` (the format/packaging come from
 /// `MimeFormatMap::resolve` on the input MIME, or a caller override) → on a
-/// terminal `Ok` write `takeSignedArtifact()` to `MimeFormatMap::outputName(...)`
-/// beside the input (guarded by the injected `OverwriteConfirmer`; the input is
-/// NEVER modified in place) → emit `succeeded(outputPath)`; otherwise
+/// terminal `Ok` write `takeSignedArtifact()` beside the input under the name
+/// the agent client library's `signedOutputPath()` gives every client, through
+/// that library's `writeSignedFile()` (an existing file is never replaced: a
+/// taken name moves to the first free numbered sibling; the name never holds
+/// part of a signature; an empty artifact is a failure; the input is NEVER
+/// modified in place) → emit
+/// `succeeded(outputPath)`; otherwise
 /// `failed(message)` with the agent-mapped `ErrorText`. The forwarded options
 /// carry this client's non-secret format/packaging choice plus the typed
 /// options' baseline level; no timestamp authority and no visible-signature
@@ -49,7 +53,7 @@ public:
     ///        vocabulary admits are honoured; anything else fails the job
     ///        before any signing starts.
     SignJob(LibreSCRS::AgentClient::AgentCard* card, QString inputPath, QString mimeType, QString formatOverride,
-            CertChooser chooser, OverwriteConfirmer overwriteConfirmer, QObject* parent = nullptr);
+            CertChooser chooser, QObject* parent = nullptr);
     ~SignJob() override;
 
     SignJob(const SignJob&) = delete;

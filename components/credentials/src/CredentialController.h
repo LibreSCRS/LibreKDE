@@ -54,8 +54,10 @@ class CredentialController : public QObject
     QML_ELEMENT
     /// Current `State` cast to int — the QML body switches on this.
     Q_PROPERTY(int state READ state NOTIFY stateChanged)
-    /// Friendly Name of the bound reader (empty when none is bound / resolvable).
-    Q_PROPERTY(QString readerName READ readerName NOTIFY readerNameChanged)
+    /// The label the bound reader is shown under -- the same one the plasmoid
+    /// and the agent's prompts use (`LibreKDE::Readers::readerLabel()`), never
+    /// the raw PC/SC name; empty when none is bound / resolvable.
+    Q_PROPERTY(QString readerLabel READ readerLabel NOTIFY readerLabelChanged)
     /// The credential list the dashboard's `ListView` binds to. Created once with
     /// the controller and populated on each `ListCredentials` result, so the
     /// pointer is CONSTANT — only its rows change (via model reset).
@@ -77,6 +79,14 @@ class CredentialController : public QObject
     /// explanation instead. Set by the card-removed mutation terminal; cleared
     /// when a card (re)binds or a fresh verb starts.
     Q_PROPERTY(QString removalNotice READ removalNotice NOTIFY removalNoticeChanged)
+    /// In `AgentUnavailable`: whether the agent is installed but stopped (true)
+    /// or not installed at all (false) — the agent client library's answer.
+    Q_PROPERTY(bool agentInstalled READ agentInstalled NOTIFY stateChanged)
+    /// True while `startAgent()` waits for the agent to answer; the action that
+    /// starts it is disabled for that long.
+    Q_PROPERTY(bool agentStarting READ agentStarting NOTIFY agentStartingChanged)
+    /// Where the user learns how to install the agent.
+    Q_PROPERTY(QString installHelpUrl READ installHelpUrl CONSTANT)
 public:
     /// Coarse UI states the window renders. The value is carried on the `state`
     /// property; `Q_ENUM` registers the enumerators for QML, which addresses them
@@ -115,9 +125,9 @@ public:
     {
         return static_cast<int>(m_state);
     }
-    [[nodiscard]] QString readerName() const
+    [[nodiscard]] QString readerLabel() const
     {
-        return m_readerName;
+        return m_readerLabel;
     }
     [[nodiscard]] CredentialModel* credentials() const noexcept
     {
@@ -139,6 +149,12 @@ public:
     {
         return m_removalNotice;
     }
+    [[nodiscard]] bool agentInstalled() const;
+    [[nodiscard]] bool agentStarting() const
+    {
+        return m_agentStarting;
+    }
+    [[nodiscard]] static QString installHelpUrl();
 
     /// @brief Bind (or re-target) to a reader by its opaque agent-side id (the
     ///        `--reader` argument the plasmoid passes). Re-classifies the bound
@@ -153,6 +169,12 @@ public:
     /// @brief Cancel the in-flight credential-list fetch or the running PIN
     ///        verb. No-op when nothing is in flight.
     Q_INVOKABLE void cancel();
+    /// @brief Start the installed agent (the client library's start, the same
+    ///        for every client of the agent), then re-resolve. Returns at once:
+    ///        the start runs from the event loop, so the view that asked may be
+    ///        replaced by its outcome. `agentStarting` holds until the answer;
+    ///        a call before then does nothing.
+    Q_INVOKABLE void startAgent();
 
     /// @name Verb invokables.
     /// The delegate's action buttons bind to these. Each mints the matching agent
@@ -192,10 +214,11 @@ public:
 
 Q_SIGNALS:
     void stateChanged();
-    void readerNameChanged();
+    void readerLabelChanged();
     void resultChanged();
     void progressChanged();
     void removalNoticeChanged();
+    void agentStartingChanged();
     /// @brief Ask the QML to raise the unblock confirm sheet for credential @p id,
     ///        showing @p pukBudgetText (the PUK's remaining unblock budget). The
     ///        sheet's Continue calls `confirmUnblock(id)`; Cancel just dismisses.
@@ -230,7 +253,7 @@ private:
     /// mutation is in flight.
     void detachMutation();
     void transitionTo(State next);
-    void setReaderName(const QString& name);
+    void setReaderLabel(const QString& label);
 
     /// Adopt a freshly minted `ManagePin` / `ActivateSigningKey` mutation: enter
     /// `Working` and wire `finished`/`phaseChanged`. Every minted operation is
@@ -282,8 +305,8 @@ private:
     QPointer<LibreSCRS::AgentClient::AgentOperation> m_mutationOp;
     /// The dashboard's model; owned by (parented to) this controller.
     CredentialModel* m_model = nullptr;
-    QString m_readerId;   ///< Bound reader id ("" = none bound).
-    QString m_readerName; ///< Friendly Name of the bound reader.
+    QString m_readerId;    ///< Bound reader id ("" = none bound).
+    QString m_readerLabel; ///< Label of the bound reader (shown, never a key).
     /// Id of the reader the binding last RESOLVED to (explicit target or
     /// fallback; "" = none). Lets bindReader() recognize an explicit re-bind
     /// of the reader already being managed, which must never abandon a running
@@ -291,6 +314,7 @@ private:
     QString m_resolvedReaderId;
     QString m_resultMessage;      ///< Last verb's banner text ("" = none).
     bool m_resultIsError = false; ///< Last verb's result is an error banner.
+    bool m_agentStarting = false; ///< `startAgent()` is waiting for the agent.
     double m_progress = 0.0;      ///< In-flight verb progress [0,1].
     /// Card-removed outcome carried on the NoCard surface (see the property).
     QString m_removalNotice;

@@ -78,7 +78,20 @@ include(CTest)
 # — plasmoid, credentials, kio, purpose — links it too, and names it explicitly
 # rather than relying on transitive propagation. LibreKDE no longer carries a
 # vendored client of its own: this library is the only one.
+#
+# The installed package is the default (the path packaging takes, so the
+# default build, the CI build and the shipped build are one path);
+# -DLIBRESCRS_AGENT_FROM_SOURCE=ON builds the agent from the deps.lock
+# revision instead. The agent's test doubles are asked for only when this
+# build has tests: a packager building without them must not be made to
+# require a component that exists to serve a test suite.
+set(LIBRESCRS_AGENT_FROM_SOURCE_DEFAULT OFF)
 include(cmake/FindOrUseLibreAgent.cmake)
+set(_librekde_agent_components ClientQt)
+if(BUILD_TESTING)
+    list(APPEND _librekde_agent_components ClientQtTestSupport)
+endif()
+librescrs_use_libreagent(COMPONENTS ${_librekde_agent_components})
 
 # Qt6::Widgets at root scope (see the note above) — created whenever a signing
 # surface (plasmoid or Purpose) is built, so librekde-signing and its consumers

@@ -9,9 +9,9 @@
 # strings. Every LibreKDE surface (plasmoid, credential window, card:/ worker,
 # Purpose signing) draws its copy from here, so the wording is decided once.
 # Alongside the text layer live the small host-side helpers the components
-# would otherwise duplicate verbatim: the first-reader-with-card finder
-# (Readers), the card capability predicates (Cards) and the rich-text
-# neutralizer (DisplayText).
+# would otherwise duplicate verbatim: the first-reader-with-card finder and the
+# label a reader is shown under (Readers), the card capability predicates
+# (Cards) and the rich-text neutralizer (DisplayText).
 #
 # Deliberately LibreMiddleware-free, as before: this links no card core.
 

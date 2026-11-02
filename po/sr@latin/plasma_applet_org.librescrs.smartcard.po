@@ -42,13 +42,18 @@ msgctxt "@action:button start smart card service"
 msgid "Start service"
 msgstr "Pokreni servis"
 
-#: components/plasmoid/package/contents/ui/AgentUnavailableState.qml:47
+#: components/plasmoid/package/contents/ui/AgentUnavailableState.qml:49
+msgctxt "@info plasmoid agent start failed"
+msgid "The service could not be started."
+msgstr "Servis nije moguće pokrenuti."
+
+#: components/plasmoid/package/contents/ui/AgentUnavailableState.qml:56
 msgctxt "@info plasmoid agent start instruction"
 msgid "Start it with this command:"
 msgstr "Pokrenite ga ovom komandom:"
 
-#: components/plasmoid/package/contents/ui/AgentUnavailableState.qml:67
-#: components/plasmoid/package/contents/ui/AgentUnavailableState.qml:71
+#: components/plasmoid/package/contents/ui/AgentUnavailableState.qml:76
+#: components/plasmoid/package/contents/ui/AgentUnavailableState.qml:80
 #: components/plasmoid/package/contents/ui/IdentityView.qml:100
 #: components/plasmoid/package/contents/ui/IdentityView.qml:104
 #: components/plasmoid/package/contents/ui/IdentityView.qml:200
@@ -57,7 +62,7 @@ msgctxt "@info:tooltip copy this field to the clipboard"
 msgid "Copy to clipboard"
 msgstr "Kopiraj u ostavu"
 
-#: components/plasmoid/package/contents/ui/AgentUnavailableState.qml:81
+#: components/plasmoid/package/contents/ui/AgentUnavailableState.qml:90
 msgctxt "@action:button open online installation help"
 msgid "Installation help"
 msgstr "Pomoć za instalaciju"

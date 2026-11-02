@@ -5,6 +5,8 @@
 #include "CardPhotoStore.h"
 #include "CardStateModel.h"
 
+#include <LibreSCRS/AgentClient/ClientTimeouts.h> // kLongOperationTimeoutMs — the default stall bound
+#include <LibreSCRS/AgentClient/AgentReader.h>    // ReaderInterface — what a reader label says
 #include <LibreSCRS/AgentClient/OperationPhase.h> // the phase the spinner status line renders
 #include <LibreSCRS/AgentClient/Types.h>          // FieldGroup — the identity read's result shape
 
@@ -20,6 +22,7 @@
 #include <QVariantMap>
 #include <QtQmlIntegration/qqmlintegration.h>
 
+#include <cstdint>
 #include <memory>
 
 namespace LibreSCRS::AgentClient {
@@ -27,6 +30,7 @@ class AgentClient;
 class AgentCard;
 class AgentOperation;
 class AgentReader;
+enum class AgentStartResult : std::uint8_t;
 } // namespace LibreSCRS::AgentClient
 
 namespace LibreKDE {
@@ -76,10 +80,20 @@ class SmartCardHandler : public QObject
     /// state (e.g. Hybrid stays Hybrid) would leave a stateChanged-riding
     /// binding stale.
     Q_PROPERTY(bool pinManagementAvailable READ pinManagementAvailable NOTIFY pinManagementAvailableChanged)
-    /// True only in State::AgentUnavailable: whether the agent looks installed
-    /// (D-Bus activation file / systemd unit present) but is merely stopped, vs
-    /// not installed at all. Drives the AgentUnavailableState guidance.
+    /// True only in State::AgentUnavailable: whether the agent is installed but
+    /// merely stopped, vs not installed at all — the agent client library's
+    /// `agentState()`, the same answer every client of the agent reads. Drives
+    /// the AgentUnavailableState guidance.
     Q_PROPERTY(bool agentInstalled READ agentInstalled NOTIFY agentInstalledChanged)
+    /// Where the user learns how to install the agent, in their language when
+    /// the guide has it.
+    Q_PROPERTY(QString installHelpUrl READ installHelpUrl CONSTANT)
+    /// True after the last `startAgent()` found the agent installed but could
+    /// not start it; cleared by the next attempt.
+    Q_PROPERTY(bool agentStartFailed READ agentStartFailed NOTIFY agentStartFailedChanged)
+    /// True while `startAgent()` waits for the agent to answer; the control that
+    /// starts it is disabled for that long.
+    Q_PROPERTY(bool agentStarting READ agentStarting NOTIFY agentStartingChanged)
     /// True in State::NoCard when a reader in scope physically reports a card
     /// (`Reader1.HasCard`) but no resolved `Card1` is available for it yet — the
     /// agent's deferred-publish window (it exports the card only after a worker
@@ -232,6 +246,15 @@ public:
     {
         return m_agentInstalled;
     }
+    [[nodiscard]] bool agentStartFailed() const
+    {
+        return m_agentStartFailed;
+    }
+    [[nodiscard]] bool agentStarting() const
+    {
+        return m_agentStarting;
+    }
+    [[nodiscard]] static QString installHelpUrl();
     [[nodiscard]] bool cardDetected() const
     {
         return m_cardDetected;
@@ -312,10 +335,6 @@ public:
     ///        main.qml). Turning it ON re-checks the free read.
     void setViewActive(bool active);
 
-    /// Pure, testable install probe: true if any @p dataDirs entry carries the
-    /// agent's D-Bus activation file or its systemd user unit.
-    [[nodiscard]] static bool agentServiceInstalledIn(const QStringList& dataDirs);
-
     /// Pure, testable: the card:/ URL for a reader friendly name.
     [[nodiscard]] static QUrl cardUrlForReader(const QString& readerName);
 
@@ -331,16 +350,6 @@ public:
     /// reader id @p readerId — `{"--reader", readerId}`. The id is forwarded
     /// verbatim; nothing here parses it.
     [[nodiscard]] static QStringList credentialsLaunchArgs(const QString& readerId);
-
-    /// Pure, testable: friendly display labels for raw PC/SC reader names,
-    /// index-aligned with @p rawNames. Strips the pcsc-lite boilerplate
-    /// (`(serial) <ifd> <slot>`), shortens to the model (preferring the
-    /// bracketed product string), and — when a dual-interface reader surfaces
-    /// both — disambiguates with "— contact" / "— contactless". Never empty
-    /// (falls back to the raw name) and never collides (a short serial tail is
-    /// appended if two labels would otherwise match). The RAW name stays the
-    /// binding/selection key everywhere; this only affects what is SHOWN.
-    [[nodiscard]] static QStringList readerDisplayLabels(const QStringList& rawNames);
 
     /// The stable identity of a PC/SC reader name for bound-reader matching: the
     /// parenthesized unit serial (e.g. `69988A87` from "Gemalto PC Twin Reader
@@ -366,11 +375,12 @@ public:
     /// strings) never equate each other. Pure; no D-Bus.
     [[nodiscard]] static bool sameReaderUnit(const QString& a, const QString& b);
 
-    /// The friendly label for a single raw reader name, resolved against the
-    /// current roster (so contact/contactless disambiguation is stable). Falls
-    /// back to @p rawName for a reader not in the roster (e.g. a remembered but
-    /// absent bound reader). QML display seam; selection/binding still use the
-    /// raw name.
+    /// The label of the reader named @p rawName in the current roster
+    /// (`LibreKDE::Readers::readerLabel()` over what the agent says about it,
+    /// the same label every other surface shows). Falls back to
+    /// @p rawName for a reader not in the roster (e.g. a remembered but absent
+    /// bound reader). QML display seam; selection/binding still use the raw
+    /// name.
     Q_INVOKABLE [[nodiscard]] QString readerDisplayName(const QString& rawName) const;
 
     /// Pure, testable: neutralize rich-text promotion for card/agent/filename-
@@ -493,10 +503,18 @@ public Q_SLOTS:
     /// raises its own PIN prompter. Gated on `Cap::Pki` by the QML that shows it.
     void signFile(const QString& fileUrl);
 
-    /// Ask systemd --user to start the D-Bus-activatable agent. When it registers
-    /// on the bus, availabilityChanged(true) drives refresh() and the state
-    /// leaves AgentUnavailable. Best-effort; no-op if systemctl is unavailable.
+    /// Start the installed agent through the agent client library, the same
+    /// start every client of the agent uses. Returns at once: the start runs
+    /// from the event loop, so the control that asked may be replaced by its
+    /// outcome. Started: availabilityChanged(true) drives refresh() and the
+    /// state leaves AgentUnavailable. Not startable: `agentStartFailed` says so.
+    /// `agentStarting` holds until the answer; a call before then does nothing.
     void startAgent();
+
+    /// How long a card read may go without a sign of life from the agent before
+    /// it is given up (the client library's stall bound, on by default at
+    /// `kLongOperationTimeoutMs`); applies to the reads started after the call.
+    void setOperationStallBudget(int milliseconds);
 
     /// User-initiated re-check behind the plasmoid's refresh affordance. Re-runs
     /// client discovery (`AgentClient::refreshDiscovery` → re-probe bus name +
@@ -505,7 +523,9 @@ public Q_SLOTS:
     /// `InterfacesAdded` (a card the agent exported but the client never saw) or
     /// a missed `NameOwnerChanged`; a no-op-safe manual nudge otherwise, since
     /// discovery already reconciles the registry. `refreshDiscovery` emits
-    /// `readersChanged`, which drives `refresh()`.
+    /// `readersChanged`, which drives `refresh()`. Returns at once: the
+    /// refresh runs from the event loop, so the control that asked may be
+    /// replaced by its outcome.
     void requestRefresh();
 
     /// Copy a rendered field value to the clipboard.
@@ -529,6 +549,8 @@ Q_SIGNALS:
     void cardLabelChanged();
     void cardPhotoChanged();
     void agentInstalledChanged();
+    void agentStartFailedChanged();
+    void agentStartingChanged();
     void cardDetectedChanged();
     void identityChanged();
     void busyChanged();
@@ -603,6 +625,8 @@ private:
     void rebuildIdentityModel(const QList<LibreSCRS::AgentClient::FieldGroup>& groups);
     void clearIdentity();
 
+    /// The answer to the start `startAgent()` asked for.
+    void onAgentStartFinished(LibreSCRS::AgentClient::AgentStartResult result);
     void setReaderName(const QString& name);
     void setCardLabel(const QString& label);
     void transitionTo(CardStateModel::State newState);
@@ -612,7 +636,6 @@ private:
     /// capability flip that keeps the coarse state still updates the launcher.
     void updatePinManagementAvailable();
     void setError(const QString& diagnosticOrEmpty);
-    [[nodiscard]] static bool detectAgentInstalled();
     void setAgentInstalled(bool installed);
     void setCardDetected(bool detected);
     /// Scope-aware: in bound mode, whether the reader `pickActiveReader` would
@@ -675,7 +698,10 @@ private:
     QString m_photoSuggestedFileName;
     quint64 m_photoToken = 0;
     bool m_agentInstalled = false;
+    bool m_agentStartFailed = false;
+    bool m_agentStarting = false;
     bool m_cardDetected = false; // NoCard branch: a card is seated but not yet resolved
+    int m_opStallBudgetMs = LibreSCRS::AgentClient::kLongOperationTimeoutMs;
     bool m_busy = false;
     QByteArray m_photoBytes;                             ///< Raw agent photo bytes (retained for Save photo…).
     const QString m_libreCelikPath = locateLibreCelik(); ///< Detected once at construction.
@@ -693,7 +719,7 @@ private:
     QString m_selectedReaderName;                 // Auto-mode transient master-detail pick
     QStringList m_availableReaderNames;           // config chooser source (all readers)
     QStringList m_readersWithCards;               // master list (readers holding a card)
-    QHash<QString, QString> m_readerDisplayNames; // raw reader name -> friendly label (roster-derived)
+    QHash<QString, QString> m_readerDisplayNames; // raw reader name -> label (from the agent)
 };
 
 } // namespace LibreKDE::Plasmoid

@@ -224,6 +224,22 @@ WorkerResult CardWorkerLogic::doListDir(const QUrl& url)
 {
     const CardNode node = m_tree.resolve(url);
 
+    // With no agent there is nothing to list, and an empty folder would read
+    // as "no card inserted". Say which of the two it is instead.
+    if (node.kind == NodeKind::Root) {
+        switch (m_source.agentState()) {
+        case LibreSCRS::AgentClient::AgentState::Ready:
+            break;
+        case LibreSCRS::AgentClient::AgentState::Stopped:
+            return WorkerResult::fail(ERR_WORKER_DEFINED, i18n("The smart-card service isn't running."));
+        case LibreSCRS::AgentClient::AgentState::Missing:
+            return WorkerResult::fail(ERR_WORKER_DEFINED,
+                                      i18nc("@info %1 is the address of the installation guide",
+                                            "The smart-card service isn't installed. To install it, see %1",
+                                            LibreSCRS::AgentClient::AgentClient::installHelpUrl()));
+        }
+    }
+
     // KIO expects a "." self-entry for a directory listing; without it it warns
     // "UDSEntry for '.' not found" and synthesizes a default. Emit it up front for
     // every directory node kind.

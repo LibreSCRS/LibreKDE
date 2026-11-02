@@ -5,6 +5,7 @@
 
 #include "ErrorText.h"
 #include "IdentityRows.h" // LibreKDE::localizedFieldLabel
+#include "Readers.h"
 
 #include <LibreSCRS/AgentClient/AgentCapabilities.h>
 #include <LibreSCRS/AgentClient/AgentCard.h>
@@ -17,7 +18,6 @@
 
 #include <QEventLoop>
 #include <QPointer>
-#include <QTimer>
 
 #include <functional>
 #include <memory>
@@ -119,7 +119,7 @@ QString reasonFor(ReadStatus status, Client::AgentOperation* op)
     if (status != ReadStatus::Error && status != ReadStatus::Unavailable) {
         return {};
     }
-    return ErrorText::forOutcome(op->errorCode(), op->callError(), op->messageFallback());
+    return ErrorText::forOutcome(op->errorCode(), op->callError(), op->messageKey(), op->messageFallback());
 }
 
 /// @brief Extra exits a caller installs on the drive loop below, wired once
@@ -127,50 +127,32 @@ QString reasonFor(ReadStatus status, Client::AgentOperation* op)
 ///        which need only the two standard exits.
 using LoopWiring = std::function<void(QEventLoop&)>;
 
-/// @brief Drive @p op to its terminal state on a scoped QEventLoop, with a
-///        PHASE-AWARE stall backstop so the doGet path can never hang forever
-/// — yet a legitimate PACE/CAN wait is never aborted.
+/// @brief Drive @p op to its terminal state on a scoped QEventLoop.
 ///
-/// The agent's own watchdog and the client's agent-death / card-removal sweeps
-/// normally drive `finished` in every real failure mode; @p opStallTimeoutMs
-/// is the last-resort backstop for an orphaned op the agent never terminalizes.
-/// It runs ONLY during machine phases (Created/Connecting/Reading/Signing/…) and
-/// is (re)started on every phase/progress tick; entering AwaitingConsent or
-/// Authenticating STOPS it — a human at the prompter takes as long as they need,
-/// bounded by the agent's prompter, not by us.
+/// The worker is synchronous, so it waits here; how long it may wait is the
+/// agent client library's stall bound (@p opStallTimeoutMs on the operation):
+/// a machine phase that goes silent ends the operation through its ordinary
+/// `finished()` with `CallError::Timeout`, while a person at the agent's prompt
+/// (AwaitingConsent / Authenticating) stops the clock — a CAN wait is never cut
+/// short.
 ///
 /// @param extraExits optional additional ways out of the loop, for an operation
 ///        the standard sweeps do not reach.
 ///
-/// @return true if @p op reached a terminal state; false if the stall backstop
-///         (or an extra exit) fired first — never a consent wait.
+/// @return true if @p op reached a terminal state; false if an extra exit fired
+///         first.
 bool driveToFinished(Client::AgentOperation* op, int opStallTimeoutMs, const LoopWiring& extraExits = {})
 {
     if (op->isFinished()) {
         return true; // recovered synchronously (lost-terminal path)
     }
+    op->setStallBudget(opStallTimeoutMs);
     QEventLoop loop;
     bool finished = false;
     QObject::connect(op, &Client::AgentOperation::finished, &loop, [&loop, &finished]() {
         finished = true;
         loop.quit();
     });
-
-    QTimer stall;
-    stall.setSingleShot(true);
-    QObject::connect(&stall, &QTimer::timeout, &loop, &QEventLoop::quit);
-    const auto armForPhase = [&stall, opStallTimeoutMs](Client::OperationPhase phase) {
-        const bool humanInLoop =
-            (phase == Client::OperationPhase::AwaitingConsent || phase == Client::OperationPhase::Authenticating);
-        if (humanInLoop) {
-            stall.stop(); // the human is thinking at the prompter — never time out
-        } else {
-            stall.start(opStallTimeoutMs); // machine phase — bound it, reset on each tick
-        }
-    };
-    QObject::connect(op, &Client::AgentOperation::phaseChanged, &loop,
-                     [&armForPhase](Client::OperationPhase phase, double) { armForPhase(phase); });
-    armForPhase(Client::OperationPhase::Created); // arm for the pre-first-signal machine phase
 
     if (extraExits) {
         extraExits(loop);
@@ -200,6 +182,11 @@ AgentCardDataSource::AgentCardDataSource(Client::AgentClient& client, int opStal
 
 AgentCardDataSource::~AgentCardDataSource() = default;
 
+Client::AgentState AgentCardDataSource::agentState() const
+{
+    return m_client.agentState();
+}
+
 QList<CardPresence> AgentCardDataSource::listReadersWithCards()
 {
     // Zero card I/O: purely the client's own registry.
@@ -215,6 +202,7 @@ QList<CardPresence> AgentCardDataSource::listReadersWithCards()
         }
         CardPresence p;
         p.readerName = reader->name();
+        p.readerLabel = Readers::readerLabel(*reader);
         p.cardId = card->id();
         // The client publishes capabilities as stable TOKENS; the tree and the
         // renderers both consume the bitfield. capabilityBits() is the exact
@@ -247,7 +235,9 @@ IdentityResult AgentCardDataSource::readIdentity(const QString& cardId)
     // core's own card guard. Without this the op->status() below would
     // dereference freed memory.
     QPointer<Client::AgentOperation> guard(op);
-    const bool reachedTerminal = driveToFinished(op, m_opStallTimeoutMs);
+    // A silent agent ends the operation through the library's stall bound, so
+    // this returns with the operation finished.
+    driveToFinished(op, m_opStallTimeoutMs);
     if (!guard) {
         result.status = ReadStatus::CardRemoved;
         return result;
@@ -257,14 +247,6 @@ IdentityResult AgentCardDataSource::readIdentity(const QString& cardId)
     // op parented to the card would accumulate one dead QObject per open until
     // card removal.
     const std::unique_ptr<Client::AgentOperation> owned(op);
-    if (!reachedTerminal) {
-        // Genuine machine-phase stall (a consent wait suppresses the backstop, so
-        // this is never a CAN wait). Ask the agent to abandon; surface Unavailable
-        // with NO reason attached — the op never produced an outcome to render.
-        op->cancel();
-        result.status = ReadStatus::Unavailable;
-        return result;
-    }
     result.status = mapStatus(op->status(), op->errorCode(), op->callError());
     if (result.status != ReadStatus::Ok) {
         result.message = reasonFor(result.status, op);
@@ -304,17 +286,14 @@ CertListResult AgentCardDataSource::readCertificates(const QString& cardId)
     // which case the client's removal sweep deletes the op mid-loop. Re-check the
     // QPointer before any post-loop deref, then own the survivor so it is reaped.
     QPointer<Client::AgentOperation> guard(op);
-    const bool reachedTerminal = driveToFinished(op, m_opStallTimeoutMs);
+    // A silent agent ends the operation through the library's stall bound, so
+    // this returns with the operation finished.
+    driveToFinished(op, m_opStallTimeoutMs);
     if (!guard) {
         result.status = ReadStatus::CardRemoved;
         return result;
     }
     const std::unique_ptr<Client::AgentOperation> owned(op);
-    if (!reachedTerminal) {
-        op->cancel();
-        result.status = ReadStatus::Unavailable;
-        return result;
-    }
     result.status = mapStatus(op->status(), op->errorCode(), op->callError());
     if (result.status != ReadStatus::Ok) {
         result.message = reasonFor(result.status, op);
@@ -337,17 +316,14 @@ PhotoResult AgentCardDataSource::getPhoto(const QString& cardId)
     // which case the client's removal sweep deletes the op mid-loop. Re-check the
     // QPointer before any post-loop deref, then own the survivor so it is reaped.
     QPointer<Client::AgentOperation> guard(op);
-    const bool reachedTerminal = driveToFinished(op, m_opStallTimeoutMs);
+    // A silent agent ends the operation through the library's stall bound, so
+    // this returns with the operation finished.
+    driveToFinished(op, m_opStallTimeoutMs);
     if (!guard) {
         result.status = ReadStatus::CardRemoved;
         return result;
     }
     const std::unique_ptr<Client::AgentOperation> owned(op);
-    if (!reachedTerminal) {
-        op->cancel();
-        result.status = ReadStatus::Unavailable;
-        return result;
-    }
     result.status = mapStatus(op->status(), op->errorCode(), op->callError());
     if (result.status != ReadStatus::Ok) {
         result.message = reasonFor(result.status, op);
@@ -415,9 +391,8 @@ CertDerResult AgentCardDataSource::getCertificateDer(const QString& cardId, cons
     // anything this surface promises, and what it eventually reports is a generic
     // timeout rather than the thing that actually happened. Watching the removal
     // directly ends the wait as soon as the client knows about it, and names the
-    // reason. The stall backstop stays underneath both as the last resort — and
-    // note it can only ever fire once here, since this operation reports no
-    // phases for it to re-arm on.
+    // reason. The client library's stall bound stays underneath both as the last
+    // resort.
     Client::AgentOperation* op = m_client.certificateDer(card->readerId(), certId);
     QPointer<Client::AgentOperation> guard(op);
     bool cardGone = false;

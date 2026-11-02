@@ -227,7 +227,8 @@ QString renderInfoTxt(const CardPresence& presence, const RenderLabels& labels)
     const auto line = [&out](const QString& key, const QString& value) {
         out += QStringLiteral("%1: %2\n").arg(key, value);
     };
-    line(labels.labelReader, presence.readerName);
+    // The label, not the raw PC/SC name the path segment carries.
+    line(labels.labelReader, presence.readerLabel.isEmpty() ? presence.readerName : presence.readerLabel);
 
     // Authoritative capability bits — the client library's mirror of the wire
     // contract (its values carry a "do not renumber" warning). PKI/eMRTD are

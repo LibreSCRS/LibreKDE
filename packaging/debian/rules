@@ -7,7 +7,7 @@ export DEB_CPPFLAGS_MAINT_APPEND = -DNDEBUG
 	dh $@ --buildsystem=cmake+ninja --builddirectory=build
 
 override_dh_auto_configure:
-	dh_auto_configure -- -DBUILD_TESTING=OFF -DINSTALL_GTEST=OFF
+	dh_auto_configure -- -DBUILD_TESTING=OFF
 
 override_dh_auto_test:
 

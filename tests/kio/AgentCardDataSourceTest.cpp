@@ -119,6 +119,35 @@ TEST(AgentCardDataSource, GetPhotoCardRemovedMidReadReturnsCleanlyNoUaf)
     EXPECT_TRUE(result.bytes.isEmpty());
 }
 
+// A listed reader carries the agent's label for info.txt beside the raw name the
+// path segment and every lookup key on, and the label follows a relabel.
+TEST(AgentCardDataSource, ListedReaderCarriesTheAgentsLabelBesideItsName)
+{
+    const QString raw = QStringLiteral(
+        "HID Global OMNIKEY 5422 Smartcard Reader [OMNIKEY 5422 Smartcard Reader] (IM0O2C00NF10456904) 00 00");
+    FakeAgent::Config cfg;
+    cfg.capabilities = Client::Cap::IdentityData;
+    cfg.readerName = raw;
+    cfg.readerModel = QStringLiteral("OMNIKEY 5422");
+    cfg.readerInterface = QStringLiteral("contact");
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
+    ASSERT_NE(client.card(h.cardPath()), nullptr);
+
+    AgentCardDataSource source(client);
+    QList<CardPresence> listed = source.listReadersWithCards();
+    ASSERT_EQ(listed.size(), 1);
+    EXPECT_EQ(listed.first().readerName, raw);
+    EXPECT_EQ(listed.first().readerLabel, QStringLiteral("OMNIKEY 5422 — contact"));
+
+    h.emitReaderRelabelled(QStringLiteral("OMNIKEY 5422 (4569)"), QStringLiteral("contactless"));
+    ASSERT_TRUE(waitFor([&]() {
+        listed = source.listReadersWithCards();
+        return listed.size() == 1 && listed.first().readerLabel == QStringLiteral("OMNIKEY 5422 (4569) — contactless");
+    }));
+    EXPECT_EQ(listed.first().readerName, raw);
+}
+
 // ============================================================================
 // Happy-path field fidelity over the live FakeAgent — the post-demarshal
 // translation layer (the identity label resolve + the client's own certificate

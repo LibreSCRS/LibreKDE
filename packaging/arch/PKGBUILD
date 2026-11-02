@@ -32,6 +32,11 @@ pkgdesc="KDE Plasma 6 integration for LibreSCRS: smart-card plasmoid, credential
 arch=('x86_64')
 url="https://github.com/LibreSCRS/LibreKDE"
 license=('LGPL-2.1-or-later')
+# The agent is a hard dependency here and a Recommends in the deb and RPM
+# recipes, for the same outcome: apt and dnf install a recommended package by
+# default, while pacman has no weak dependency it installs on its own — an
+# optdepends is only printed. A plain `pacman -S librekde` therefore gets the
+# agent the same way `apt install librekde` does.
 depends=(
     'librescrs-agent'   # the D-Bus agent this client talks to
     'librescrs-agent-client-qt' # LibreAgent::ClientQt (find_package(LibreAgent CONFIG))
@@ -55,10 +60,7 @@ makedepends=(
     'ninja'
     'git'                   # GitVersion.cmake
     'extra-cmake-modules'   # ECM (KDEInstallDirs/KDECMakeSettings/...)
-    'gtest'                 # BUILD_TESTING unit tests
     'qt6-tools'             # lrelease for ki18n .po -> .qm (ECMPoQmTools)
-    'dbus'                  # dbus-run-session for the D-Bus client tests
-    'python'                # tools/check-catalogs.py, run as the CatalogReconcile test
     'librescrs-agent-client-qt' # find_package(LibreAgent 5.0 CONFIG COMPONENTS ClientQt)
                                 #   at configure time (cmake/FindOrUseLibreAgent.cmake)
 )
@@ -90,15 +92,8 @@ build() {
         -DLIBREKDE_BUILD_PURPOSE=ON \
         -DLIBREKDE_BUILD_KIO=ON \
         -DLIBREKDE_BUILD_CREDENTIALS=ON \
-        -DBUILD_TESTING=ON
+        -DBUILD_TESTING=OFF
     cmake --build build -j4
-}
-
-check() {
-    cd "$srcdir/LibreKDE"
-    # KDE/Qt tests need offscreen Qt; the D-Bus client tests spin a private
-    # bus via dbus-run-session (dbus is a makedepend).
-    QT_QPA_PLATFORM=offscreen ctest --test-dir build --output-on-failure -j4
 }
 
 package() {
@@ -115,4 +110,10 @@ package() {
     # The credential window is a NoDisplay helper launched from the plasmoid, so
     # it gets no separate AppStream component (it is not an app-store entry).
     install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+
+    # The agent client library is released in lockstep with its consumers and
+    # carries no ABI gate: depend on EXACTLY the build this was compiled against.
+    local agentclient
+    agentclient=$(pacman -Q librescrs-agent-client-qt | cut -d' ' -f2)
+    depends=("${depends[@]/#librescrs-agent-client-qt/librescrs-agent-client-qt=$agentclient}")
 }

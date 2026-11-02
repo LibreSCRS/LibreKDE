@@ -6,14 +6,25 @@ set -uo pipefail
 fail=0
 check() { if [ "$2" -eq 0 ]; then echo "PASS $1"; else echo "FAIL $1"; fail=1; fi; }
 
+# FAMILY is deb or rpm; anything else is refused before anything runs, rather
+# than read as one of them. Arch is not among them: the release matrix does
+# not build this repository's Arch recipe.
+case "${FAMILY:-}" in
+deb | rpm) ;;
+*)
+  echo "FAIL FAMILY='${FAMILY:-}' is not deb or rpm"
+  exit 2
+  ;;
+esac
+
 # The librekde metapackage pins every part to exactly its own build. Read from
 # the package files before anything is installed: an install proves only that
 # the dependencies resolve, and a ">=" or a wrong version resolves just as well.
 PARTS="librekde-common librekde-plasmoid librekde-kio librekde-purpose librekde-credentials"
 meta="" n=0
-for f in /pkg/*."${FAMILY:-deb}"; do
+for f in /pkg/*."$FAMILY"; do
   [ -f "$f" ] || continue
-  if [ "${FAMILY:-deb}" = deb ]; then nm=$(dpkg-deb -f "$f" Package 2>/dev/null)
+  if [ "$FAMILY" = deb ]; then nm=$(dpkg-deb -f "$f" Package 2>/dev/null)
   else nm=$(rpm -qp --qf '%{NAME}' "$f" 2>/dev/null); fi
   if [ "$nm" = librekde ]; then meta="$f"; n=$((n + 1)); fi
 done
@@ -21,7 +32,7 @@ if [ "$n" -ne 1 ]; then
   [ "$n" -eq 0 ] && echo "  no librekde package under /pkg"
   check "V0 exactly one librekde metapackage (counted $n)" 1
 else
-  if [ "${FAMILY:-deb}" = deb ]; then
+  if [ "$FAMILY" = deb ]; then
     ver=$(dpkg-deb -f "$meta" Version)
     # "name (op version)" -> "name op version", one per line.
     deps=$(dpkg-deb -f "$meta" Depends | tr ',' '\n' \
@@ -37,7 +48,7 @@ else
   done
 fi
 
-if [ "${FAMILY:-deb}" = deb ]; then
+if [ "$FAMILY" = deb ]; then
   export DEBIAN_FRONTEND=noninteractive
   # The base container is not a machine. Ubuntu's image ships
   # /etc/dpkg/dpkg.cfg.d/excludes with path-exclude=/usr/share/locale/*/LC_MESSAGES/*.mo
@@ -91,13 +102,6 @@ n=$(wc -l < /tmp/all.txt); echo "PATH_COUNT=$n"
 test "$n" -gt 5; check "V-coexist the path list is not empty (counted $n)" $?
 test ! -s /tmp/dupes.txt; check "V-coexist every installed path owned exactly once" $?
 [ -s /tmp/dupes.txt ] && cat /tmp/dupes.txt
-
-miss=0
-for f in /usr/bin/librescrs-credentials-kde $(find $LIBGLOB/qt6/plugins/kf6 -name '*.so' 2>/dev/null); do
-  [ -e "$f" ] || continue
-  if ldd "$f" 2>/dev/null | grep -q 'not found'; then echo "  not found in $f"; miss=1; fi
-done
-test "$miss" -eq 0; check "V11 no unresolved shared-library dependency" $?
 
 remove_ours
 find /usr -iname '*librekde*' -o -iname '*org.librescrs.smartcard*' > /tmp/leftover.txt

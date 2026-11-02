@@ -33,11 +33,11 @@ target_link_libraries(SignJobTest PRIVATE
     Qt6::Core Qt6::DBus Qt6::Test
 )
 target_compile_features(SignJobTest PRIVATE cxx_std_23)
-librekde_private_session_bus(SignJobTest)
+libreagent_private_session_bus(SignJobTest)
 # A wedged test under dbus-run-session must fail in minutes, not consume the
 # runner's whole wall: every bus-backed test here carries an explicit timeout.
 libreagent_gtest_discover_tests(SignJobTest
-    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en;${LIBREKDE_PRIVATE_BUS_ENV}"
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en;${LIBREAGENT_PRIVATE_BUS_ENV}"
     PROPERTIES TIMEOUT 120)
 
 # Which card signs, against the FakeAgent with one and with two signing-capable
@@ -57,7 +57,7 @@ target_link_libraries(CardSelectionTest PRIVATE
     Qt6::Core Qt6::DBus Qt6::Test
 )
 target_compile_features(CardSelectionTest PRIVATE cxx_std_23)
-librekde_private_session_bus(CardSelectionTest)
+libreagent_private_session_bus(CardSelectionTest)
 libreagent_gtest_discover_tests(CardSelectionTest
-    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en;${LIBREKDE_PRIVATE_BUS_ENV}"
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en;${LIBREAGENT_PRIVATE_BUS_ENV}"
     PROPERTIES TIMEOUT 120)

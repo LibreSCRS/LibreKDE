@@ -3,6 +3,12 @@
 Name:           librekde
 Version:        5.0.0
 Release:        1%{?dist}
+# The agent client library is released in lockstep with its consumers and
+# carries no ABI gate, so each package depends on EXACTLY the build it was
+# compiled against: the version of the -devel package in the build root. Before
+# that package is installed (source-package stage) nothing is resolved, and this
+# package's own version stands in.
+%global agentclient_evr %(rpm -q --qf '%%{VERSION}-%%{RELEASE}' librescrs-agent-client-qt-devel 2>/dev/null | grep -v 'not installed' || echo %{version})
 Summary:        KDE Plasma 6 integration for the LibreSCRS smart-card stack
 
 License:        LGPL-2.1-or-later
@@ -32,9 +38,6 @@ BuildRequires:  kf6-kdbusaddons-devel
 # libplasma-devel, not plasma-devel. The latter is not a package name on this
 # distribution and the recipe carried it for a while regardless.
 BuildRequires:  libplasma-devel
-BuildRequires:  gtest-devel
-BuildRequires:  dbus-daemon
-BuildRequires:  python3
 # LibreKDE links no middleware target of its own: it talks to the agent through
 # the Qt client library, and that is what its version floor applies to.
 BuildRequires:  librescrs-agent-client-qt-devel >= 5.0
@@ -67,7 +70,7 @@ Message catalogs and AppStream metadata shared by the other packages.
 Summary:        LibreSCRS smart-card plasmoid for KDE Plasma 6
 Requires:       %{name}-common = %{version}-%{release}
 Requires:       plasma-workspace
-Requires:       librescrs-agent-client-qt%{?_isa} >= 5.0
+Requires:       librescrs-agent-client-qt%{?_isa} = %{agentclient_evr}
 Recommends:     librescrs-agent >= 5.0
 
 %description plasmoid
@@ -77,7 +80,7 @@ moment it is inserted.
 %package kio
 Summary:        card:/ KIO worker for the LibreSCRS KDE integration
 Requires:       %{name}-common = %{version}-%{release}
-Requires:       librescrs-agent-client-qt%{?_isa} >= 5.0
+Requires:       librescrs-agent-client-qt%{?_isa} = %{agentclient_evr}
 
 %description kio
 Browse the contents of an inserted card from any KIO-aware application.
@@ -85,7 +88,7 @@ Browse the contents of an inserted card from any KIO-aware application.
 %package purpose
 Summary:        Purpose "Sign" plugin for the LibreSCRS KDE integration
 Requires:       %{name}-common = %{version}-%{release}
-Requires:       librescrs-agent-client-qt%{?_isa} >= 5.0
+Requires:       librescrs-agent-client-qt%{?_isa} = %{agentclient_evr}
 
 %description purpose
 Adds a Sign action to the KDE share menu.
@@ -93,7 +96,7 @@ Adds a Sign action to the KDE share menu.
 %package credentials
 Summary:        Credential-management window for LibreSCRS cards
 Requires:       %{name}-common = %{version}-%{release}
-Requires:       librescrs-agent-client-qt%{?_isa} >= 5.0
+Requires:       librescrs-agent-client-qt%{?_isa} = %{agentclient_evr}
 
 %description credentials
 Change a PIN, unblock one with a PUK, and see how many attempts are left.
@@ -102,7 +105,7 @@ Change a PIN, unblock one with a PUK, and see how many attempts are left.
 %autosetup -n %{name}-%{version}
 
 %build
-%cmake -GNinja -DBUILD_TESTING=OFF -DINSTALL_GTEST=OFF
+%cmake -GNinja -DBUILD_TESTING=OFF
 %cmake_build
 
 %install

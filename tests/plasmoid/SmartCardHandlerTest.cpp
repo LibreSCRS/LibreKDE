@@ -9,6 +9,7 @@
 #include <LibreSCRS/AgentClient/AgentCapabilities.h>
 #include <LibreSCRS/AgentClient/AgentCard.h>
 #include <LibreSCRS/AgentClient/AgentClient.h>
+#include <LibreSCRS/AgentClient/AgentOperation.h>
 #include <LibreSCRS/AgentClient/AgentReader.h>
 #include <LibreSCRS/AgentClient/OperationPhase.h>
 #include <LibreSCRS/AgentClient/Types.h>
@@ -27,6 +28,7 @@
 #include <QClipboard>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QImage>
 #include <QSignalSpy>
@@ -165,74 +167,52 @@ TEST(SmartCardHandler, SameReaderUnitRequiresMatchingBaseAndSerial)
                                                  QStringLiteral("Example Token (0013) 01 00")));
 }
 
-// readerDisplayLabels: friendly, distinguishable labels from raw PC/SC names.
-// Pure static — no D-Bus. Runs in the test's C locale, so i18nc yields the
-// English "%1 — contact(less)" msgids.
-TEST(SmartCardHandler, ReaderDisplayLabelsShortensAndDisambiguates)
+// The label shown for a reader is built from what the agent says about it, not
+// from the raw PC/SC name, and it follows the agent when the agent relabels the
+// reader (another reader arrived or left beside it) while the name stays.
+TEST(SmartCardHandler, ReaderLabelsAreTheAgentsAndFollowARelabel)
 {
-    const QStringList raw = {
-        QStringLiteral(
-            "HID Global OMNIKEY 5422 Smartcard Reader [OMNIKEY 5422 Smartcard Reader] (IM0O2C00NF10456904) 01 00"),
-        QStringLiteral(
-            "HID Global OMNIKEY 5422 Smartcard Reader [OMNIKEY 5422CL Smartcard Reader] (IM0O2C00NF10456904) 00 00"),
-        QStringLiteral("Gemalto PC Twin Reader (69988A87) 02 00"),
-    };
-    const QStringList out = SmartCardHandler::readerDisplayLabels(raw);
-    ASSERT_EQ(out.size(), 3);
-    // The dual-interface OMNIKEY collapses to one model, disambiguated by interface.
-    EXPECT_EQ(out.at(0), QStringLiteral("OMNIKEY 5422 — contact"));
-    EXPECT_EQ(out.at(1), QStringLiteral("OMNIKEY 5422 — contactless"));
-    // A single-interface reader keeps no interface suffix.
-    EXPECT_EQ(out.at(2), QStringLiteral("Gemalto PC Twin"));
+    const QString raw = QStringLiteral(
+        "HID Global OMNIKEY 5422 Smartcard Reader [OMNIKEY 5422 Smartcard Reader] (IM0O2C00NF10456904) 00 00");
+    FakeAgent::Config cfg;
+    cfg.hasCard = false;
+    cfg.readerName = raw;
+    cfg.readerModel = QStringLiteral("OMNIKEY 5422");
+    cfg.readerInterface = QStringLiteral("contact");
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+
+    auto handler = makeHandler(h);
+    ASSERT_TRUE(waitFor([&]() { return handler->availableReaderNames() == QStringList{raw}; }));
+    EXPECT_EQ(handler->readerDisplayName(raw), QStringLiteral("OMNIKEY 5422 — contact"));
+
+    // The name a view lists by stays; the label under it changes, and the view
+    // is told so it asks again.
+    QSignalSpy listed(handler.get(), &SmartCardHandler::availableReaderNamesChanged);
+    h.emitReaderRelabelled(QStringLiteral("OMNIKEY 5422 (4569)"), QStringLiteral("contactless"));
+    ASSERT_TRUE(waitFor([&]() {
+        return handler->readerDisplayName(raw) == QStringLiteral("OMNIKEY 5422 (4569) — contactless");
+    })) << "label is still "
+        << handler->readerDisplayName(raw).toStdString();
+    EXPECT_GE(listed.count(), 1) << "a relabelled reader must reach a view that already lists it";
+    EXPECT_EQ(handler->availableReaderNames(), QStringList{raw});
 }
 
-// A lone reader with no contactless sibling gets no "— contact" suffix; a lone
-// contactless reader is still marked (a meaningful attribute).
-TEST(SmartCardHandler, ReaderDisplayLabelsLoneReaders)
+// A reader the agent sends no label for shows its name as the agent has it:
+// the client library hands the name back as the model, and nothing here
+// shortens it by a rule of its own.
+TEST(SmartCardHandler, AReaderTheAgentLeavesUnlabelledShowsItsName)
 {
-    const QStringList out = SmartCardHandler::readerDisplayLabels(
-        {QStringLiteral("HID Global OMNIKEY 5422 Smartcard Reader [OMNIKEY 5422 Smartcard Reader] (SER) 01 00")});
-    ASSERT_EQ(out.size(), 1);
-    EXPECT_EQ(out.at(0), QStringLiteral("OMNIKEY 5422"));
+    const QString raw = QStringLiteral("Gemalto PC Twin Reader (69988A87) 00 00");
+    FakeAgent::Config cfg;
+    cfg.hasCard = false;
+    cfg.readerName = raw;
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
 
-    const QStringList cl = SmartCardHandler::readerDisplayLabels(
-        {QStringLiteral("HID Global OMNIKEY 5422 Smartcard Reader [OMNIKEY 5422CL Smartcard Reader] (SER) 00 00")});
-    ASSERT_EQ(cl.size(), 1);
-    EXPECT_EQ(cl.at(0), QStringLiteral("OMNIKEY 5422 — contactless"));
-}
-
-// Never empty, never colliding: two identical devices get disambiguated, and an
-// unparseable name falls back to itself.
-TEST(SmartCardHandler, ReaderDisplayLabelsUniqueAndSafe)
-{
-    // Two identical models on different physical readers (distinct serials): the
-    // labels must not collide.
-    const QStringList twins = SmartCardHandler::readerDisplayLabels({
-        QStringLiteral("Gemalto PC Twin Reader (AAAA1111) 00 00"),
-        QStringLiteral("Gemalto PC Twin Reader (BBBB2222) 01 00"),
-    });
-    ASSERT_EQ(twins.size(), 2);
-    EXPECT_NE(twins.at(0), twins.at(1)) << "identical models must be disambiguated";
-    EXPECT_TRUE(twins.at(0).startsWith(QStringLiteral("Gemalto PC Twin")));
-
-    // Two same-model units REPORTING THE SAME serial: the serial-tail form
-    // collides for the second unit, and with that shared tail being "2" the
-    // 1-based index fallback reproduces the very label it flees — the guard
-    // must keep re-validating until a genuinely unique label comes out.
-    const QStringList sameSerial = SmartCardHandler::readerDisplayLabels({
-        QStringLiteral("Alpha (2) 00 00"),
-        QStringLiteral("Alpha (2) 01 00"),
-    });
-    ASSERT_EQ(sameSerial.size(), 2);
-    EXPECT_NE(sameSerial.at(0), sameSerial.at(1))
-        << "the disambiguated fallback must itself be re-checked for uniqueness";
-
-    // A name that yields nothing after cleaning falls back to the raw string.
-    const QStringList odd = SmartCardHandler::readerDisplayLabels({QStringLiteral("Reader")});
-    ASSERT_EQ(odd.size(), 1);
-    EXPECT_FALSE(odd.at(0).isEmpty());
-
-    EXPECT_TRUE(SmartCardHandler::readerDisplayLabels({}).isEmpty());
+    auto handler = makeHandler(h);
+    ASSERT_TRUE(waitFor([&]() { return handler->availableReaderNames() == QStringList{raw}; }));
+    EXPECT_EQ(handler->readerDisplayName(raw), raw);
+    // A name no reader in the roster carries is shown as it is.
+    EXPECT_EQ(handler->readerDisplayName(QStringLiteral("Ghost Reader")), QStringLiteral("Ghost Reader"));
 }
 
 TEST(SmartCardHandler, HybridCardClassifiesHybrid)
@@ -579,17 +559,30 @@ TEST(SmartCardHandler, ErrorOnOperationFinishedNonOk)
     EXPECT_FALSE(handler->errorMessage().isEmpty());
 }
 
-// The composed copy rule's FLOOR: a read that finishes non-Ok must never leave
-// the banner blank, whatever its outcome carried. This fixture is the worst case
-// the rule exists for — a wire cancel, whose terminal carries no error code, no
-// call classification and no agent message at all (the fake sends msgKey /
-// msgFallback only for an Error terminal) — so every axis the copy could be
-// drawn from is empty and the rule's own localized floor is the only thing left.
-//
-// Resolving this through the error code alone renders NOTHING, and ErrorState's
-// banner comes up empty in a state whose whole job is to say what went wrong.
-// That is what this pins.
-TEST(SmartCardHandler, CancelledReadStillCarriesNonEmptyErrorCopy)
+// A card announcing an unlock method this build has no name for still needs
+// unlocking: the widget waits for the user's explicit read instead of reading
+// the card as if it needed nothing.
+TEST(SmartCardHandler, AnUnnamedUnlockMethodStillRequiresAnUnlock)
+{
+    FakeAgent::Config cfg;
+    cfg.capabilities = Client::Cap::IdentityData;
+    cfg.preReadAuth = QStringLiteral("Biometric"); // a method appended to the wire later
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+
+    auto handler = makeHandler(h);
+    handler->setViewActive(true);
+    ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PreAuthRequired); }));
+    waitFor([]() { return false; }, 200);
+    EXPECT_EQ(handler->state(), static_cast<int>(State::PreAuthRequired));
+    EXPECT_FALSE(handler->busy()) << "the card was read without the unlock it announced";
+    EXPECT_FALSE(handler->hasIdentity());
+}
+
+// The holder dismissing the agent's CAN prompt cancels the read on the wire:
+// the terminal carries no error code, no call classification and no message.
+// Nothing failed, so the widget goes back to the unlock button it started
+// from — not to an error page — and releases the busy latch.
+TEST(SmartCardHandler, CancelledReadReturnsToTheUnlockPrompt)
 {
     FakeAgent::Config cfg;
     cfg.capabilities = Client::Cap::IdentityData;
@@ -602,10 +595,35 @@ TEST(SmartCardHandler, CancelledReadStillCarriesNonEmptyErrorCopy)
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PreAuthRequired); }));
 
     handler->readIdentity();
-    ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::Error); }));
-    EXPECT_FALSE(handler->errorMessage().isEmpty())
-        << "a cancelled read must still draw copy from the shared rule's floor, never a blank banner";
-    EXPECT_FALSE(handler->busy()) << "the terminal must release the busy latch on a cancel too";
+    ASSERT_TRUE(waitFor([&]() { return !handler->busy(); }));
+    // Let any late transition land before judging the state.
+    waitFor([]() { return false; }, 100);
+    EXPECT_EQ(handler->state(), static_cast<int>(State::PreAuthRequired));
+    EXPECT_TRUE(handler->errorMessage().isEmpty());
+}
+
+// An agent that holds the bus name but never reports on a read must not leave
+// the widget busy for good — a latched busy disables the "Read card" button.
+// The bound is the client library's stall budget (shortened here so the test
+// does not wait the full production budget): the read ends as an error and the
+// latch is released.
+TEST(SmartCardHandler, ASilentReadReleasesTheBusyLatch)
+{
+    FakeAgent::Config cfg;
+    cfg.capabilities = Client::Cap::IdentityData;
+    cfg.preReadAuth = QStringLiteral("Can"); // an EXPLICIT read
+    cfg.operationDelayMs = 60000;            // the op never finishes and reports nothing
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+
+    auto handler = makeHandler(h);
+    handler->setOperationStallBudget(300);
+    ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PreAuthRequired); }));
+
+    handler->readIdentity();
+    ASSERT_TRUE(handler->busy());
+    EXPECT_TRUE(waitFor([&]() { return !handler->busy(); }, 3000)) << "a silent read kept the widget busy";
+    EXPECT_EQ(handler->state(), static_cast<int>(State::Error));
+    EXPECT_FALSE(handler->errorMessage().isEmpty());
 }
 
 // On a successful identity read the handler ALSO fires a best-effort GetPhoto;
@@ -639,6 +657,31 @@ TEST(SmartCardHandler, ReadIdentityCapturesCardPhoto)
     const QImage stored = handler->photoStore()->image(handler->photoSlot());
     EXPECT_FALSE(stored.isNull());
     EXPECT_EQ(stored.size(), QSize(2, 2));
+}
+
+// A finished identity or photo read is released, not kept until the card is
+// pulled: the operation holds the holder's whole identity (and the photo
+// descriptor), and the widget lives as long as the desktop session does.
+TEST(SmartCardHandler, FinishedReadsAreReleased)
+{
+    FakeAgent::Config cfg;
+    cfg.capabilities = Client::Cap::IdentityData;
+    cfg.preReadAuth = QStringLiteral("Can");
+    cfg.operationDelayMs = 5;
+    cfg.finalStatus = 0; // Ok
+    cfg.photoBytes = tinyPngBytes();
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+
+    auto client = std::make_shared<Client::AgentClient>();
+    SmartCardHandler handler(client);
+    ASSERT_TRUE(waitFor([&]() { return handler.state() == static_cast<int>(State::PreAuthRequired); }));
+    Client::AgentCard* card = client->card(h.cardPath());
+    ASSERT_NE(card, nullptr);
+
+    handler.readIdentity();
+    ASSERT_TRUE(waitFor([&]() { return handler.hasCardPhoto(); }));
+    EXPECT_TRUE(waitFor([&]() { return card->findChildren<Client::AgentOperation*>().isEmpty(); }))
+        << card->findChildren<Client::AgentOperation*>().size() << " finished operation(s) still alive";
 }
 
 // Security-relevant PII invariant: the holder photo is scrubbed from the
@@ -782,32 +825,18 @@ TEST(SmartCardHandler, AgentUnavailableWhenServiceAbsent)
     ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::AgentUnavailable); }));
 }
 
-// Pure install probe: a data dir carrying the agent's D-Bus activation file (or
-// its systemd user unit) reads as "installed"; an empty dir reads as "not
-// installed" — the two cases the AgentUnavailable state must distinguish.
-TEST(SmartCardHandler, AgentServiceInstalledInDetectsActivationFileAndUnit)
+// Whether the agent is installed is the client library's answer about the
+// bus this widget talks to, not a scan of files on disk: on this private bus
+// nothing can start an agent, so the page must say "not installed" and point at
+// the installation guide — whatever service files the machine running the test
+// happens to carry.
+TEST(SmartCardHandler, NoAgentOnTheBusReadsAsNotInstalled)
 {
-    QTemporaryDir dbusDir;
-    ASSERT_TRUE(dbusDir.isValid());
-    ASSERT_TRUE(QDir(dbusDir.path()).mkpath(QStringLiteral("dbus-1/services")));
-    {
-        QFile svc(dbusDir.path() + QStringLiteral("/dbus-1/services/org.librescrs.Agent.service"));
-        ASSERT_TRUE(svc.open(QIODevice::WriteOnly));
-        svc.write("[D-BUS Service]\nName=org.librescrs.Agent\n");
-    }
-    EXPECT_TRUE(SmartCardHandler::agentServiceInstalledIn({dbusDir.path()}));
-
-    QTemporaryDir unitDir;
-    ASSERT_TRUE(QDir(unitDir.path()).mkpath(QStringLiteral("systemd/user")));
-    {
-        QFile unit(unitDir.path() + QStringLiteral("/systemd/user/librescrs-agent.service"));
-        ASSERT_TRUE(unit.open(QIODevice::WriteOnly));
-        unit.write("[Unit]\n");
-    }
-    EXPECT_TRUE(SmartCardHandler::agentServiceInstalledIn({unitDir.path()}));
-
-    QTemporaryDir emptyDir;
-    EXPECT_FALSE(SmartCardHandler::agentServiceInstalledIn({emptyDir.path()}));
+    SmartCardHandler handler(std::make_shared<Client::AgentClient>());
+    ASSERT_EQ(handler.state(), static_cast<int>(State::AgentUnavailable));
+    EXPECT_FALSE(handler.agentInstalled());
+    EXPECT_EQ(handler.installHelpUrl(), Client::AgentClient::installHelpUrl());
+    EXPECT_TRUE(handler.installHelpUrl().contains(QStringLiteral("install-agent")));
 }
 
 // A present card whose Capabilities are empty (no plugin matched) resolves to the
@@ -1729,6 +1758,39 @@ TEST(SmartCardHandler, LibreCelikDetectionReflectsPath)
     qputenv("PATH", savedPath);
 }
 
+// "Open in LibreCelik" starts LibreCelik with no arguments: LibreCelik reads
+// none (it shows its own reader pages), so a reader name on its command line
+// was a contract only this side knew about.
+TEST(SmartCardHandler, OpenInLibreCelikPassesNoReaderName)
+{
+    const QByteArray savedPath = qgetenv("PATH");
+    QTemporaryDir dir;
+    const QString argcFile = dir.filePath(QStringLiteral("argc"));
+    const QString exe = dir.filePath(QStringLiteral("librecelik"));
+    {
+        QFile f(exe);
+        ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+        f.write(QStringLiteral("#!/bin/sh\necho \"$#\" > '%1'\n").arg(argcFile).toUtf8());
+        f.close();
+        QFile::setPermissions(exe, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+    }
+    FakeAgent::Config cfg;
+    cfg.capabilities = Client::Cap::IdentityData;
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+
+    qputenv("PATH", dir.path().toLocal8Bit());
+    auto handler = makeHandler(h);
+    qputenv("PATH", savedPath);
+    ASSERT_TRUE(handler->libreCelikAvailable());
+    ASSERT_TRUE(waitFor([&]() { return !handler->readerName().isEmpty(); }));
+
+    handler->openInLibreCelik();
+    ASSERT_TRUE(waitFor([&]() { return QFile::exists(argcFile) && QFileInfo(argcFile).size() > 0; }));
+    QFile argc(argcFile);
+    ASSERT_TRUE(argc.open(QIODevice::ReadOnly));
+    EXPECT_EQ(argc.readAll().trimmed(), QByteArray("0"));
+}
+
 // busy latches true from readIdentity() until the read finishes.
 TEST(SmartCardHandler, BusyLatchesDuringRead)
 {
@@ -1838,8 +1900,7 @@ TEST(SmartCardHandler, BusyClearsWhenActiveCardSwitchedMidRead)
 // The plasmoid "Sign a file…" entry: signFile() drives the shared SignJob over
 // the handler's bound card, forwarding an input fd + the MIME-derived
 // {format,packaging} to Card1.Sign. The plasmoid injects its OWN non-QtWidgets
-// seams; SignJob auto-picks the lone signing cert (chooser never invoked) and the
-// temp output is fresh (overwrite confirmer never invoked), so no seam fires here.
+// seams; SignJob auto-picks the lone signing cert, so the chooser never fires.
 // Assert the wire Sign carries the right cert, options, and input bytes.
 TEST(SmartCardHandler, SignFileDrivesWireSign)
 {
@@ -1866,6 +1927,50 @@ TEST(SmartCardHandler, SignFileDrivesWireSign)
     EXPECT_EQ(opts.value(QStringLiteral("format")).toString(), QStringLiteral("pades"));
     EXPECT_EQ(opts.value(QStringLiteral("packaging")).toString(), QStringLiteral("enveloped"));
     EXPECT_EQ(h.lastSignInputBytes(), QByteArray("%PDF-1.4\nplasmoid\n"));
+}
+
+// The derived name can already belong to a file this widget never wrote: the
+// counterparty's signed copy, another tool's output, an earlier version that was
+// sent. Signing next to it must leave it alone and land on the first free
+// numbered sibling instead.
+TEST(SmartCardHandler, SignFileNeverReplacesAnExistingSignedFile)
+{
+    FakeAgent::Config cfg;
+    cfg.capabilities = Client::Cap::Pki;
+    cfg.certScript = {{QStringLiteral("cert-sign"), true, QStringLiteral("Signer")}};
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+
+    auto handler = makeHandler(h);
+    ASSERT_TRUE(waitFor([&]() { return handler->state() == static_cast<int>(State::PkiOnly); }));
+
+    QTemporaryDir dir;
+    const QString input = dir.filePath(QStringLiteral("contract.pdf"));
+    {
+        QFile f(input);
+        ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+        f.write("%PDF-1.4\nplasmoid\n");
+    }
+    const QString existing = dir.filePath(QStringLiteral("contract-signed.pdf"));
+    {
+        QFile f(existing);
+        ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+        f.write("SOMEONE ELSE'S SIGNED COPY");
+    }
+
+    handler->signFile(QUrl::fromLocalFile(input).toString());
+    ASSERT_TRUE(waitFor([&]() {
+        return handler->signResult().value(QStringLiteral("outcome")).toInt() ==
+               static_cast<int>(SmartCardHandler::SignOutcome::Succeeded);
+    }));
+
+    const QString sibling = dir.filePath(QStringLiteral("contract-signed (2).pdf"));
+    EXPECT_EQ(handler->signResult().value(QStringLiteral("outputPath")).toString(), sibling);
+    QFile kept(existing);
+    ASSERT_TRUE(kept.open(QIODevice::ReadOnly));
+    EXPECT_EQ(kept.readAll(), QByteArray("SOMEONE ELSE'S SIGNED COPY"));
+    QFile written(sibling);
+    ASSERT_TRUE(written.open(QIODevice::ReadOnly));
+    EXPECT_EQ(written.readAll(), QByteArray("FAKE-SIGNED-ARTIFACT"));
 }
 
 // A multi-signing-cert card signs with the deterministic FIRST cert — but the
@@ -2191,7 +2296,7 @@ TEST(SignParity, PlasmoidAndPurposeProduceIdenticalWireSign)
     ASSERT_NE(card2, nullptr);
     EXPECT_EQ(cardChooserCalls, 0) << "a single-card fixture must never raise the card chooser";
 
-    QTemporaryDir dirB; // different dir -> the second run never hits the overwrite seam
+    QTemporaryDir dirB; // different dir -> both runs write the same unnumbered name
     const QString inputB = dirB.filePath(QStringLiteral("doc.pdf"));
     {
         QFile fb(inputB);
@@ -2202,11 +2307,9 @@ TEST(SignParity, PlasmoidAndPurposeProduceIdenticalWireSign)
     CertChooser pickFirst = [](const QList<Client::CertificateInfo>& c) -> std::optional<QString> {
         return c.isEmpty() ? std::nullopt : std::optional<QString>(c.first().id);
     };
-    OverwriteConfirmer alwaysOverwrite = [](const QString&) { return true; };
     // Same shape as SignPurposeJob::start(): mimeType from Purpose data() (here
     // "application/pdf"), empty formatOverride.
-    auto* job =
-        new SignJob(card2, inputB, QStringLiteral("application/pdf"), QString(), pickFirst, alwaysOverwrite, client2);
+    auto* job = new SignJob(card2, inputB, QStringLiteral("application/pdf"), QString(), pickFirst, client2);
     bool done = false;
     QObject::connect(job, &SignJob::succeeded, client2, [&](const QString&) { done = true; });
     QObject::connect(job, &SignJob::failed, client2, [&](const QString&) { done = true; });

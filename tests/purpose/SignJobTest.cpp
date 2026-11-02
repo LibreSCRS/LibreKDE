@@ -4,7 +4,7 @@
 // Drives the agent-side SignJob end-to-end against the FakeAgent on a private
 // dbus-run-session bus (headless, offscreen). Covers: happy path writes the
 // right output name; non-Ok surfaces ErrorText; the one/multi/zero signing-cert
-// selection paths with an injected chooser; overwrite-prompt seam.
+// selection paths with an injected chooser; an existing output is never replaced.
 //
 // Uses the shared D-Bus harness (its FakeAgent peer + its QCoreApplication
 // TestMain), not a harness of its own.
@@ -63,16 +63,6 @@ CertChooser cancelChooser()
     return [](const QList<Client::CertificateInfo>&) -> std::optional<QString> { return std::nullopt; };
 }
 
-OverwriteConfirmer alwaysOverwrite()
-{
-    return [](const QString&) { return true; };
-}
-
-OverwriteConfirmer neverOverwrite()
-{
-    return [](const QString&) { return false; };
-}
-
 } // namespace
 
 // --- happy path: PDF → report-signed.pdf written next to the input ----------
@@ -94,7 +84,7 @@ TEST(SignJob, HappyPathWritesEnvelopedOutput)
     f.write("%PDF-1.4\n");
     f.close();
 
-    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), alwaysOverwrite());
+    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst());
     QSignalSpy ok(&job, &SignJob::succeeded);
     QSignalSpy bad(&job, &SignJob::failed);
     job.start();
@@ -137,7 +127,7 @@ TEST(SignJob, ExposesTheAgentsResolvedSignMetaAfterSuccess)
     f.write("%PDF-1.4\n");
     f.close();
 
-    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), alwaysOverwrite());
+    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst());
     QSignalSpy ok(&job, &SignJob::succeeded);
     job.start();
     ASSERT_TRUE(waitFor([&] { return ok.count() > 0; }));
@@ -163,7 +153,7 @@ TEST(SignJob, DoesNotOverrideTheAgentsConfiguredLevel)
     f.write("%PDF-1.4\n");
     f.close();
 
-    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), alwaysOverwrite());
+    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst());
     QSignalSpy ok(&job, &SignJob::succeeded);
     job.start();
     ASSERT_TRUE(waitFor([&] { return ok.count() > 0; }));
@@ -196,7 +186,7 @@ TEST(SignJob, RelaysPhaseChangedFromActiveOperation)
     f.write("%PDF-1.4\n");
     f.close();
 
-    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), alwaysOverwrite());
+    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst());
     QSignalSpy phaseSpy(&job, &SignJob::phaseChanged);
     job.start();
 
@@ -232,7 +222,7 @@ TEST(SignJob, CadesDetachedWritesP7sSidecar)
     f.write("\x01\x02\x03", 3);
     f.close();
 
-    SignJob job(card, input, QStringLiteral("application/octet-stream"), QString(), pickFirst(), alwaysOverwrite());
+    SignJob job(card, input, QStringLiteral("application/octet-stream"), QString(), pickFirst());
     QSignalSpy ok(&job, &SignJob::succeeded);
     job.start();
     ASSERT_TRUE(waitFor([&] { return ok.count() > 0; }));
@@ -261,7 +251,7 @@ TEST(SignJob, SignFailureSurfacesErrorText)
     f.write("%PDF-1.4\n");
     f.close();
 
-    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), alwaysOverwrite());
+    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst());
     QSignalSpy ok(&job, &SignJob::succeeded);
     QSignalSpy bad(&job, &SignJob::failed);
     job.start();
@@ -294,13 +284,13 @@ TEST(SignJob, SurfacesAgentMessageForGenericEngineError)
     f.write("%PDF-1.4\n");
     f.close();
 
-    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), alwaysOverwrite());
+    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst());
     QSignalSpy bad(&job, &SignJob::failed);
     job.start();
     ASSERT_TRUE(waitFor([&] { return bad.count() > 0; }));
-    // The agent's specific message ("agent fallback") is surfaced, NOT the
-    // hardcoded generic — the ErrorText generic engine code defers to it.
-    EXPECT_EQ(bad.at(0).at(0).toString(), QStringLiteral("agent fallback"));
+    // The agent's specific message ("agent fallback") is surfaced below the
+    // localized headline for the code, not replaced by it.
+    EXPECT_EQ(bad.at(0).at(0).toString(), QStringLiteral("The signing engine reported an error.\nagent fallback"));
 }
 
 TEST(SignJob, SurfacesConfigStringForEngineUnavailable)
@@ -322,7 +312,7 @@ TEST(SignJob, SurfacesConfigStringForEngineUnavailable)
     f.write("%PDF-1.4\n");
     f.close();
 
-    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), alwaysOverwrite());
+    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst());
     QSignalSpy bad(&job, &SignJob::failed);
     job.start();
     ASSERT_TRUE(waitFor([&] { return bad.count() > 0; }));
@@ -355,7 +345,7 @@ TEST(SignJob, SurfacesLocalizedStringForInvalidDocument)
     f.write("%PDF-1.4\n");
     f.close();
 
-    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), alwaysOverwrite());
+    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst());
     QSignalSpy bad(&job, &SignJob::failed);
     job.start();
     ASSERT_TRUE(waitFor([&] { return bad.count() > 0; }));
@@ -393,7 +383,7 @@ TEST(SignJob, MultipleCertsUsesChooser)
         return QStringLiteral("cert-B");
     };
 
-    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), chooser, alwaysOverwrite());
+    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), chooser);
     QSignalSpy ok(&job, &SignJob::succeeded);
     job.start();
     ASSERT_TRUE(waitFor([&] { return ok.count() > 0; }));
@@ -424,7 +414,7 @@ TEST(SignJob, ChooserCancelAborts)
     f.write("%PDF-1.4\n");
     f.close();
 
-    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), cancelChooser(), alwaysOverwrite());
+    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), cancelChooser());
     QSignalSpy ok(&job, &SignJob::succeeded);
     QSignalSpy bad(&job, &SignJob::failed);
     job.start();
@@ -454,7 +444,7 @@ TEST(SignJob, NoSigningCertSurfacesCapabilityMissing)
     f.write("%PDF-1.4\n");
     f.close();
 
-    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), alwaysOverwrite());
+    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst());
     QSignalSpy ok(&job, &SignJob::succeeded);
     QSignalSpy bad(&job, &SignJob::failed);
     job.start();
@@ -515,7 +505,7 @@ TEST(SignJob, CardRemovedDuringChooserFailsCleanly)
         return cands.isEmpty() ? std::nullopt : std::optional<QString>(cands.first().id);
     };
 
-    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pullThenChoose, alwaysOverwrite());
+    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pullThenChoose);
     QSignalSpy ok(&job, &SignJob::succeeded);
     QSignalSpy bad(&job, &SignJob::failed);
     job.start();
@@ -558,7 +548,7 @@ TEST(SignJob, FinishedBeforeSubscribeRaceStillReachesJobNoHang)
     f.write("%PDF-1.4\n");
     f.close();
 
-    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), alwaysOverwrite());
+    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst());
     QSignalSpy ok(&job, &SignJob::succeeded);
     QSignalSpy bad(&job, &SignJob::failed);
     job.start();
@@ -595,7 +585,7 @@ TEST(SignJob, CardRemovedMidOperationFailsCleanlyNoHang)
     f.write("%PDF-1.4\n");
     f.close();
 
-    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), alwaysOverwrite());
+    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst());
     QSignalSpy ok(&job, &SignJob::succeeded);
     QSignalSpy bad(&job, &SignJob::failed);
     job.start();
@@ -614,9 +604,9 @@ TEST(SignJob, CardRemovedMidOperationFailsCleanlyNoHang)
     EXPECT_FALSE(QFile::exists(dir.filePath(QStringLiteral("report-signed.pdf")))); // nothing written
 }
 
-// --- overwrite declined: existing output is left untouched ------------------
+// --- a taken name: the existing file stays, the signature goes beside it -------
 
-TEST(SignJob, OverwriteDeclinedAborts)
+TEST(SignJob, AnExistingOutputIsNeverReplaced)
 {
     FakeAgent::Config cfg;
     cfg.capabilities = Client::Cap::Pki;
@@ -632,23 +622,85 @@ TEST(SignJob, OverwriteDeclinedAborts)
     ASSERT_TRUE(f.open(QIODevice::WriteOnly));
     f.write("%PDF-1.4\n");
     f.close();
-
-    // Pre-create the output so the confirmer path fires.
-    const QString out = dir.filePath(QStringLiteral("report-signed.pdf"));
-    QFile pre(out);
+    const QString taken = dir.filePath(QStringLiteral("report-signed.pdf"));
+    QFile pre(taken);
     ASSERT_TRUE(pre.open(QIODevice::WriteOnly));
     pre.write("OLD");
     pre.close();
 
-    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst(), neverOverwrite());
+    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst());
     QSignalSpy ok(&job, &SignJob::succeeded);
     QSignalSpy bad(&job, &SignJob::failed);
     job.start();
     ASSERT_TRUE(waitFor([&] { return ok.count() + bad.count() > 0; }));
-    EXPECT_EQ(ok.count(), 0);
-    EXPECT_EQ(bad.count(), 1);
+    ASSERT_EQ(ok.count(), 1);
+    EXPECT_EQ(job.outputPath(), dir.filePath(QStringLiteral("report-signed (2).pdf")));
 
-    QFile of(out);
+    QFile of(taken);
     ASSERT_TRUE(of.open(QIODevice::ReadOnly));
-    EXPECT_EQ(of.readAll(), QByteArray("OLD")); // untouched
+    EXPECT_EQ(of.readAll(), QByteArray("OLD"));
+}
+
+// --- the shared naming rule: a detached XAdES is `<name>.xsig` ---------------
+
+TEST(SignJob, XadesDetachedWritesXsigSidecar)
+{
+    FakeAgent::Config cfg;
+    cfg.capabilities = Client::Cap::Pki;
+    cfg.certScript = {{QStringLiteral("cert-A"), true, QStringLiteral("Ana")}};
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
+    Client::AgentCard* card = client.card(h.cardPath());
+    ASSERT_NE(card, nullptr);
+
+    QTemporaryDir dir;
+    const QString input = dir.filePath(QStringLiteral("invoice.xml"));
+    QFile f(input);
+    ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+    f.write("<invoice/>");
+    f.close();
+
+    SignJob job(card, input, QStringLiteral("application/xml"), QString(), pickFirst());
+    QSignalSpy ok(&job, &SignJob::succeeded);
+    job.start();
+    ASSERT_TRUE(waitFor([&] { return ok.count() > 0; }));
+    EXPECT_EQ(job.outputPath(), dir.filePath(QStringLiteral("invoice.xml.xsig")));
+}
+
+// --- a signature that carries nothing is no signature -------------------------
+
+// The agent answered Ok but the artifact it sealed is empty. Writing it would
+// leave a zero-byte `report-signed.pdf` that reads as the signed copy; the job
+// fails instead, and no file is left under any name.
+TEST(SignJob, AnEmptySignatureIsAFailureAndLeavesNoFile)
+{
+    FakeAgent::Config cfg;
+    cfg.capabilities = Client::Cap::Pki;
+    cfg.certScript = {{QStringLiteral("cert-A"), true, QStringLiteral("Ana")}};
+    cfg.signArtifactBytes = QByteArray();
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    Client::AgentClient client;
+    Client::AgentCard* card = client.card(h.cardPath());
+    ASSERT_NE(card, nullptr);
+
+    QTemporaryDir dir;
+    const QString input = dir.filePath(QStringLiteral("report.pdf"));
+    QFile f(input);
+    ASSERT_TRUE(f.open(QIODevice::WriteOnly));
+    f.write("%PDF-1.4\n");
+    f.close();
+
+    SignJob job(card, input, QStringLiteral("application/pdf"), QString(), pickFirst());
+    QSignalSpy ok(&job, &SignJob::succeeded);
+    QSignalSpy bad(&job, &SignJob::failed);
+    job.start();
+    ASSERT_TRUE(waitFor([&] { return ok.count() + bad.count() > 0; }));
+    EXPECT_EQ(ok.count(), 0) << "an empty artifact was reported as a signature at " << job.outputPath().toStdString();
+    ASSERT_EQ(bad.count(), 1);
+    // Said as what happened -- an empty signature -- not as a failed write.
+    const QString message = bad.first().first().toString();
+    EXPECT_EQ(message, QStringLiteral("The signature for report.pdf came back empty, so no signed file was saved."));
+    EXPECT_TRUE(job.outputPath().isEmpty());
+    EXPECT_EQ(QDir(dir.path()).entryList(QDir::Files | QDir::Hidden), QStringList{QStringLiteral("report.pdf")})
+        << "nothing but the input may be left in the folder";
 }

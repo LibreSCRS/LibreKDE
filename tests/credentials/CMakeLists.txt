@@ -42,11 +42,27 @@ target_link_libraries(CredentialControllerTest PRIVATE
     Qt6::Core Qt6::DBus Qt6::Test
 )
 target_compile_features(CredentialControllerTest PRIVATE cxx_std_23)
-librekde_private_session_bus(CredentialControllerTest)
+libreagent_private_session_bus(CredentialControllerTest)
 # A wedged test under dbus-run-session must fail in minutes, not consume the
 # runner's whole wall: every bus-backed test here carries an explicit timeout.
 libreagent_gtest_discover_tests(CredentialControllerTest
-    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en;${LIBREKDE_PRIVATE_BUS_ENV}"
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en;${LIBREAGENT_PRIVATE_BUS_ENV}"
+    PROPERTIES TIMEOUT 120)
+
+# "Start service" against a session bus on which the agent is installed but not
+# running (librekde_activatable_agent_bus, tests/CMakeLists.txt).
+add_executable(CredentialAgentStartTest
+    CredentialAgentStartTest.cpp
+)
+target_link_libraries(CredentialAgentStartTest PRIVATE
+    GTest::gtest credentials-core LibreAgent::ClientQt librekde-agentclient
+    librekde-test-support librekde-test-main
+    Qt6::Core Qt6::DBus Qt6::Test
+)
+target_compile_features(CredentialAgentStartTest PRIVATE cxx_std_23)
+librekde_activatable_agent_bus(CredentialAgentStartTest)
+libreagent_gtest_discover_tests(CredentialAgentStartTest
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en;${LIBREAGENT_PRIVATE_BUS_ENV}"
     PROPERTIES TIMEOUT 120)
 
 # Capstone E2E — the full credential-lifecycle flow (list → manage → result →
@@ -62,9 +78,9 @@ target_link_libraries(CredentialsE2ETest PRIVATE
     Qt6::Core Qt6::DBus Qt6::Test
 )
 target_compile_features(CredentialsE2ETest PRIVATE cxx_std_23)
-librekde_private_session_bus(CredentialsE2ETest)
+libreagent_private_session_bus(CredentialsE2ETest)
 libreagent_gtest_discover_tests(CredentialsE2ETest
-    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en;${LIBREKDE_PRIVATE_BUS_ENV}"
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en;${LIBREAGENT_PRIVATE_BUS_ENV}"
     PROPERTIES TIMEOUT 120)
 
 # Credential guidance/state resolver — proves the two frozen guidance keys the

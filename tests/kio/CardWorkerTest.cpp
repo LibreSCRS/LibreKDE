@@ -84,7 +84,7 @@ protected:
 
 CardPresence presence(const QString& reader, const QString& path, std::uint32_t caps, const QString& preAuth)
 {
-    return CardPresence{reader, path, caps, preAuth};
+    return CardPresence{reader, path, caps, preAuth, QString()};
 }
 
 // A SIGNING certificate's KeyUsage: digitalSignature + nonRepudiation (ordinals
@@ -477,4 +477,30 @@ TEST(CardWorker, UnknownPathErrors)
     EXPECT_EQ(w.stat(QUrl(QStringLiteral("card:/Nope"))).error(), KIO::ERR_DOES_NOT_EXIST);
     // PKI-only card has no Identity dir.
     EXPECT_EQ(w.stat(QUrl(QStringLiteral("card:/R/Identity"))).error(), KIO::ERR_DOES_NOT_EXIST);
+}
+
+// card:/ with no agent to ask is not an empty card folder: the user is told
+// whether the service is merely not running or not installed at all (with the
+// installation guide), instead of looking at a folder that says "no cards".
+TEST(CardWorker, RootWithoutAnAgentSaysWhyInsteadOfListingNothing)
+{
+    FakeCardDataSource src({});
+    TestableCardWorker w(src);
+
+    src.setAgentState(Client::AgentState::Missing);
+    const KIO::WorkerResult missing = w.listDir(QUrl(QStringLiteral("card:/")));
+    EXPECT_FALSE(missing.success());
+    EXPECT_EQ(missing.error(), KIO::ERR_WORKER_DEFINED);
+    EXPECT_TRUE(missing.errorString().contains(Client::AgentClient::installHelpUrl()));
+
+    src.setAgentState(Client::AgentState::Stopped);
+    const KIO::WorkerResult stopped = w.listDir(QUrl(QStringLiteral("card:/")));
+    EXPECT_FALSE(stopped.success());
+    EXPECT_EQ(stopped.error(), KIO::ERR_WORKER_DEFINED);
+    EXPECT_NE(stopped.errorString(), missing.errorString());
+
+    // An agent that runs and sees no card: an empty folder, which is the truth.
+    src.setAgentState(Client::AgentState::Ready);
+    EXPECT_TRUE(w.listDir(QUrl(QStringLiteral("card:/"))).success());
+    EXPECT_TRUE(w.listedNames.isEmpty());
 }

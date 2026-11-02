@@ -11,10 +11,11 @@
 #include <optional>
 
 /// @file
-/// @brief Injectable seams for the two interactive decisions in a sign flow —
-///        which signing certificate to use, and whether to overwrite an
-///        existing output file. The Job takes these as std::function so tests
-///        drive them headlessly and the real plugin wires them to KF6 dialogs.
+/// @brief Injectable seams for the interactive decisions in a sign flow —
+///        which card and which signing certificate to use. The Job takes these
+///        as std::function so tests drive them headlessly and the real plugin
+///        wires them to KF6 dialogs. There is no overwrite decision to inject:
+///        the signed output never replaces an existing file.
 
 namespace LibreKDE {
 
@@ -25,12 +26,6 @@ namespace LibreKDE {
 /// is present; a single candidate is auto-selected without a prompt.
 using CertChooser =
     std::function<std::optional<QString>(const QList<LibreSCRS::AgentClient::CertificateInfo>& candidates)>;
-
-/// @brief Confirm overwriting @p outputPath (an absolute path that already
-///        exists). Return true to overwrite, false to abort. Never called when
-///        the target does not yet exist. The input is never modified in place,
-///        so this only ever guards the derived signed-output filename.
-using OverwriteConfirmer = std::function<bool(const QString& outputPath)>;
 
 /// @brief One signing-capable card offered to a `CardChooser`.
 ///

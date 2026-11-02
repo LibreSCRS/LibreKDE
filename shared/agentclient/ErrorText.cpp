@@ -3,6 +3,8 @@
 
 #include "ErrorText.h"
 
+#include <LibreSCRS/AgentClient/FailureCopy.h>
+
 #include <KLocalizedString>
 
 #include <optional>
@@ -101,19 +103,11 @@ using LibreSCRS::AgentClient::ErrorCode;
 ///        not name the code at all.
 ///
 /// Engaged means "this client decided what to say about this code". Disengaged
-/// means the opposite — `None`, or a code an agent newer than this build appended
-/// — and it is a genuinely different fact from "decided to echo the agent's
-/// message", which is what `SigningEngineError` deliberately does.
-///
-/// Collapsing those two into one string is what let an unnamed code hand a
-/// caller its own @p msgFallback back while looking like a mapping result, so
-/// the distinction is carried in the type rather than reconstructed downstream
-/// by testing the returned string for emptiness.
-///
-/// Every engaged value is non-blank, provided @p msgFallback is itself either
-/// empty or non-blank: `ki18nd("librekde", msgid).toString()` yields the
-/// translation or the English msgid on a catalog miss, never empty.
-[[nodiscard]] std::optional<QString> localizedCopyFor(ErrorCode code, const QString& msgFallback)
+/// means the opposite — `None`, or a code an agent newer than this build
+/// appended. Every engaged value is non-blank: `ki18nd("librekde",
+/// msgid).toString()` yields the translation or the English msgid on a catalog
+/// miss, never empty.
+[[nodiscard]] std::optional<QString> localizedCopyFor(ErrorCode code)
 {
     // Only the codes a client can meaningfully phrase synchronously are
     // localized here; everything else (and None) is not this file's to name.
@@ -149,16 +143,9 @@ using LibreSCRS::AgentClient::ErrorCode;
     case ErrorCode::TsaUnreachable:
         return ki18nd("librekde", "The timestamp authority is unreachable.").toString();
     case ErrorCode::SigningEngineError:
-        // The catch-all engine code defers to the agent's own message when it
-        // carried one, matching the None-defers-to-msgFallback rule below.
-        // Today the agent's msgFallback for this code is usually the LM's own
-        // (near-identical, English) generic, so the practical win is small — the
-        // common deployment failure is separated out to its own LOCALIZED
-        // EngineUnavailable code. This branch keeps the door open for
-        // an agent that sends a genuinely specific message on this code without
-        // the client having to hardcode-flatten it.
-        return msgFallback.isEmpty() ? ki18nd("librekde", "The signing engine reported an error.").toString()
-                                     : msgFallback;
+        // The catch-all engine code: the agent's message, shown below this
+        // headline, names the actual engine complaint.
+        return ki18nd("librekde", "The signing engine reported an error.").toString();
     case ErrorCode::InvalidDocument:
         return ki18nd("librekde", "The document you tried to sign is invalid or could not be read. Check the file.")
             .toString();
@@ -179,8 +166,8 @@ using LibreSCRS::AgentClient::ErrorCode;
         // rejecting it, and its header therefore obliges every switch over the
         // type to carry a `default:` arm and treat an unrecognised value as
         // opaque display/log data. Falling here is the disengaged answer — this
-        // build has no copy for that code — which is exactly how the resolution
-        // order in `forOutcome` wants an unnamed code handled.
+        // build has no copy for that code — and `forOutcome` puts the generic
+        // sentence in its place, above whatever the agent said about it.
         //
         // The cost of this arm is that a code APPENDED to the client library is
         // no longer a `-Wswitch` diagnostic here. That guard moves wholesale to
@@ -191,47 +178,67 @@ using LibreSCRS::AgentClient::ErrorCode;
     return std::nullopt;
 }
 
+/// @brief This client's sentence for one of the agent's message keys the
+///        client library says a client localizes (`kLocalizedMessageKeys`).
+///
+/// Three keys name exactly the failure a code of their own names, so they
+/// share that code's sentence; the other two report no code at all.
+[[nodiscard]] QString forMessageKey(const QString& key)
+{
+    if (key == QLatin1StringView("op.cancelled")) {
+        return ki18ndc("librekde", "@info:status the operation was cancelled", "The operation was cancelled.")
+            .toString();
+    }
+    if (key == QLatin1StringView("op.helper_too_old")) {
+        return ki18ndc("librekde", "@info:status the installed PIN entry helper is older than the smart-card service",
+                       "The secure entry prompt is out of date. Update the smart-card service.")
+            .toString();
+    }
+    if (key == QLatin1StringView("op.card_removed")) {
+        return *localizedCopyFor(ErrorCode::CardRemoved);
+    }
+    if (key == QLatin1StringView("op.entry_expired")) {
+        return *localizedCopyFor(ErrorCode::EntryExpired);
+    }
+    if (key == QLatin1StringView("op.watchdog_timeout")) {
+        return *localizedCopyFor(ErrorCode::WatchdogTimeout);
+    }
+    return genericFailure();
+}
+
 } // namespace
 
 QString forCode(ErrorCode code, const QString& msgFallback)
 {
-    return localizedCopyFor(code, msgFallback).value_or(msgFallback);
+    return localizedCopyFor(code).value_or(msgFallback);
 }
 
-QString forOutcome(ErrorCode code, CallError call, const QString& msgFallback)
+QString forOutcome(ErrorCode code, CallError call, const QString& messageKey, const QString& msgFallback)
 {
-    // A whitespace-only agent message is not a message. It is non-empty by
-    // QString's reckoning and blank by the user's, which is the outcome this
-    // function exists to prevent — so it is treated as ABSENT here, once, and
-    // every arm below sees either a real message or none at all. Normalizing at
-    // the top rather than per-arm also keeps `localizedCopyFor`'s
-    // SigningEngineError decision ("defer to the agent's message when it sent
-    // one") from deferring to whitespace.
-    const QString message = msgFallback.trimmed().isEmpty() ? QString() : msgFallback;
-
-    // Arm 1 — the agent's own taxonomy, when this client names the code.
-    // `localizedCopyFor` is disengaged (rather than echoing @p message) for a
-    // code it does not name, so an unnamed code cannot short-circuit the order
-    // and hand a user the raw transport string that arm 2 exists to replace.
-    // Every engaged value is non-blank, so no emptiness re-check is needed here
-    // — the type carries what a string comparison used to guess.
-    if (const std::optional<QString> named = localizedCopyFor(code, message)) {
-        return *named;
+    // Which part of the report a user reads is decided once, by the client
+    // library, for every client of the agent; this keeps only the sentences.
+    const LibreSCRS::AgentClient::FailureCopy copy =
+        LibreSCRS::AgentClient::describeFailure(code, call, messageKey, msgFallback);
+    switch (copy.source) {
+    case LibreSCRS::AgentClient::FailureSource::MessageKey:
+        return forMessageKey(copy.messageKey);
+    case LibreSCRS::AgentClient::FailureSource::ErrorCode: {
+        // The localized headline; the agent's own English line, when it said
+        // more than the headline, is the only specific record of the failure
+        // and stays below it. A code this build does not name gets the generic.
+        const QString headline = localizedCopyFor(copy.errorCode).value_or(genericFailure());
+        if (copy.detail.isEmpty() || copy.detail == headline) {
+            return headline;
+        }
+        return headline + QLatin1Char('\n') + copy.detail;
     }
-    // Arm 2 — the transport axis, ahead of the fallback string. Every route
-    // that classifies here reaches this function with a fallback that is either
-    // empty or a developer/bus diagnostic, so preferring the fallback would be
-    // preferring untranslated developer text over localized copy.
-    if (call != CallError::None) {
-        return forCallError(call);
+    case LibreSCRS::AgentClient::FailureSource::AgentMessage:
+        return copy.detail;
+    case LibreSCRS::AgentClient::FailureSource::Transport:
+        return forCallError(copy.callError);
+    case LibreSCRS::AgentClient::FailureSource::Generic:
+        break;
     }
-    // Arm 3 — the agent's authored message. Reached only when the agent
-    // answered and neither classification axis named the failure, so this
-    // string is agent-authored user copy rather than a transport diagnostic.
-    if (!message.isEmpty()) {
-        return message;
-    }
-    // Arm 4 — nothing classified and nothing was said.
     return genericFailure();
 }
 

@@ -25,11 +25,11 @@ class AgentCardDataSource : public CardDataSource
 {
 public:
     /// @brief Borrow a live client (owned by the worker). Does no I/O at
-    ///        construction. Uses the production op-stall backstop, seeded from
-    ///        the client library's long-operation budget.
+    ///        construction. Each operation keeps the client library's stall
+    ///        bound at its default (`kLongOperationTimeoutMs`).
     explicit AgentCardDataSource(LibreSCRS::AgentClient::AgentClient& client);
-    /// @brief Test seam: inject a short op-stall backstop so a machine-phase stall
-    ///        surfaces fast (a real read never trips the production 35 s backstop).
+    /// @brief Test seam: a shorter stall bound on each operation, so a silent
+    ///        machine phase surfaces fast.
     AgentCardDataSource(LibreSCRS::AgentClient::AgentClient& client, int opStallTimeoutMs);
     ~AgentCardDataSource() override;
 
@@ -38,6 +38,7 @@ public:
     [[nodiscard]] CertListResult readCertificates(const QString& cardId) override;
     [[nodiscard]] PhotoResult getPhoto(const QString& cardId) override;
     [[nodiscard]] CertDerResult getCertificateDer(const QString& cardId, const QString& certId) override;
+    [[nodiscard]] LibreSCRS::AgentClient::AgentState agentState() const override;
 
 private:
     LibreSCRS::AgentClient::AgentClient& m_client;

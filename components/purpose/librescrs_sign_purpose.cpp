@@ -87,8 +87,8 @@ void SignPurposeJob::start()
         return;
     }
 
-    m_signJob = new LibreKDE::SignJob(card, inputPath, mimeType, QString(), LibreKDE::Signing::widgetCertChooser(),
-                                      LibreKDE::Signing::widgetOverwriteConfirmer(), this);
+    m_signJob =
+        new LibreKDE::SignJob(card, inputPath, mimeType, QString(), LibreKDE::Signing::widgetCertChooser(), this);
     connect(m_signJob, &LibreKDE::SignJob::succeeded, this, [this](const QString& outputPath) {
         QJsonObject out;
         out.insert(QStringLiteral("url"), QUrl::fromLocalFile(outputPath).toString());
