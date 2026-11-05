@@ -7,7 +7,6 @@ ecm_qt_declare_logging_category(PlasmoidLogging_SRCS
     HEADER plasmoid_log_categories.h
     IDENTIFIER LibreKDE::Plasmoid::Logging
     CATEGORY_NAME rs.librescrs.librekde.plasmoid
-    EXPORT LibreKDE
     DESCRIPTION "LibreKDE Plasma 6 plasmoid"
 )
 
@@ -132,7 +131,6 @@ target_link_libraries(librekde-plasmoid
         LibreAgent::ClientQt
         librekde-agentclient
         librekde-signing
-        LibreKDELogging
 )
 target_compile_features(librekde-plasmoid PRIVATE cxx_std_23)
 

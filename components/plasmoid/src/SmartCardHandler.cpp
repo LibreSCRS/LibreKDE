@@ -507,7 +507,7 @@ void SmartCardHandler::readIdentity()
     setOperationPhase(Client::OperationPhase::Created); // reset for the new read
     connect(op, &Client::AgentOperation::finished, this, &SmartCardHandler::onOperationFinished);
     connect(op, &Client::AgentOperation::phaseChanged, this,
-            [this](Client::OperationPhase ph, double /*progress*/) { setOperationPhase(ph); });
+            [this](Client::OperationPhase ph) { setOperationPhase(ph); });
 }
 
 void SmartCardHandler::warmCertificateCache()
@@ -666,15 +666,14 @@ void SmartCardHandler::signFile(const QString& fileUrl)
     entry.message.clear();
     publishSignSurfaces();
 
-    connect(job, &LibreKDE::SignJob::phaseChanged, this,
-            [this, reader](Client::OperationPhase ph, double /*progress*/) {
-                const auto it = m_signStates.find(reader);
-                if (it == m_signStates.end()) {
-                    return;
-                }
-                it->phase = static_cast<int>(ph);
-                publishSignSurfaces();
-            });
+    connect(job, &LibreKDE::SignJob::phaseChanged, this, [this, reader](Client::OperationPhase ph) {
+        const auto it = m_signStates.find(reader);
+        if (it == m_signStates.end()) {
+            return;
+        }
+        it->phase = static_cast<int>(ph);
+        publishSignSurfaces();
+    });
 
     connect(job, &LibreKDE::SignJob::succeeded, this, [this, reader, job](const QString& outputPath) {
         ReaderSignState& done = m_signStates[reader];
@@ -758,7 +757,7 @@ void SmartCardHandler::startPhotoRead()
     op->setStallBudget(m_opStallBudgetMs);
     m_photoOp = op;
     connect(op, &Client::AgentOperation::phaseChanged, this,
-            [this](Client::OperationPhase ph, double /*progress*/) { setOperationPhase(ph); });
+            [this](Client::OperationPhase ph) { setOperationPhase(ph); });
     // Drive on the op's terminal signal (queued per the client's terminal
     // discipline). Async/signal-driven: NO nested QEventLoop — the plasmoid runs
     // on the GUI event loop. If the card is pulled mid-read the op is destroyed

@@ -66,7 +66,7 @@ jobs:
       # reachable from the upstream main, one revision per dependency), and
       # the Arch recipe building this repository's signed tag.
       - name: Shared gates
-        uses: LibreSCRS/ci/actions/gates@d68f5d781a665759eaba63c67ef0e6eb1f738063
+        uses: LibreSCRS/ci/actions/gates@a6efbfe4072c3ef31aaf928fcfc64e6673658a7a
         with:
           gates: check-workflows check-skip-reasons check-version deps-lock check-recipe
 
@@ -102,7 +102,6 @@ jobs:
       CLIENTQT_CMAKE_ARGS: >-
         -DCMAKE_BUILD_TYPE=RelWithDebInfo
         -DLIBREAGENT_BUILD_CORE=OFF
-        -DLIBREAGENT_BUILD_WIRE=ON
         -DLIBREAGENT_BUILD_CLIENT_QT=ON
         -DLIBREAGENT_INSTALL_WIRE_ARCHIVE=ON
         -DCMAKE_DISABLE_FIND_PACKAGE_LibreMiddleware=ON
@@ -146,7 +145,7 @@ jobs:
       # distribution packaging installs.
       - name: Check out LibreAgent at the revision deps.lock names
         id: deps
-        uses: LibreSCRS/ci/actions/checkout-deps@d68f5d781a665759eaba63c67ef0e6eb1f738063
+        uses: LibreSCRS/ci/actions/checkout-deps@a6efbfe4072c3ef31aaf928fcfc64e6673658a7a
         with:
           root: LibreKDE
           names: LibreAgent
@@ -187,17 +186,11 @@ jobs:
           cmake --build build -j4
           cmake --install build --prefix "$AGENT_PREFIX"
 
-      # Explicit component flags pin the package contract (their CMake option
-      # defaults are already ON, but pin them so CI matches the PKGBUILD).
       - name: Configure
         working-directory: LibreKDE
         run: |
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-            -DLIBREKDE_BUILD_PLASMOID=ON \
-            -DLIBREKDE_BUILD_PURPOSE=ON \
-            -DLIBREKDE_BUILD_KIO=ON \
-            -DLIBREKDE_BUILD_CREDENTIALS=ON \
             -DBUILD_TESTING=ON \
             -DCMAKE_PREFIX_PATH="$AGENT_PREFIX"
 
@@ -218,7 +211,7 @@ jobs:
       # tests ci/test-floor.txt names. Discovery is PRE_TEST, so listing runs
       # the Qt test binaries, which need the offscreen platform plugin.
       - name: Shared gates after the build
-        uses: LibreSCRS/ci/actions/gates@d68f5d781a665759eaba63c67ef0e6eb1f738063
+        uses: LibreSCRS/ci/actions/gates@a6efbfe4072c3ef31aaf928fcfc64e6673658a7a
         env:
           QT_QPA_PLATFORM: offscreen
         with:

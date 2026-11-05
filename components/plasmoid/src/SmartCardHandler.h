@@ -458,8 +458,9 @@ public:
     /// leaves that group headless in the only list that renders it.
     [[nodiscard]] static QVariantList applyGroupHeadings(QVariantList details);
 
-    /// @brief The shared photo store the QML `CardPhotoProvider` reads from.
-    ///        Co-owned (shared_ptr) so the provider can outlive this handler.
+    /// @brief The photo store this handler writes into: the process-wide
+    ///        `sharedCardPhotoStore()`, which the QML `CardPhotoProvider` is given
+    ///        on its own at engine init, not through this accessor.
     [[nodiscard]] std::shared_ptr<CardPhotoStore> photoStore() const
     {
         return m_photoStore;
@@ -472,6 +473,12 @@ public:
     {
         return m_photoSlot;
     }
+
+    /// How long a card read may go without a sign of life from the agent before
+    /// it is given up (the client library's stall bound, on by default at
+    /// `kLongOperationTimeoutMs`); applies to the reads started after the call.
+    /// Deliberately not a slot: QML has no business shortening the bound.
+    void setOperationStallBudget(int milliseconds);
 
 public Q_SLOTS:
     /// Launch LibreCelik as a sibling process for the full card UI.
@@ -510,11 +517,6 @@ public Q_SLOTS:
     /// state leaves AgentUnavailable. Not startable: `agentStartFailed` says so.
     /// `agentStarting` holds until the answer; a call before then does nothing.
     void startAgent();
-
-    /// How long a card read may go without a sign of life from the agent before
-    /// it is given up (the client library's stall bound, on by default at
-    /// `kLongOperationTimeoutMs`); applies to the reads started after the call.
-    void setOperationStallBudget(int milliseconds);
 
     /// User-initiated re-check behind the plasmoid's refresh affordance. Re-runs
     /// client discovery (`AgentClient::refreshDiscovery` → re-probe bus name +

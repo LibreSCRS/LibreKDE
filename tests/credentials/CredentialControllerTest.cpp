@@ -893,7 +893,7 @@ TEST(CredentialController, RequestUnblockEmitsBudgetThenConfirmMintsOp)
 }
 
 // Partial bring-up: activating a transport PIN sets the PIN but its signing-key
-// step fails (outcome=keyActivationFailed, pinActivated=true, keyActivated=false).
+// step fails (outcome=keyActivationFailed).
 // The controller renders the key-failure message (an error, not neutral) and then
 // re-lists — the fresh list is what re-offers the standalone "Activate signing
 // key" affordance; we never re-request the spent transport value.
@@ -914,9 +914,7 @@ TEST(CredentialController, ActivatePartialBringUpRendersKeyFailure)
     ASSERT_TRUE(waitFor([&]() { return ctl.state() == int(State::Ready); }));
 
     h.mutateConfig([](FakeAgent::Config& c) {
-        c.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("keyActivationFailed")},
-                                   {QStringLiteral("pin_activated"), true},
-                                   {QStringLiteral("key_activated"), false}};
+        c.credResult = QVariantMap{{QStringLiteral("outcome"), QStringLiteral("keyActivationFailed")}};
     });
     ctl.activate(QStringLiteral("user:0x86"));
 

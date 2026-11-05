@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // SPDX-FileCopyrightText: 2026 hirashix0
 //
-// Total-coverage guard for the four closed Credentials1 record-token enums —
-// CredentialKind / CredentialState / UnblockStyle / RecoveryPath — mirroring
+// Total-coverage guard for the closed Credentials1 record-token enums —
+// CredentialKind / CredentialState / RecoveryPath — mirroring
 // CredentialTextCoverageTest (which owns CredentialOutcome). Compiled with
 // -Werror=switch, so extending any of these enums without a decision here is a
 // compile error naming the enumerator, never silence.
@@ -12,7 +12,7 @@
 //     over EVERY enumerator with no default (compile error), and the tail
 //     static_asserts trip on an append that leaves a classifier stale.
 //  2. A parse-arm gap: the walk round-trips every token through the PRODUCTION
-//     CredentialRecord::fromVariantMap (the kindFrom/stateFrom/styleFrom/
+//     CredentialRecord::fromVariantMap (the kindFrom/stateFrom/
 //     recoveryFrom chains are file-local, so the record demarshaller is the
 //     public seam) and demands the exact enumerator back.
 //  3. A display-arm gap: kindName()/stateName() fall through to `return {}` on
@@ -24,7 +24,6 @@
 // org.librescrs.Agent.Operation.Credentials1.xml record keys
 //   kind          "user" | "sign" | "puk" | "can" | "unknown"
 //   state         "unknown" | "transport" | "operational" | "needsChange" | "blocked"
-//   unblock_style "unknown" | "resetOnly" | "setsNewPin" | "unblockAndChange"
 //   recovery      "unknown" | "holderViaPuk" | "issuerProcess" | "none"
 
 #include "CredentialText.h"
@@ -44,7 +43,6 @@ using LibreSCRS::AgentClient::CredentialKind;
 using LibreSCRS::AgentClient::CredentialRecord;
 using LibreSCRS::AgentClient::CredentialState;
 using LibreSCRS::AgentClient::RecoveryPath;
-using LibreSCRS::AgentClient::UnblockStyle;
 
 // NO default case in any classifier: with -Werror=switch a new enumerator is a
 // compile error until its wire token is decided here. Values past the tail
@@ -84,21 +82,6 @@ constexpr std::optional<const char*> wireTokenForState(CredentialState s) noexce
     return std::nullopt;
 }
 
-constexpr std::optional<const char*> wireTokenForStyle(UnblockStyle u) noexcept
-{
-    switch (u) {
-    case UnblockStyle::Unknown:
-        return "unknown";
-    case UnblockStyle::ResetOnly:
-        return "resetOnly";
-    case UnblockStyle::SetsNewPin:
-        return "setsNewPin";
-    case UnblockStyle::UnblockAndChange:
-        return "unblockAndChange";
-    }
-    return std::nullopt;
-}
-
 constexpr std::optional<const char*> wireTokenForRecovery(RecoveryPath r) noexcept
 {
     switch (r) {
@@ -126,7 +109,6 @@ constexpr std::uint32_t enumeratedCount(Classifier classify) noexcept
 
 constexpr std::uint32_t kKindCount = enumeratedCount<CredentialKind>(wireTokenForKind);
 constexpr std::uint32_t kStateCount = enumeratedCount<CredentialState>(wireTokenForState);
-constexpr std::uint32_t kStyleCount = enumeratedCount<UnblockStyle>(wireTokenForStyle);
 constexpr std::uint32_t kRecoveryCount = enumeratedCount<RecoveryPath>(wireTokenForRecovery);
 
 // Anchor each count on the LAST enumerator so an append that leaves a
@@ -135,8 +117,6 @@ static_assert(kKindCount == static_cast<std::uint32_t>(CredentialKind::Unknown) 
               "wireTokenForKind out of step with the CredentialKind tail");
 static_assert(kStateCount == static_cast<std::uint32_t>(CredentialState::Blocked) + 1u,
               "wireTokenForState out of step with the CredentialState tail");
-static_assert(kStyleCount == static_cast<std::uint32_t>(UnblockStyle::UnblockAndChange) + 1u,
-              "wireTokenForStyle out of step with the UnblockStyle tail");
 static_assert(kRecoveryCount == static_cast<std::uint32_t>(RecoveryPath::None) + 1u,
               "wireTokenForRecovery out of step with the RecoveryPath tail");
 
@@ -176,17 +156,6 @@ TEST(CredentialVocabularyCoverage, EveryStateRoundTripsAndHasCopy)
     }
 }
 
-TEST(CredentialVocabularyCoverage, EveryUnblockStyleRoundTrips)
-{
-    for (std::uint32_t v = 0; v < kStyleCount; ++v) {
-        const auto u = static_cast<UnblockStyle>(v);
-        const auto token = wireTokenForStyle(u);
-        ASSERT_TRUE(token.has_value());
-        EXPECT_EQ(recordWith("unblock_style", *token).unblockStyle, u)
-            << "token '" << *token << "' failed the parse round-trip";
-    }
-}
-
 TEST(CredentialVocabularyCoverage, EveryRecoveryPathRoundTrips)
 {
     for (std::uint32_t v = 0; v < kRecoveryCount; ++v) {
@@ -203,6 +172,5 @@ TEST(CredentialVocabularyCoverage, UnknownTokensFailSafeToUnknown)
 {
     EXPECT_EQ(recordWith("kind", "no-such-token").kind, CredentialKind::Unknown);
     EXPECT_EQ(recordWith("state", "no-such-token").state, CredentialState::Unknown);
-    EXPECT_EQ(recordWith("unblock_style", "no-such-token").unblockStyle, UnblockStyle::Unknown);
     EXPECT_EQ(recordWith("recovery", "no-such-token").recovery, RecoveryPath::Unknown);
 }

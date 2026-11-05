@@ -556,7 +556,6 @@ void CredentialController::beginMutation(Client::AgentOperation* op, Client::Cre
     }
     m_mutationOp = op;
     m_mutationCancelRequested = false; // a fresh verb — no cancel requested yet
-    setProgress(0.0);
     // Entered even for a verb the agent refuses at method entry, whose terminal is
     // already known at minting time: the library QUEUES that terminal rather than
     // emitting it from the minting call, so Working is real (briefly) and the
@@ -572,8 +571,6 @@ void CredentialController::beginMutation(Client::AgentOperation* op, Client::Cre
     // an operation already terminal when minted queued its terminal, delivered once
     // we return to the event loop.
     connect(op, &Client::AgentOperation::finished, this, [this, op]() { onMutationDone(op); });
-    connect(op, &Client::AgentOperation::phaseChanged, this,
-            [this](Client::OperationPhase, double progress) { setProgress(progress); });
 }
 
 void CredentialController::onMutationDone(Client::AgentOperation* op)
@@ -634,7 +631,7 @@ void CredentialController::onMutationDone(Client::AgentOperation* op)
     // resultIsError: neutral (Ok / userCancelled) → not an
     // error; everything else (invalidPin, blocked, keyActivationFailed, …) → error —
     // EXCEPT a cancel is forced neutral regardless of the raw outcome. A partial
-    // bring-up (pinActivated && !keyActivated ⇒ keyActivationFailed) needs no special
+    // bring-up (keyActivationFailed) needs no special
     // case: the message says the key step failed, and the re-list below will now
     // advertise keyActivatable, surfacing the standalone Activate button — we never
     // re-request the spent transport value.
@@ -781,15 +778,6 @@ void CredentialController::setResult(bool isError, const QString& message)
     m_resultIsError = isError;
     m_resultMessage = message;
     Q_EMIT resultChanged();
-}
-
-void CredentialController::setProgress(double progress)
-{
-    if (qFuzzyCompare(m_progress, progress)) {
-        return;
-    }
-    m_progress = progress;
-    Q_EMIT progressChanged();
 }
 
 void CredentialController::setRemovalNotice(const QString& notice)

@@ -243,10 +243,8 @@ TEST(AgentCardDataSource, ReadCertificatesHappyPathRoundTripsEveryCertificateFie
     EXPECT_EQ(v.extendedKeyUsageOids, QStringList{QStringLiteral("1.3.6.1.5.5.7.3.2")});
     EXPECT_EQ(v.chainSubjectCns, (QStringList{QStringLiteral("Pera Peric"), QStringLiteral("MUP CA")}));
     // The scripted verdict 2 is a wire number; the client collapses the three
-    // untrusted causes onto one display value and keeps the raw number beside
-    // it. Both are asserted — the collapse, and the cause it collapsed.
+    // untrusted causes onto one display value.
     EXPECT_EQ(v.trust, Client::TrustStatus::Untrusted);
-    EXPECT_EQ(v.extra.value(QStringLiteral("trustStatusWire")).toUInt(), 2u);
 }
 
 TEST(AgentCardDataSource, GetPhotoHappyPathReadsSealedMemfdBytes)

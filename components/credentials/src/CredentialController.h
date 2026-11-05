@@ -69,10 +69,6 @@ class CredentialController : public QObject
     /// Whether the last verb's result is an error (a red banner) versus a neutral
     /// or success notice (an informational banner). Never true for a user cancel.
     Q_PROPERTY(bool resultIsError READ resultIsError NOTIFY resultChanged)
-    /// Best-effort progress [0,1] of the in-flight verb, driven off the agent's
-    /// Operation `Phase`/`Progress`; 0 until the agent reports any. The `Working`
-    /// affordance may show a determinate bar, else an indeterminate spinner.
-    Q_PROPERTY(double progress READ progress NOTIFY progressChanged)
     /// The truthful outcome of a mutation terminated by a card pull ("" = none).
     /// A card removed mid-verb lands the window in `NoCard`, where the `Result`
     /// banner never renders — so the notice rides the NoCard placeholder's
@@ -140,10 +136,6 @@ public:
     [[nodiscard]] bool resultIsError() const noexcept
     {
         return m_resultIsError;
-    }
-    [[nodiscard]] double progress() const noexcept
-    {
-        return m_progress;
     }
     [[nodiscard]] QString removalNotice() const
     {
@@ -216,7 +208,6 @@ Q_SIGNALS:
     void stateChanged();
     void readerLabelChanged();
     void resultChanged();
-    void progressChanged();
     void removalNoticeChanged();
     void agentStartingChanged();
     /// @brief Ask the QML to raise the unblock confirm sheet for credential @p id,
@@ -256,7 +247,7 @@ private:
     void setReaderLabel(const QString& label);
 
     /// Adopt a freshly minted `ManagePin` / `ActivateSigningKey` mutation: enter
-    /// `Working` and wire `finished`/`phaseChanged`. Every minted operation is
+    /// `Working` and wire `finished`. Every minted operation is
     /// non-null — a call the agent refuses at method entry comes back as an
     /// operation that terminalizes immediately with the refusal, so a refusal is
     /// reached through `onMutationDone` like any other outcome, never here.
@@ -292,7 +283,6 @@ private:
     /// flight — the public invokables guard on this (the Working scrim is UI-only).
     [[nodiscard]] bool canStartMutation() const;
     void setResult(bool isError, const QString& message);
-    void setProgress(double progress);
     void setRemovalNotice(const QString& notice);
 
     // Co-owned, process-shared agent client (sharedAgentClient() in production;
@@ -315,7 +305,6 @@ private:
     QString m_resultMessage;      ///< Last verb's banner text ("" = none).
     bool m_resultIsError = false; ///< Last verb's result is an error banner.
     bool m_agentStarting = false; ///< `startAgent()` is waiting for the agent.
-    double m_progress = 0.0;      ///< In-flight verb progress [0,1].
     /// Card-removed outcome carried on the NoCard surface (see the property).
     QString m_removalNotice;
     /// Kind PRESENTED by the in-flight mutation, stashed at invoke time for the

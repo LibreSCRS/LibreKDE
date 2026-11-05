@@ -17,7 +17,7 @@ CredentialControllerTest 39
 CredentialGuidanceLocaleTest 3
 CredentialModelTest 8
 CredentialTextCoverageTest 5
-CredentialVocabularyCoverageTest 5
+CredentialVocabularyCoverageTest 4
 CredentialsE2ETest 4
 ErrorTextCoverageTest 5
 ErrorTextTest 13
@@ -27,7 +27,7 @@ LatinCatalogTest 6
 MimeFormatMapTest 10
 ReadersTest 4
 SignJobTest 19
-SmartCardHandlerTest 99
+SmartCardHandlerTest 100
 appstreamtest.cmake 1
 check-catalogs.py 1
 identity-render-fence.cmake 1

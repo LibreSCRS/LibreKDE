@@ -626,6 +626,14 @@ TEST(SmartCardHandler, ASilentReadReleasesTheBusyLatch)
     EXPECT_FALSE(handler->errorMessage().isEmpty());
 }
 
+// The stall bound is a test seam, not part of the widget's QML surface: a slot
+// or invokable is callable from QML, and the QML that ships has no reason to
+// shorten how long a read may stay silent.
+TEST(SmartCardHandler, TheStallBudgetIsNotReachableFromQml)
+{
+    EXPECT_EQ(SmartCardHandler::staticMetaObject.indexOfMethod("setOperationStallBudget(int)"), -1);
+}
+
 // On a successful identity read the handler ALSO fires a best-effort GetPhoto;
 // when the card yields a photo the handler decodes it into its CardPhotoStore
 // and flips hasCardPhoto true (driving the image:// URL the QML Image binds to).

@@ -48,6 +48,19 @@ every entry below describes a change to what you get by building from source.
   `components/krunner` and no KWallet backend here, and each option's only
   other mention was the status line that printed its value.
 
+- The `LIBREKDE_BUILD_PLASMOID`, `LIBREKDE_BUILD_PURPOSE`, `LIBREKDE_BUILD_KIO`
+  and `LIBREKDE_BUILD_CREDENTIALS` switches. Every component is always built:
+  each package ships all four, and nothing built or tested the configurations
+  that left one out.
+
+- The `coverage` CMake preset and `gcovr.cfg`. No job or script ran them, and
+  a coverage figure is a property of whatever configuration measured it.
+
+- Metadata nothing needs: the widget's `ServiceTypes` key (a Plasma 5 key
+  Plasma 6 does not read), its `X-Plasma-Provides` key, which advertised an
+  alternative no applet offers, and the KIO worker's `X-DocPath`, which
+  pointed at a handbook page that was never written.
+
 ### Changed
 
 - Building the agent client library from source along with this build is now

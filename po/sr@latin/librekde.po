@@ -28,22 +28,22 @@ msgctxt "unblock sheet: %1 PUK name, %2 remaining unblocks"
 msgid "%1: %2 unblocks left"
 msgstr "%1: %2 deblokiranja"
 
-#: components/credentials/src/CredentialController.cpp:704
+#: components/credentials/src/CredentialController.cpp:701
 #, kde-format
 msgid "The card's credentials changed; the list was refreshed."
 msgstr "Akreditivi kartice su se promenili; lista je osvežena."
 
-#: components/credentials/src/CredentialController.cpp:712
+#: components/credentials/src/CredentialController.cpp:709
 #, kde-format
 msgid "Please wait a moment before trying again."
 msgstr "Sačekajte trenutak pre ponovnog pokušaja."
 
-#: components/credentials/src/CredentialController.cpp:728
+#: components/credentials/src/CredentialController.cpp:725
 #, kde-format
 msgid "The card refused the request."
 msgstr "Kartica je odbila zahtev."
 
-#: components/credentials/src/CredentialController.cpp:752
+#: components/credentials/src/CredentialController.cpp:749
 #, kde-format
 msgid "The action could not be started."
 msgstr "Radnju nije moguće pokrenuti."
@@ -326,37 +326,37 @@ msgid "%1 — contact"
 msgstr "%1 — kontaktni"
 
 # --- components/plasmoid/src/SmartCardHandler.cpp --
-#: components/plasmoid/src/SmartCardHandler.cpp:1403
+#: components/plasmoid/src/SmartCardHandler.cpp:1402
 #, kde-format
 msgctxt "@info:status reading data from the card"
 msgid "Reading card…"
 msgstr "Čitam karticu…"
 
-#: components/plasmoid/src/SmartCardHandler.cpp:1405
+#: components/plasmoid/src/SmartCardHandler.cpp:1404
 #, kde-format
 msgctxt "@info:status waiting for PIN/CAN in the secure prompt"
 msgid "Waiting for input…"
 msgstr "Čekam unos…"
 
-#: components/plasmoid/src/SmartCardHandler.cpp:1407
+#: components/plasmoid/src/SmartCardHandler.cpp:1406
 #, kde-format
 msgctxt "@info:status verifying the entered secret on the card"
 msgid "Verifying…"
 msgstr "Proveravam…"
 
-#: components/plasmoid/src/SmartCardHandler.cpp:1409
+#: components/plasmoid/src/SmartCardHandler.cpp:1408
 #, kde-format
 msgctxt "@info:status producing the signature on the card"
 msgid "Signing…"
 msgstr "Potpisujem…"
 
-#: components/plasmoid/src/SmartCardHandler.cpp:1411
+#: components/plasmoid/src/SmartCardHandler.cpp:1410
 #, kde-format
 msgctxt "@info:status attaching a trusted timestamp"
 msgid "Adding timestamp…"
 msgstr "Dodajem vremenski žig…"
 
-#: components/plasmoid/src/SmartCardHandler.cpp:1417
+#: components/plasmoid/src/SmartCardHandler.cpp:1416
 #, kde-format
 msgctxt "@info:status generic in-progress card operation"
 msgid "Working…"

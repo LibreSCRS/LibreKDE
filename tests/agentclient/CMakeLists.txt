@@ -24,8 +24,8 @@ target_compile_options(CredentialTextCoverageTest PRIVATE -Werror=switch)
 libreagent_gtest_discover_tests(CredentialTextCoverageTest
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANGUAGE=en")
 
-# Total-coverage guard for the four closed Credentials1 record-token enums
-# (Kind/State/UnblockStyle/Recovery): -Werror=switch classifiers force a
+# Total-coverage guard for the closed Credentials1 record-token enums
+# (Kind/State/Recovery): -Werror=switch classifiers force a
 # deliberate wire-token decision per enumerator, the walks round-trip every
 # token through the production demarshaller and demand non-empty
 # kindName()/stateName() display copy. Sibling of CredentialTextCoverageTest
