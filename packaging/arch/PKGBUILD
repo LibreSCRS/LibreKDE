@@ -49,9 +49,9 @@ depends=(
     'kcoreaddons'
     'knotifications'
     'kconfig'
-    'kio'               # card:/ KIO worker (LIBREKDE_BUILD_KIO)
-    'purpose'           # Purpose "Sign" plugin (LIBREKDE_BUILD_PURPOSE)
-    'kirigami'          # credential-management window UI (LIBREKDE_BUILD_CREDENTIALS)
+    'kio'               # card:/ KIO worker
+    'purpose'           # Purpose "Sign" plugin
+    'kirigami'          # credential-management window UI
     'kdbusaddons'       # credential window single-instance (KDBusService)
     'qqc2-desktop-style' # org.kde.desktop QtQuick Controls style for the window
 )
@@ -79,19 +79,9 @@ sha256sums=('SKIP')  # a git source has no archive to checksum; the signature is
 
 build() {
     cd "$srcdir/LibreKDE"
-    # Explicit component flags (their CMake defaults are already ON, but pin
-    # them so the package contract does not silently drift):
-    #   LIBREKDE_BUILD_KIO         — card:/ KIO worker
-    #   LIBREKDE_BUILD_PURPOSE     — Purpose "Sign" plugin
-    #   LIBREKDE_BUILD_PLASMOID    — Plasma 6 widget
-    #   LIBREKDE_BUILD_CREDENTIALS — credential-management window
     cmake -S . -B build -G Ninja \
         -DCMAKE_BUILD_TYPE=RelWithDebInfo \
         -DCMAKE_INSTALL_PREFIX=/usr \
-        -DLIBREKDE_BUILD_PLASMOID=ON \
-        -DLIBREKDE_BUILD_PURPOSE=ON \
-        -DLIBREKDE_BUILD_KIO=ON \
-        -DLIBREKDE_BUILD_CREDENTIALS=ON \
         -DBUILD_TESTING=OFF
     cmake --build build -j4
 }

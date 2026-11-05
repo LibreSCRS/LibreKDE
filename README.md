@@ -37,7 +37,6 @@ into:
 git clone https://github.com/LibreSCRS/LibreAgent.git ../LibreAgent
 cmake -B ../build-agent -S ../LibreAgent -DCMAKE_BUILD_TYPE=Release \
       -DLIBREAGENT_BUILD_CORE=OFF \
-      -DLIBREAGENT_BUILD_WIRE=ON \
       -DLIBREAGENT_BUILD_CLIENT_QT=ON
 cmake --build ../build-agent -j4
 cmake --install ../build-agent --prefix "$PWD/../agent-prefix"
@@ -71,29 +70,20 @@ test pins `LANG`, because `LC_ALL` outranks it.
 
 ## Build dependencies
 
-Always needed, whichever components you build:
+Every component is always built:
 
 - CMake 3.24+, a C++23 compiler, and Ninja or Make
 - `git` — the version is derived from the repository's tags at configure time
 - `extra-cmake-modules` 6.0+
 - LibreAgent 5.0+, built and installed with its `ClientQt` component
-- Qt 6.6+ development packages: Core / Gui / Qml / DBus / Test
-- KF6 6.0+ development packages: I18n / CoreAddons / Notifications / Config
+- Qt 6.6+ development packages: Core / Gui / Qml / Quick / QuickControls2 /
+  Widgets / DBus / Test
+- KF6 6.0+ development packages: I18n / CoreAddons / Notifications / Config /
+  KIO / Service / Purpose / Kirigami / DBusAddons
+- Plasma 6.0+ (`libplasma`)
 - `gettext` (`msgfmt`) — the catalogues are compiled during the build
-
-Needed per component, keyed to the CMake option that gates each one:
-
-- `LIBREKDE_BUILD_PLASMOID` — Plasma 6.0+ (`libplasma`), KF6 KIO and Service,
-  and Qt Widgets
-- `LIBREKDE_BUILD_PURPOSE` — KF6 Purpose, and Qt Widgets
-- `LIBREKDE_BUILD_KIO` — KF6 KIO
-- `LIBREKDE_BUILD_CREDENTIALS` — KF6 Kirigami and DBusAddons, and Qt
-  QuickControls2 and Widgets
-- `BUILD_TESTING` (on by default) — GoogleTest, and `dbus` for the tests that
-  bring up their own bus
-
-Qt Widgets and KF6 KIO each answer to more than one component, so switching one
-component off does not necessarily drop them.
+- with `BUILD_TESTING` (on by default): GoogleTest, and `dbus` for the tests
+  that bring up their own bus
 
 ## Translations
 

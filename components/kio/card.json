@@ -3,7 +3,6 @@
         "card": {
             "Class": ":local",
             "Icon": "secure-card",
-            "X-DocPath": "kioworker6/card/index.html",
             "defaultMimetype": "application/octet-stream",
             "determineMimetypeFromExtension": false,
             "input": "none",

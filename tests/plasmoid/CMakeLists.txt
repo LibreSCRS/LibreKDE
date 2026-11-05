@@ -33,7 +33,6 @@ ecm_qt_declare_logging_category(PlasmoidTestLogging_SRCS
     HEADER plasmoid_log_categories.h
     IDENTIFIER LibreKDE::Plasmoid::Logging
     CATEGORY_NAME rs.librescrs.librekde.plasmoid
-    EXPORT LibreKDE
     DESCRIPTION "LibreKDE Plasma 6 plasmoid"
 )
 
@@ -56,7 +55,7 @@ target_include_directories(SmartCardHandlerTest PRIVATE
 target_link_libraries(SmartCardHandlerTest
     PRIVATE GTest::gtest LibreAgent::ClientQt librekde-agentclient librekde-test-support librekde-signing
             Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::DBus Qt6::Test
-            KF6::I18n KF6::CoreAddons KF6::KIOGui KF6::Service LibreKDELogging
+            KF6::I18n KF6::CoreAddons KF6::KIOGui KF6::Service
 )
 target_compile_features(SmartCardHandlerTest PRIVATE cxx_std_23)
 libreagent_private_session_bus(SmartCardHandlerTest)
@@ -85,7 +84,7 @@ target_include_directories(AgentStartTest PRIVATE
 target_link_libraries(AgentStartTest
     PRIVATE GTest::gtest LibreAgent::ClientQt librekde-agentclient librekde-test-support librekde-signing
             Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::DBus Qt6::Test
-            KF6::I18n KF6::CoreAddons KF6::KIOGui KF6::Service LibreKDELogging
+            KF6::I18n KF6::CoreAddons KF6::KIOGui KF6::Service
 )
 target_compile_features(AgentStartTest PRIVATE cxx_std_23)
 librekde_activatable_agent_bus(AgentStartTest)

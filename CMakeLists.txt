@@ -55,11 +55,6 @@ include(ECMPoQmTools)
 find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Core Gui Qml DBus Test)
 find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS I18n CoreAddons Notifications Config)
 
-option(LIBREKDE_BUILD_PLASMOID  "Build Plasma 6 widget"   ON)
-option(LIBREKDE_BUILD_PURPOSE   "Build Purpose plugin"    ON)
-option(LIBREKDE_BUILD_KIO       "Build card:/ KIO worker"           ON)
-option(LIBREKDE_BUILD_CREDENTIALS "Build the credential-management window" ON)
-
 option(BUILD_TESTING "Build tests" ON)
 # Bound every test. ctest's built-in default is 1500 seconds, so a single
 # wedged test can hold a hosted runner for twenty-five minutes without ever
@@ -93,57 +88,31 @@ if(BUILD_TESTING)
 endif()
 librescrs_use_libreagent(COMPONENTS ${_librekde_agent_components})
 
-# Qt6::Widgets at root scope (see the note above) — created whenever a signing
-# surface (plasmoid or Purpose) is built, so librekde-signing and its consumers
-# resolve the target from any subdirectory.
-if(LIBREKDE_BUILD_PLASMOID OR LIBREKDE_BUILD_PURPOSE)
-    find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Widgets)
-endif()
+# Qt6::Widgets at root scope (see the note above), so librekde-signing and its
+# consumers resolve the target from any subdirectory.
+find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Widgets)
 
-# Qt6::Quick is linked by the plasmoid and by its QML plugin, and it was never
-# asked for: on a machine that also builds the credential window the target
-# arrives through QuickControls2, and on a developer machine the Qt development
-# packages are all installed anyway. In a clean chroot with only what the recipe
-# declares, the target does not exist and configuration fails on a name that
-# looks like a typo. Ask for what is linked.
-if(LIBREKDE_BUILD_PLASMOID)
-    find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Quick)
-endif()
+# Qt6::Quick is linked by the plasmoid and by its QML plugin. In a clean chroot
+# with only what the recipe declares, the target does not arrive through any
+# other package, so ask for what is linked.
+find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Quick)
 
 add_subdirectory(shared)
 
-if(LIBREKDE_BUILD_PLASMOID)
-    find_package(Plasma 6.0 REQUIRED)
-    # The KIO framework provides KF6::KIOGui -> KIO::CommandLauncherJob, which the
-    # plasmoid's "Manage credentials…" action uses to launch the standalone
-    # credentials window with an explicit argv + startup-notification token.
-    # (KIOGui is a target under the KIO umbrella, not a standalone find component.)
-    # KF6::Service (KService) resolves LibreCelik via the freedesktop application
-    # database for a cross-distro "is it installed?" probe (SmartCardHandler).
-    find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS KIO Service)
-    add_subdirectory(components/plasmoid)
-endif()
+# Every component is always built: the packages ship all of them, and a
+# configuration that leaves one out is a configuration nobody tests.
+find_package(Plasma 6.0 REQUIRED)
+# KF6::KIOGui (under the KIO umbrella) -> KIO::CommandLauncherJob launches the
+# credential window from the plasmoid; the card:/ worker is KIO too. KF6::Service
+# resolves LibreCelik through the application database (SmartCardHandler).
+find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS KIO Service Purpose Kirigami DBusAddons)
+# QApplication (org.kde.desktop QtQuick Controls style is QtWidgets-backed).
+find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS QuickControls2)
 
-if(LIBREKDE_BUILD_PURPOSE)
-    find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS Purpose)
-    add_subdirectory(components/purpose)
-endif()
-
-if(LIBREKDE_BUILD_KIO)
-    find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS KIO)
-    add_subdirectory(components/kio)
-endif()
-
-if(LIBREKDE_BUILD_CREDENTIALS)
-    find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS Kirigami DBusAddons)
-    # QApplication (org.kde.desktop QtQuick Controls style is QtWidgets-backed).
-    find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS QuickControls2 Widgets)
-    add_subdirectory(components/credentials)
-endif()
-
-# KRunner/KIO/KWallet add_subdirectory() blocks land with their respective
-# future-phase plans. Their find_package() calls intentionally don't fire here
-# because their option defaults are OFF.
+add_subdirectory(components/plasmoid)
+add_subdirectory(components/purpose)
+add_subdirectory(components/kio)
+add_subdirectory(components/credentials)
 
 if(BUILD_TESTING)
     add_subdirectory(tests)
@@ -163,7 +132,3 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/po)
 endif()
 
 message(STATUS "LibreKDE ${PROJECT_VERSION} configured")
-message(STATUS "  - plasmoid: ${LIBREKDE_BUILD_PLASMOID}")
-message(STATUS "  - purpose : ${LIBREKDE_BUILD_PURPOSE}")
-message(STATUS "  - kio     : ${LIBREKDE_BUILD_KIO}")
-message(STATUS "  - credentials: ${LIBREKDE_BUILD_CREDENTIALS}")

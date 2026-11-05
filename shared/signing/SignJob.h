@@ -81,7 +81,7 @@ Q_SIGNALS:
     ///        op, then the sign op) so a host can drive a spinner + phase label
     ///        across the whole flow. The two ops never emit concurrently (the
     ///        cert op is deleteLater'd before the sign op is created).
-    void phaseChanged(LibreSCRS::AgentClient::OperationPhase phase, double progress);
+    void phaseChanged(LibreSCRS::AgentClient::OperationPhase phase);
 
 private:
     // The terminal outcome is polled off the operation that reported it

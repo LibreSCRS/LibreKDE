@@ -26,7 +26,6 @@ ecm_qt_declare_logging_category(SigningLogging_SRCS
     HEADER signing_log_categories.h
     IDENTIFIER LibreKDE::Signing::Logging
     CATEGORY_NAME rs.librescrs.librekde.signing
-    EXPORT LibreKDE
     DESCRIPTION "LibreKDE shared signing core"
 )
 
@@ -55,7 +54,7 @@ target_include_directories(librekde-signing
 # the agent client library, and nothing in this lib's public headers names it.
 target_link_libraries(librekde-signing
     PUBLIC  Qt6::Core LibreAgent::ClientQt
-    PRIVATE librekde-agentclient KF6::I18n Qt6::Widgets LibreKDELogging
+    PRIVATE librekde-agentclient KF6::I18n Qt6::Widgets
 )
 target_compile_features(librekde-signing PUBLIC cxx_std_23)
 set_target_properties(librekde-signing PROPERTIES

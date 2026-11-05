@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 hirashix0
 #
 # LibreKDE shared layer — used by every component. Deliberately thin:
-# logging categories, the host-side localized copy for the agent's vocabularies,
+# the host-side localized copy for the agent's vocabularies,
 # and the shared signing core. NOT a "framework" — only the bits that would be
 # cut-and-pasted across components if they weren't here.
 #
@@ -16,10 +16,5 @@
 # longer here either: it is the shared agent client library's, and `agentclient/`
 # keeps only the text layer over it.
 
-add_subdirectory(logging)
 add_subdirectory(agentclient)
-
-# The shared signing core is only needed when a surface that signs is built.
-if(LIBREKDE_BUILD_PLASMOID OR LIBREKDE_BUILD_PURPOSE)
-    add_subdirectory(signing)
-endif()
+add_subdirectory(signing)

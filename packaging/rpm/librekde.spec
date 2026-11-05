@@ -110,7 +110,6 @@ Change a PIN, unblock one with a PUK, and see how many attempts are left.
 
 %install
 %cmake_install
-%find_lang librekde || :
 
 %files
 
