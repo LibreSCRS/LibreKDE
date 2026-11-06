@@ -71,7 +71,7 @@ Summary:        LibreSCRS smart-card plasmoid for KDE Plasma 6
 Requires:       %{name}-common = %{version}-%{release}
 Requires:       plasma-workspace
 Requires:       librescrs-agent-client-qt%{?_isa} = %{agentclient_evr}
-Recommends:     librescrs-agent >= 5.0
+Requires:       librescrs-agent >= 5.0
 
 %description plasmoid
 A system-tray widget that shows what is on a LibreSCRS-supported card the

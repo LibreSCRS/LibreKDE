@@ -43,8 +43,8 @@ Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends},
          librekde-common (= ${source:Version}),
          plasma-workspace,
-         qml6-module-qtquick-dialogs
-Recommends: librescrs-agent (>= 5.0)
+         qml6-module-qtquick-dialogs,
+         librescrs-agent (>= 5.0)
 Description: LibreSCRS smart-card plasmoid for KDE Plasma 6
  A system-tray widget that shows what is on a LibreSCRS-supported card the
  moment it is inserted.

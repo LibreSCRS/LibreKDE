@@ -6,17 +6,20 @@ set -uo pipefail
 fail=0
 check() { if [ "$2" -eq 0 ]; then echo "PASS $1"; else echo "FAIL $1"; fail=1; fi; }
 
-# FAMILY is deb or rpm; anything else is refused before anything runs, rather
-# than read as one of them. Arch is not among them: the release matrix does
-# not build this repository's Arch recipe.
+# FAMILY is deb, rpm or arch; anything else is refused before anything runs,
+# rather than read as one of them.
 case "${FAMILY:-}" in
-deb | rpm) ;;
+deb | rpm | arch) ;;
 *)
-  echo "FAIL FAMILY='${FAMILY:-}' is not deb or rpm"
+  echo "FAIL FAMILY='${FAMILY:-}' is not deb, rpm or arch"
   exit 2
   ;;
 esac
 
+# Arch has one librekde package and no metapackage, so there is no pin to read.
+if [ "$FAMILY" = arch ]; then
+  echo "  V0 not applicable: the Arch recipe builds a single package"
+else
 # The librekde metapackage pins every part to exactly its own build. Read from
 # the package files before anything is installed: an install proves only that
 # the dependencies resolve, and a ">=" or a wrong version resolves just as well.
@@ -47,8 +50,14 @@ else
     check "V0 librekde depends on '$p = $ver'" $?
   done
 fi
+fi
 
-if [ "$FAMILY" = deb ]; then
+# The agent is a hard dependency of librekde-plasmoid, so its user packages (the
+# agent and the prompter it requires) go into the same install as the rest.
+# Development packages are left out: nobody installs those to run the
+# application.
+case "$FAMILY" in
+deb)
   export DEBIAN_FRONTEND=noninteractive
   # The base container is not a machine. Ubuntu's image ships
   # /etc/dpkg/dpkg.cfg.d/excludes with path-exclude=/usr/share/locale/*/LC_MESSAGES/*.mo
@@ -59,21 +68,40 @@ if [ "$FAMILY" = deb ]; then
   apt-get update -qq
   apt-get install -y --no-install-recommends \
       /pkg-LibreMiddleware/liblibrescrs5_*.deb \
-      /pkg-LibreAgent/liblibrescrs-agentclient-qt5_*.deb /pkg/*.deb >/dev/null
+      /pkg-LibreAgent/liblibrescrs-agentclient-qt5_*.deb \
+      /pkg-LibreLinux/librescrs-agent_*.deb /pkg-LibreLinux/librescrs-pinentry-kde_*.deb \
+      /pkg/*.deb >/dev/null
   check "V1 install with upstreams" $?
   LIBGLOB="/usr/lib/*"
   installed_list() { dpkg-query -W -f='${Package}\n'; }
   files_of() { dpkg -L "$1" 2>/dev/null; }
   remove_ours() { apt-get purge -y $(installed_list | grep -E 'librescrs|liblibrescrs|librekde') >/dev/null; }
-else
+  ;;
+rpm)
   dnf -y -q install /pkg-LibreMiddleware/librescrs-middleware-5*.rpm \
-      /pkg-LibreAgent/librescrs-agent-client-qt-5*.rpm /pkg/*.rpm >/dev/null
+      /pkg-LibreAgent/librescrs-agent-client-qt-5*.rpm \
+      /pkg-LibreLinux/librescrs-agent-5*.rpm /pkg-LibreLinux/librescrs-pinentry-kde-5*.rpm \
+      /pkg/*.rpm >/dev/null
   check "V1 install with upstreams" $?
   LIBGLOB="/usr/lib64"
   installed_list() { rpm -qa --qf '%{NAME}\n'; }
   files_of() { rpm -ql "$1" 2>/dev/null; }
   remove_ours() { dnf -y -q remove $(installed_list | grep -E '^(librescrs|liblibrescrs|librekde)') >/dev/null; }
-fi
+  ;;
+arch)
+  # Only the runtime packages: the plasmoid links the Qt client library of the
+  # agent library's recipe, not its core or common packages.
+  pacman -U --noconfirm /pkg-LibreMiddleware/librescrs-middleware-5*.pkg.tar.zst \
+      /pkg-LibreAgent/librescrs-agent-client-qt-5*.pkg.tar.zst \
+      /pkg-LibreLinux/librescrs-agent-5*.pkg.tar.zst /pkg-LibreLinux/librescrs-pinentry-kde-5*.pkg.tar.zst \
+      /pkg/*.pkg.tar.zst >/dev/null
+  check "V1 install with upstreams" $?
+  LIBGLOB="/usr/lib"
+  installed_list() { pacman -Qq; }
+  files_of() { pacman -Qlq "$1" 2>/dev/null; }
+  remove_ours() { pacman -Rns --noconfirm $(installed_list | grep -E '^(librescrs|liblibrescrs|librekde)') >/dev/null; }
+  ;;
+esac
 
 test -d /usr/share/plasma/plasmoids/org.librescrs.smartcard
 check "V2 plasmoid package directory" $?

@@ -32,11 +32,9 @@ pkgdesc="KDE Plasma 6 integration for LibreSCRS: smart-card plasmoid, credential
 arch=('x86_64')
 url="https://github.com/LibreSCRS/LibreKDE"
 license=('LGPL-2.1-or-later')
-# The agent is a hard dependency here and a Recommends in the deb and RPM
-# recipes, for the same outcome: apt and dnf install a recommended package by
-# default, while pacman has no weak dependency it installs on its own — an
-# optdepends is only printed. A plain `pacman -S librekde` therefore gets the
-# agent the same way `apt install librekde` does.
+# The agent is a hard dependency in every package format (deb Depends, rpm
+# Requires, and here): the plasmoid shows no card without it, and a weak
+# dependency can be skipped silently by the package manager.
 depends=(
     'librescrs-agent'   # the D-Bus agent this client talks to
     'librescrs-agent-client-qt' # LibreAgent::ClientQt (find_package(LibreAgent CONFIG))
