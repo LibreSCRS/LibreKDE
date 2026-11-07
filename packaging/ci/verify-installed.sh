@@ -89,6 +89,10 @@ rpm)
   remove_ours() { dnf -y -q remove $(installed_list | grep -E '^(librescrs|liblibrescrs|librekde)') >/dev/null; }
   ;;
 arch)
+  # The archlinux image's pacman.conf has NoExtract = usr/share/locale/*, so
+  # the catalogues are never unpacked there (same trap as Ubuntu's dpkg
+  # excludes above). Drop that rule; the reinstall below then extracts them.
+  sed -i '\|^NoExtract *= *usr/share/locale/\*|d' /etc/pacman.conf
   # Only the runtime packages: the plasmoid links the Qt client library of the
   # agent library's recipe, not its core or common packages.
   pacman -U --noconfirm /pkg-LibreMiddleware/librescrs-middleware-5*.pkg.tar.zst \
