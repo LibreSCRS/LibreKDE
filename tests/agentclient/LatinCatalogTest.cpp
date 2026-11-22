@@ -305,6 +305,34 @@ TEST(IdentityCheckReasonLatin, ChainFailedResolvesToLatinTransliteration)
     KLocalizedString::clearLanguages();
 }
 
+// The read-interruption rows in the Latin script: the three reasons and the
+// three row labels, each asserted against its exact transliteration and
+// against the Cyrillic string it must differ from.
+TEST(IdentityReadInterruptionLatin, ReasonsAndLabelsResolveToLatinTransliteration)
+{
+    KLocalizedString::setLanguages({QStringLiteral("sr@latin")});
+
+    const auto reason = [](const char* key) {
+        return LibreKDE::localizedReadInterruptionReason(QString::fromLatin1(key));
+    };
+    EXPECT_EQ(reason("read.channel-failed"), QStringLiteral("Bezbedna veza sa čipom je otkazala tokom čitanja."));
+    EXPECT_EQ(reason("read.card-removed"), QStringLiteral("Kartica je uklonjena pre kraja čitanja."));
+    EXPECT_EQ(reason("read.reader-lost"), QStringLiteral("Čitač kartica je isključen pre kraja čitanja."));
+    EXPECT_NE(reason("read.card-removed"), QString::fromUtf8("Картица је уклоњена пре краја читања."))
+        << "still the Cyrillic catalog's answer";
+
+    const auto label = [](const char* key, const char* fallback) {
+        return localizedFieldLabel(makeRow(QString::fromLatin1(key), QString::fromLatin1(fallback), {}));
+    };
+    EXPECT_EQ(label("field.read_interrupted", "Read Interrupted"), QStringLiteral("Čitanje prekinuto"));
+    EXPECT_EQ(label("field.read_unread_groups", "Unread Data Groups"), QStringLiteral("Nepročitane grupe podataka"));
+    EXPECT_EQ(label("field.annex_skipped", "National Annex"), QStringLiteral("Nacionalni aneks"));
+    EXPECT_NE(label("field.annex_skipped", "National Annex"), QString::fromUtf8("Национални анекс"))
+        << "still the Cyrillic catalog's answer";
+
+    KLocalizedString::clearLanguages();
+}
+
 // The sr@latin half of IdentityLabelTest's EveryImportRemedyNamesWhereToImport,
 // and the one gate that can see this file lose the location clause. Neither of
 // the two checks that already cover sr@latin would: the whole-catalog scan only

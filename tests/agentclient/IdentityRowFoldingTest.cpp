@@ -321,3 +321,83 @@ TEST(IdentityRowFolding, AggregateVerdictsSurviveBesideTheChecks)
         }
     }
 }
+
+// A read that stopped early says so on screen, under the overall verdicts: that
+// it was interrupted and why, which data groups were never read, and that the
+// national annex was skipped too. The four wire fields the producer uses for
+// this are consumed by the client library and must not come back as raw rows.
+TEST(IdentityRowFolding, InterruptedReadShowsReasonUnreadGroupsAndSkippedAnnex)
+{
+    const auto rows = rowsFor("security_status", {
+                                                     {"overall_integrity", "Data Integrity", "NOT_PERFORMED"},
+                                                     {"read_interrupted", "", "true"},
+                                                     {"read_interrupted_reason", "", "read.card-removed"},
+                                                     {"read_interrupted_groups", "", "DG11, DG12"},
+                                                     {"annex_skipped", "", "true"},
+                                                 });
+    ASSERT_EQ(rows.size(), 4);
+    // The overall verdict first; the interruption rows after it, in reading order.
+    EXPECT_EQ(rows[0].label, QStringLiteral("Data Integrity"));
+    EXPECT_EQ(rows[1].label, QStringLiteral("Read Interrupted"));
+    EXPECT_EQ(rows[1].value, QStringLiteral("The card was removed before the read finished."));
+    EXPECT_EQ(rows[2].label, QStringLiteral("Unread Data Groups"));
+    EXPECT_EQ(rows[2].value, QStringLiteral("DG11, DG12"));
+    EXPECT_EQ(rows[3].label, QStringLiteral("National Annex"));
+    EXPECT_EQ(rows[3].value, QStringLiteral("Not read"));
+    for (const RenderedRow& row : rows) {
+        EXPECT_FALSE(row.value.contains(QStringLiteral("card-removed")))
+            << "the raw reason key must not reach a reader";
+    }
+}
+
+// Each of the three reason keys the middleware ships names its own cause.
+TEST(IdentityRowFolding, EveryInterruptionReasonRendersAsItsOwnSentence)
+{
+    QStringList seen;
+    for (const char* key : {"read.channel-failed", "read.card-removed", "read.reader-lost"}) {
+        const auto rows = rowsFor("security_status", {
+                                                         {"read_interrupted", "", "true"},
+                                                         {"read_interrupted_reason", "", key},
+                                                     });
+        ASSERT_EQ(rows.size(), 1) << key;
+        EXPECT_EQ(rows[0].label, QStringLiteral("Read Interrupted")) << key;
+        EXPECT_NE(rows[0].value, QString::fromUtf8(key)) << key << " has no sentence of its own";
+        EXPECT_FALSE(seen.contains(rows[0].value)) << key << " repeats another reason's sentence";
+        seen << rows[0].value;
+    }
+}
+
+// Nothing unread and no annex: the reason row stands alone, with no empty
+// "Unread Data Groups" or "National Annex" row beside it.
+TEST(IdentityRowFolding, InterruptedReadOmitsRowsItHasNothingToSayFor)
+{
+    const auto rows = rowsFor("security_status", {
+                                                     {"read_interrupted", "", "true"},
+                                                     {"read_interrupted_reason", "", "read.channel-failed"},
+                                                 });
+    ASSERT_EQ(rows.size(), 1);
+    EXPECT_EQ(rows[0].label, QStringLiteral("Read Interrupted"));
+}
+
+// A newer agent may name a cause this build has never heard of. The row that
+// says the read was cut short must survive it, showing the key rather than
+// nothing.
+TEST(IdentityRowFolding, UnknownInterruptionReasonShowsTheKeyRatherThanNothing)
+{
+    const auto rows = rowsFor("security_status", {
+                                                     {"read_interrupted", "", "true"},
+                                                     {"read_interrupted_reason", "", "read.invented-later"},
+                                                 });
+    ASSERT_EQ(rows.size(), 1);
+    EXPECT_EQ(rows[0].value, QStringLiteral("read.invented-later"));
+}
+
+// A complete read carries none of these fields and renders none of these rows.
+TEST(IdentityRowFolding, CompleteReadShowsNoInterruptionRows)
+{
+    const auto rows = rowsFor("security_status", {
+                                                     {"overall_integrity", "Data Integrity", "PASSED"},
+                                                 });
+    ASSERT_EQ(rows.size(), 1);
+    EXPECT_EQ(rows[0].label, QStringLiteral("Data Integrity"));
+}

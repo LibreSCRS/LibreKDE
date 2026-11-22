@@ -156,6 +156,16 @@ const QHash<QString, KLocalizedString>& labelTable()
         {QStringLiteral("field.annex_authenticity"),
          ki18ndc("librekde", "@item:intable identity field (annex)", "Data Authenticity")},
 
+        // --- Interrupted read -----------------------------------------------
+        // Rows identityRows() adds under a verdict group's overall verdicts when
+        // the read stopped before the end.
+        {QStringLiteral("field.read_interrupted"),
+         ki18ndc("librekde", "@item:intable identity field (the read stopped early)", "Read Interrupted")},
+        {QStringLiteral("field.read_unread_groups"),
+         ki18ndc("librekde", "@item:intable identity field (data groups never read)", "Unread Data Groups")},
+        {QStringLiteral("field.annex_skipped"),
+         ki18ndc("librekde", "@item:intable identity field (national annex)", "National Annex")},
+
         // --- Card metadata --------------------------------------------------
         {QStringLiteral("field.card_type"),
          ki18ndc("librekde", "@item:intable identity field (card generation)", "Card Type")},
@@ -287,6 +297,25 @@ const QHash<QString, KLocalizedString>& checkReasonTable()
     return *table;
 }
 
+// Frozen `read_interrupted_reason` key -> why the read stopped, same domain and
+// resolution timing as checkReasonTable(). A separate table on purpose: those
+// five describe a verdict, these describe a read that ended early, and the two
+// vocabularies grow independently.
+const QHash<QString, KLocalizedString>& readInterruptionReasonTable()
+{
+    static const auto* const table = new QHash<QString, KLocalizedString>{
+        {QStringLiteral("read.channel-failed"),
+         ki18ndc("librekde", "@item:intable why reading the document stopped early",
+                 "The secure connection to the chip failed during the read.")},
+        {QStringLiteral("read.card-removed"),
+         ki18ndc("librekde", "@item:intable why reading the document stopped early",
+                 "The card was removed before the read finished.")},
+        {QStringLiteral("read.reader-lost"), ki18ndc("librekde", "@item:intable why reading the document stopped early",
+                                                     "The card reader was disconnected before the read finished.")},
+    };
+    return *table;
+}
+
 /// The status token at the head of @p value, localized; empty when @p value does
 /// not start with one this build names.
 ///
@@ -366,6 +395,22 @@ QStringList mappedCheckReasonKeys()
     return checkReasonTable().keys();
 }
 
+QString localizedReadInterruptionReason(const QString& reasonKey)
+{
+    if (const auto it = readInterruptionReasonTable().constFind(reasonKey);
+        it != readInterruptionReasonTable().constEnd()) {
+        return it->toString();
+    }
+    // A key a newer agent invented: show it rather than blank a read that is
+    // being reported correctly.
+    return reasonKey;
+}
+
+QStringList mappedReadInterruptionReasonKeys()
+{
+    return readInterruptionReasonTable().keys();
+}
+
 namespace {
 
 /// One separated security check, as the row a surface draws.
@@ -399,6 +444,36 @@ LibreSCRS::AgentClient::IdentityRow checkRow(const QString& groupKey,
     return row;
 }
 
+/// The rows that say a read stopped early, in the order a reader needs them:
+/// that it stopped and why, which data groups were never read, and that the
+/// national annex was skipped too. Each carries a frozen labelKey so the label
+/// is translated by the same table as every other row.
+QList<LibreSCRS::AgentClient::IdentityRow>
+interruptionRows(const QString& groupKey, const LibreSCRS::AgentClient::ReadInterruption& interruption)
+{
+    const auto make = [&groupKey](const char* fieldKey, const char* labelFallback, const QString& value) {
+        LibreSCRS::AgentClient::IdentityRow row;
+        row.groupKey = groupKey;
+        row.fieldKey = QString::fromLatin1(fieldKey);
+        row.labelKey = QStringLiteral("field.") + row.fieldKey;
+        row.labelFallback = QString::fromLatin1(labelFallback);
+        row.value = value;
+        return row;
+    };
+
+    QList<LibreSCRS::AgentClient::IdentityRow> rows;
+    rows.append(make("read_interrupted", "Read Interrupted", localizedReadInterruptionReason(interruption.reason)));
+    if (!interruption.unreadGroups.isEmpty()) {
+        rows.append(
+            make("read_unread_groups", "Unread Data Groups", interruption.unreadGroups.join(QStringLiteral(", "))));
+    }
+    if (interruption.annexSkipped) {
+        rows.append(make("annex_skipped", "National Annex",
+                         ki18ndc("librekde", "@item:intable national annex was not read", "Not read").toString()));
+    }
+    return rows;
+}
+
 } // namespace
 
 QList<LibreSCRS::AgentClient::IdentityRow> identityRows(const QList<LibreSCRS::AgentClient::FieldGroup>& groups)
@@ -422,6 +497,10 @@ QList<LibreSCRS::AgentClient::IdentityRow> identityRows(const QList<LibreSCRS::A
         carried.key = group.key;
         carried.fields = verdict.aggregates;
         out.append(Client::flattenIdentityFields({carried}));
+        // Under the overall verdicts, so the reader sees what they rest on.
+        if (verdict.interruption) {
+            out.append(interruptionRows(group.key, *verdict.interruption));
+        }
     }
     return out;
 }

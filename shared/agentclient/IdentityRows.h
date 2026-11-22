@@ -85,9 +85,15 @@ namespace LibreKDE {
 ///    rendered. This build has no vocabulary for either, and a raw producer
 ///    token on screen is a machine key put in front of a person.
 ///
+/// A read that stopped early (`SecurityVerdict::interruption`) adds up to three
+/// rows after the group's other fields, under the overall verdicts: that the
+/// read was interrupted with the localized reason, the data groups not read, and
+/// that the national annex was skipped. Their `labelKey`s are `field.read_interrupted`,
+/// `field.read_unread_groups` and `field.annex_skipped`.
+///
 /// Order: a group's checks come first, in the library's ascending numeric
-/// ordinal, then every field it did not consume, in arrival order; groups keep
-/// their own order. Stated so the assembly is describable — invariant 2 above
+/// ordinal, then every field it did not consume, in arrival order, then any
+/// interruption rows; groups keep their own order. Stated so the assembly is describable — invariant 2 above
 /// still stands, and no view may depend on it.
 [[nodiscard]] QList<LibreSCRS::AgentClient::IdentityRow>
 identityRows(const QList<LibreSCRS::AgentClient::FieldGroup>& groups);
@@ -112,6 +118,17 @@ identityRows(const QList<LibreSCRS::AgentClient::FieldGroup>& groups);
 
 /// @brief Every reason key the table maps, so a test can pin the set.
 [[nodiscard]] QStringList mappedCheckReasonKeys();
+
+/// @brief Resolve a `read_interrupted_reason` KEY ("read.card-removed", ...)
+///        into the sentence saying why the read stopped.
+///
+/// A key this build does not know comes back as itself, never empty: a newer
+/// agent may name a cause this build has never heard of, and the row that says
+/// the read was cut short must not vanish with it.
+[[nodiscard]] QString localizedReadInterruptionReason(const QString& reasonKey);
+
+/// @brief Every interruption reason key the table maps, so a test can pin the set.
+[[nodiscard]] QStringList mappedReadInterruptionReasonKeys();
 
 /// @brief Resolve an identity field's display label, localized.
 ///

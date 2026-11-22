@@ -963,7 +963,7 @@ msgid "Document Type"
 msgstr "Врста документа"
 
 #: shared/agentclient/IdentityRows.cpp:105
-#: shared/agentclient/IdentityRows.cpp:165
+#: shared/agentclient/IdentityRows.cpp:175
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Serial Number"
@@ -1113,85 +1113,85 @@ msgctxt "@item:intable identity field (annex)"
 msgid "Data Authenticity"
 msgstr "Аутентичност података"
 
-#: shared/agentclient/IdentityRows.cpp:161
+#: shared/agentclient/IdentityRows.cpp:171
 #, kde-format
 msgctxt "@item:intable identity field (card generation)"
 msgid "Card Type"
 msgstr "Тип картице"
 
-#: shared/agentclient/IdentityRows.cpp:164
+#: shared/agentclient/IdentityRows.cpp:174
 #, kde-format
 msgctxt "@item:intable identity field (token label)"
 msgid "Label"
 msgstr "Назив"
 
-#: shared/agentclient/IdentityRows.cpp:166
+#: shared/agentclient/IdentityRows.cpp:176
 #, kde-format
 msgctxt "@item:intable identity field"
 msgid "Manufacturer"
 msgstr "Произвођач"
 
-#: shared/agentclient/IdentityRows.cpp:177
+#: shared/agentclient/IdentityRows.cpp:187
 #, kde-format
 msgctxt "@title:group identity fields"
 msgid "Personal Data"
 msgstr "Лични подаци"
 
-#: shared/agentclient/IdentityRows.cpp:178
+#: shared/agentclient/IdentityRows.cpp:188
 #, kde-format
 msgctxt "@title:group identity fields"
 msgid "Document"
 msgstr "Документ"
 
-#: shared/agentclient/IdentityRows.cpp:179
+#: shared/agentclient/IdentityRows.cpp:189
 #, kde-format
 msgctxt "@title:group identity fields"
 msgid "Issuing Information"
 msgstr "Подаци о издавању"
 
-#: shared/agentclient/IdentityRows.cpp:180
+#: shared/agentclient/IdentityRows.cpp:190
 #, kde-format
 msgctxt "@title:group identity fields"
 msgid "Additional Data"
 msgstr "Додатни подаци"
 
-#: shared/agentclient/IdentityRows.cpp:181
+#: shared/agentclient/IdentityRows.cpp:191
 #, kde-format
 msgctxt "@title:group identity fields"
 msgid "National Data"
 msgstr "Национални подаци"
 
-#: shared/agentclient/IdentityRows.cpp:182
+#: shared/agentclient/IdentityRows.cpp:192
 #, kde-format
 msgctxt "@title:group identity fields"
 msgid "Contacts"
 msgstr "Контакти"
 
-#: shared/agentclient/IdentityRows.cpp:184
+#: shared/agentclient/IdentityRows.cpp:194
 #, kde-format
 msgctxt "@title:group identity fields"
 msgid "Travel Document Verification"
 msgstr "Провера података путне исправе"
 
-#: shared/agentclient/IdentityRows.cpp:187
+#: shared/agentclient/IdentityRows.cpp:197
 #, kde-format
 msgctxt "@title:group identity fields"
 msgid "Authentication"
 msgstr "Аутентификација"
 
-#: shared/agentclient/IdentityRows.cpp:205
+#: shared/agentclient/IdentityRows.cpp:215
 #, kde-format
 msgctxt "@title:group identity fields"
 msgid "Additional Personal Data"
 msgstr "Додатни лични подаци"
 
-#: shared/agentclient/IdentityRows.cpp:208
+#: shared/agentclient/IdentityRows.cpp:218
 #, kde-format
 msgctxt "@title:group identity fields"
 msgid "Additional Data Verification"
 msgstr "Провера додатних података"
 
-#: shared/agentclient/IdentityRows.cpp:268
+#: shared/agentclient/IdentityRows.cpp:278
 #, kde-format
 msgctxt "@item:intable why a security check came out as it did"
 msgid ""
@@ -1202,7 +1202,7 @@ msgstr ""
 "у, у одељку Подешавања → Поверење, да би потписник овог документа могао да "
 "се провери."
 
-#: shared/agentclient/IdentityRows.cpp:272
+#: shared/agentclient/IdentityRows.cpp:282
 #, kde-format
 msgctxt "@item:intable why a security check came out as it did"
 msgid ""
@@ -1212,7 +1212,7 @@ msgstr ""
 "Складиште CSCA сертификата се не може прочитати. Проверите да ли његов "
 "директоријум постоји и да ли дозволе допуштају читање."
 
-#: shared/agentclient/IdentityRows.cpp:276
+#: shared/agentclient/IdentityRows.cpp:286
 #, kde-format
 msgctxt "@item:intable why a security check came out as it did"
 msgid ""
@@ -1222,7 +1222,7 @@ msgstr ""
 "Складиште CSCA сертификата не садржи ниједан употребљив сертификат. Поново "
 "увезите ICAO мастер-листу у LibreCelik-у, у одељку Подешавања → Поверење."
 
-#: shared/agentclient/IdentityRows.cpp:280
+#: shared/agentclient/IdentityRows.cpp:290
 #, kde-format
 msgctxt "@item:intable why a security check came out as it did"
 msgid ""
@@ -1234,7 +1234,7 @@ msgstr ""
 "LibreCelik-у, у одељку Подешавања → Поверење, увезите мастер-листу која "
 "покрива државу издаваоца."
 
-#: shared/agentclient/IdentityRows.cpp:284
+#: shared/agentclient/IdentityRows.cpp:294
 #, kde-format
 msgctxt "@item:intable why a security check came out as it did"
 msgid ""
@@ -1244,67 +1244,67 @@ msgstr ""
 "Потписник овог документа се не повезује ни са једним увезеним CSCA "
 "сертификатом. Не ослањајте се на овај документ; проверите га код издаваоца."
 
-#: shared/agentclient/IdentityRows.cpp:312
+#: shared/agentclient/IdentityRows.cpp:341
 #, kde-format
 msgctxt "@item:intable security check outcome"
 msgid "Passed"
 msgstr "Успешно"
 
-#: shared/agentclient/IdentityRows.cpp:313
+#: shared/agentclient/IdentityRows.cpp:342
 #, kde-format
 msgctxt "@item:intable security check outcome"
 msgid "Failed"
 msgstr "Неуспешно"
 
-#: shared/agentclient/IdentityRows.cpp:314
+#: shared/agentclient/IdentityRows.cpp:343
 #, kde-format
 msgctxt "@item:intable security check outcome"
 msgid "Not performed"
 msgstr "Није извршено"
 
-#: shared/agentclient/IdentityRows.cpp:315
+#: shared/agentclient/IdentityRows.cpp:344
 #, kde-format
 msgctxt "@item:intable security check outcome"
 msgid "Not supported"
 msgstr "Није подржано"
 
-#: shared/agentclient/IdentityRows.cpp:316
+#: shared/agentclient/IdentityRows.cpp:345
 #, kde-format
 msgctxt "@item:intable security check outcome"
 msgid "Skipped"
 msgstr "Прескочено"
 
-#: shared/agentclient/IdentityRows.cpp:339
+#: shared/agentclient/IdentityRows.cpp:368
 #, kde-format
 msgctxt "@item:intable eMRTD access-control method"
 msgid "BAC"
 msgstr "BAC"
 
-#: shared/agentclient/IdentityRows.cpp:340
+#: shared/agentclient/IdentityRows.cpp:369
 #, kde-format
 msgctxt "@item:intable eMRTD access-control method"
 msgid "PACE (CAN)"
 msgstr "PACE (CAN)"
 
-#: shared/agentclient/IdentityRows.cpp:341
+#: shared/agentclient/IdentityRows.cpp:370
 #, kde-format
 msgctxt "@item:intable eMRTD access-control method"
 msgid "PACE (MRZ)"
 msgstr "PACE (MRZ)"
 
-#: shared/agentclient/IdentityRows.cpp:343
+#: shared/agentclient/IdentityRows.cpp:372
 #, kde-format
 msgctxt "@item:intable eMRTD access-control method"
 msgid "Chip Authentication"
 msgstr "Аутентификација чипа"
 
-#: shared/agentclient/IdentityRows.cpp:345
+#: shared/agentclient/IdentityRows.cpp:374
 #, kde-format
 msgctxt "@item:intable eMRTD access-control method"
 msgid "None (plain read)"
 msgstr "Без заштите (отворено читање)"
 
-#: shared/agentclient/IdentityRows.cpp:462
+#: shared/agentclient/IdentityRows.cpp:541
 #, kde-format
 msgctxt "@item:intable identity field value (card carries no date)"
 msgid "Unknown"
@@ -1543,6 +1543,48 @@ msgstr "Биће вам затражен ПУК у безбедном упиту
 msgctxt "@action:button proceed to unblock a PIN with its PUK"
 msgid "Continue"
 msgstr "Настави"
+
+#: shared/agentclient/IdentityRows.cpp:163
+#, kde-format
+msgctxt "@item:intable identity field (the read stopped early)"
+msgid "Read Interrupted"
+msgstr "Читање прекинуто"
+
+#: shared/agentclient/IdentityRows.cpp:165
+#, kde-format
+msgctxt "@item:intable identity field (data groups never read)"
+msgid "Unread Data Groups"
+msgstr "Непрочитане групе података"
+
+#: shared/agentclient/IdentityRows.cpp:167
+#, kde-format
+msgctxt "@item:intable identity field (national annex)"
+msgid "National Annex"
+msgstr "Национални анекс"
+
+#: shared/agentclient/IdentityRows.cpp:309
+#, kde-format
+msgctxt "@item:intable why reading the document stopped early"
+msgid "The secure connection to the chip failed during the read."
+msgstr "Безбедна веза са чипом је отказала током читања."
+
+#: shared/agentclient/IdentityRows.cpp:312
+#, kde-format
+msgctxt "@item:intable why reading the document stopped early"
+msgid "The card was removed before the read finished."
+msgstr "Картица је уклоњена пре краја читања."
+
+#: shared/agentclient/IdentityRows.cpp:314
+#, kde-format
+msgctxt "@item:intable why reading the document stopped early"
+msgid "The card reader was disconnected before the read finished."
+msgstr "Читач картица је искључен пре краја читања."
+
+#: shared/agentclient/IdentityRows.cpp:472
+#, kde-format
+msgctxt "@item:intable national annex was not read"
+msgid "Not read"
+msgstr "Није прочитано"
 
 # --- Agent guidance keys (runtime message keys; not xgettext-extractable) ---
 # Emitted by the agent (LibreMiddleware pin_family_quirks.cpp) and resolved via

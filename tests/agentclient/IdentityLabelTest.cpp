@@ -24,6 +24,8 @@
 
 #include <utility>
 
+#include <QRegularExpression>
+
 #include <gtest/gtest.h>
 
 using LibreKDE::isHiddenIdentityRow;
@@ -104,7 +106,7 @@ TEST(IdentityLabel, CardTypeAndAddressDateResolveToSerbian)
 TEST(IdentityLabel, MappedKeyCoverageIsPinned)
 {
     const QStringList keys = mappedLabelKeys();
-    EXPECT_EQ(keys.size(), 72);
+    EXPECT_EQ(keys.size(), 75);
     EXPECT_TRUE(keys.contains(QStringLiteral("field.card_type")));
     EXPECT_TRUE(keys.contains(QStringLiteral("field.address_date")));
     // Hidden rows are filtered, never labelled.
@@ -459,6 +461,41 @@ TEST(IdentityCheckReason, EveryReasonResolvesToSerbian)
               QString::fromUtf8("Потписник овог документа се не повезује ни са једним увезеним CSCA "
                                 "сертификатом. Не ослањајте се на овај документ; проверите га код издаваоца."));
     KLocalizedString::clearLanguages();
+}
+
+// The three read-interruption reasons and the three row labels, in Serbian
+// Cyrillic, with no Latin letter inside a Cyrillic word.
+TEST(IdentityReadInterruption, ReasonsAndLabelsResolveToSerbian)
+{
+    KLocalizedString::setLanguages({QStringLiteral("sr")});
+    EXPECT_EQ(LibreKDE::localizedReadInterruptionReason(QStringLiteral("read.channel-failed")),
+              QString::fromUtf8("Безбедна веза са чипом је отказала током читања."));
+    EXPECT_EQ(LibreKDE::localizedReadInterruptionReason(QStringLiteral("read.card-removed")),
+              QString::fromUtf8("Картица је уклоњена пре краја читања."));
+    EXPECT_EQ(LibreKDE::localizedReadInterruptionReason(QStringLiteral("read.reader-lost")),
+              QString::fromUtf8("Читач картица је искључен пре краја читања."));
+
+    const auto label = [](const char* key, const char* fallback) {
+        return localizedFieldLabel(makeRow(QString::fromLatin1(key), QString::fromLatin1(fallback), {}));
+    };
+    EXPECT_EQ(label("field.read_interrupted", "Read Interrupted"), QString::fromUtf8("Читање прекинуто"));
+    EXPECT_EQ(label("field.read_unread_groups", "Unread Data Groups"), QString::fromUtf8("Непрочитане групе података"));
+    EXPECT_EQ(label("field.annex_skipped", "National Annex"), QString::fromUtf8("Национални анекс"));
+
+    const QRegularExpression latinLetter(QStringLiteral("[A-Za-z]"));
+    for (const QString& key : LibreKDE::mappedReadInterruptionReasonKeys()) {
+        EXPECT_FALSE(LibreKDE::localizedReadInterruptionReason(key).contains(latinLetter)) << qPrintable(key);
+    }
+    KLocalizedString::clearLanguages();
+}
+
+TEST(IdentityReadInterruption, MappedReasonKeyCoverageIsPinned)
+{
+    const QStringList keys = LibreKDE::mappedReadInterruptionReasonKeys();
+    EXPECT_EQ(keys.size(), 3);
+    EXPECT_TRUE(keys.contains(QStringLiteral("read.channel-failed")));
+    EXPECT_TRUE(keys.contains(QStringLiteral("read.card-removed")));
+    EXPECT_TRUE(keys.contains(QStringLiteral("read.reader-lost")));
 }
 
 // Same three-step the field labels take: catalog hit, else the text the

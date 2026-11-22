@@ -21,9 +21,9 @@ CredentialVocabularyCoverageTest 4
 CredentialsE2ETest 4
 ErrorTextCoverageTest 5
 ErrorTextTest 13
-IdentityLabelTest 31
-IdentityRowFoldingTest 11
-LatinCatalogTest 6
+IdentityLabelTest 33
+IdentityRowFoldingTest 16
+LatinCatalogTest 7
 MimeFormatMapTest 10
 ReadersTest 4
 SignJobTest 19
