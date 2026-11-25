@@ -23,6 +23,7 @@
 #include <QCoreApplication>
 
 #include <utility>
+#include <vector>
 
 #include <QRegularExpression>
 
@@ -106,7 +107,7 @@ TEST(IdentityLabel, CardTypeAndAddressDateResolveToSerbian)
 TEST(IdentityLabel, MappedKeyCoverageIsPinned)
 {
     const QStringList keys = mappedLabelKeys();
-    EXPECT_EQ(keys.size(), 75);
+    EXPECT_EQ(keys.size(), 87);
     EXPECT_TRUE(keys.contains(QStringLiteral("field.card_type")));
     EXPECT_TRUE(keys.contains(QStringLiteral("field.address_date")));
     // Hidden rows are filtered, never labelled.
@@ -156,6 +157,27 @@ TEST(IdentityValue, AddressDateThatIsNotADateReadsAsUnknown)
     EXPECT_EQ(localizedFieldValue(makeValueRow(QStringLiteral("field.address_date"), QStringLiteral("32.13.2020"))),
               QString::fromUtf8("Непознато"));
     KLocalizedString::clearLanguages();
+}
+
+// card_type carries the document type; the codes must never reach the screen.
+TEST(IdentityValue, CardTypeNamesTheDocument)
+{
+    KLocalizedString::setLanguages({QStringLiteral("en_US")});
+    for (const char* code : {"ID", "IF", "RP", "EL"}) {
+        const QString shown =
+            localizedFieldValue(makeValueRow(QStringLiteral("field.card_type"), QString::fromLatin1(code)));
+        EXPECT_FALSE(shown.isEmpty()) << code;
+        EXPECT_NE(shown, QString::fromLatin1(code)) << code;
+    }
+    EXPECT_EQ(localizedFieldValue(makeValueRow(QStringLiteral("field.card_type"), QStringLiteral("EL"))),
+              QStringLiteral("Official Service ID"));
+    KLocalizedString::setLanguages({QStringLiteral("sr")});
+    EXPECT_EQ(localizedFieldValue(makeValueRow(QStringLiteral("field.card_type"), QStringLiteral("RP"))),
+              QString::fromUtf8("Боравишна дозвола"));
+    KLocalizedString::clearLanguages();
+    // A code this build has never heard of passes through verbatim.
+    EXPECT_EQ(localizedFieldValue(makeValueRow(QStringLiteral("field.card_type"), QStringLiteral("ZZ"))),
+              QStringLiteral("ZZ"));
 }
 
 // No blanket date policing — every other field is passed through byte for byte.
@@ -212,7 +234,41 @@ TEST(IdentityRowFilter, AnnexVerdictRowsAreNotHidden)
     }
 }
 
+// Every key a Serbian eID document can emit (CardEdge, all four document
+// types). A key missing here renders as the plugin's English fallback.
+TEST(IdentityLabel, EveryRsEidKeyIsLabelled)
+{
+    const std::vector<const char*> cardKeys = {
+        // document
+        "doc_reg_no", "document_type", "document_serial_number", "issuing_date", "expiry_date", "issuing_authority",
+        "document_name", "card_number",
+        // personal
+        "personal_number", "surname", "given_name", "parent_given_name", "sex", "place_of_birth", "community_of_birth",
+        "state_of_birth", "state_of_birth_code", "date_of_birth", "nationality", "status_of_foreigner",
+        "purpose_of_stay", "note", "blood_group",
+        // address
+        "state", "community", "place", "street", "house_number", "house_letter", "entrance", "floor",
+        "apartment_number", "address_date",
+        // service
+        "status", "badge_number", "rank", "organisational_unit", "position", "service_address",
+        // meta
+        "card_type"};
+    const QStringList mapped = mappedLabelKeys();
+    for (const char* key : cardKeys) {
+        EXPECT_TRUE(mapped.contains(QStringLiteral("field.") + QLatin1String(key))) << "unlabelled: " << key;
+    }
+}
+
 // ---- group headings --------------------------------------------------------
+
+TEST(IdentityGroupLabel, ServiceHasHeading)
+{
+    KLocalizedString::setLanguages({QStringLiteral("en_US")});
+    EXPECT_EQ(localizedGroupLabel(QStringLiteral("service")), QStringLiteral("Service"));
+    KLocalizedString::setLanguages({QStringLiteral("sr")});
+    EXPECT_EQ(localizedGroupLabel(QStringLiteral("service")), QString::fromUtf8("Служба"));
+    KLocalizedString::clearLanguages();
+}
 
 TEST(IdentityGroupLabel, KnownGroupResolvesToSerbian)
 {
@@ -260,7 +316,7 @@ TEST(IdentityGroupLabel, UnknownGroupResolvesToEmpty)
 TEST(IdentityGroupLabel, MappedGroupKeyCoverageIsPinned)
 {
     const QStringList keys = mappedGroupKeys();
-    EXPECT_EQ(keys.size(), 10);
+    EXPECT_EQ(keys.size(), 11);
     EXPECT_TRUE(keys.contains(QStringLiteral("presence")));
     EXPECT_TRUE(keys.contains(QStringLiteral("security_status")));
     EXPECT_TRUE(keys.contains(QStringLiteral("annex.<id>.personal")));

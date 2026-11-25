@@ -1138,7 +1138,7 @@ QVariantList SmartCardHandler::curateIdentitySummary(const QVariantList& fields)
     // field keys the agent's LibreMiddleware identity plugins emit (verified
     // against the shipping code, not guessed):
     //   - rs-eid-plugin/src/eid_card_plugin.cpp: surname, given_name,
-    //     personal_number, document_type, document_serial_number, doc_reg_no,
+    //     personal_number, document_serial_number, doc_reg_no,
     //     expiry_date, card_type
     //   - rs-health-plugin/src/health_card_plugin.cpp: family_name, given_name,
     //     personal_number, card_id, date_of_expiry, valid_until
@@ -1164,7 +1164,6 @@ QVariantList SmartCardHandler::curateIdentitySummary(const QVariantList& fields)
         QStringLiteral("document_serial_number"),
         QStringLiteral("doc_reg_no"),
         QStringLiteral("card_id"),
-        QStringLiteral("document_type"),
         QStringLiteral("card_type"),
         QStringLiteral("date_of_expiry"),
         QStringLiteral("expiry_date"),

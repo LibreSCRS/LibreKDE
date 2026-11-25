@@ -59,6 +59,19 @@ const QHash<QString, KLocalizedString>& labelTable()
         {QStringLiteral("field.nationality"), ki18ndc("librekde", "@item:intable identity field", "Nationality")},
         {QStringLiteral("field.status_of_foreigner"),
          ki18ndc("librekde", "@item:intable identity field", "Status of Foreigner")},
+        {QStringLiteral("field.purpose_of_stay"),
+         ki18ndc("librekde", "@item:intable identity field", "Purpose of Stay")},
+        {QStringLiteral("field.note"), ki18ndc("librekde", "@item:intable identity field", "Note")},
+        {QStringLiteral("field.blood_group"), ki18ndc("librekde", "@item:intable identity field", "Blood Group")},
+        {QStringLiteral("field.badge_number"), ki18ndc("librekde", "@item:intable identity field", "Badge Number")},
+        {QStringLiteral("field.rank"), ki18ndc("librekde", "@item:intable identity field", "Rank")},
+        {QStringLiteral("field.organisational_unit"),
+         ki18ndc("librekde", "@item:intable identity field", "Organisational Unit")},
+        {QStringLiteral("field.position"), ki18ndc("librekde", "@item:intable identity field", "Position")},
+        {QStringLiteral("field.service_address"),
+         ki18ndc("librekde", "@item:intable identity field", "Service Address")},
+        {QStringLiteral("field.status"),
+         ki18ndc("librekde", "@item:intable identity field (service status)", "Status")},
 
         // --- Birth ----------------------------------------------------------
         {QStringLiteral("field.date_of_birth"), ki18ndc("librekde", "@item:intable identity field", "Date of Birth")},
@@ -66,6 +79,8 @@ const QHash<QString, KLocalizedString>& labelTable()
         {QStringLiteral("field.community_of_birth"),
          ki18ndc("librekde", "@item:intable identity field", "Community of Birth")},
         {QStringLiteral("field.state_of_birth"), ki18ndc("librekde", "@item:intable identity field", "State of Birth")},
+        {QStringLiteral("field.state_of_birth_code"),
+         ki18ndc("librekde", "@item:intable identity field", "State of Birth Code")},
 
         // --- Identifiers ----------------------------------------------------
         {QStringLiteral("field.personal_number"),
@@ -111,6 +126,8 @@ const QHash<QString, KLocalizedString>& labelTable()
          ki18ndc("librekde", "@item:intable identity field (annex document number)", "Document Number")},
         {QStringLiteral("field.doc_reg_no"),
          ki18ndc("librekde", "@item:intable identity field", "Registration Number")},
+        {QStringLiteral("field.document_name"), ki18ndc("librekde", "@item:intable identity field", "Document Name")},
+        {QStringLiteral("field.card_number"), ki18ndc("librekde", "@item:intable identity field", "Card Number")},
         {QStringLiteral("field.issuing_state"), ki18ndc("librekde", "@item:intable identity field", "Issuing State")},
         {QStringLiteral("field.issuing_authority"),
          ki18ndc("librekde", "@item:intable identity field", "Issuing Authority")},
@@ -168,7 +185,7 @@ const QHash<QString, KLocalizedString>& labelTable()
 
         // --- Card metadata --------------------------------------------------
         {QStringLiteral("field.card_type"),
-         ki18ndc("librekde", "@item:intable identity field (card generation)", "Card Type")},
+         ki18ndc("librekde", "@item:intable identity field (document type)", "Card Type")},
 
         // --- PKCS#15 / OpenSC token info ------------------------------------
         {QStringLiteral("field.label"), ki18ndc("librekde", "@item:intable identity field (token label)", "Label")},
@@ -185,6 +202,7 @@ const QHash<QString, KLocalizedString>& groupLabelTable()
 {
     static const auto* const table = new QHash<QString, KLocalizedString>{
         {QStringLiteral("personal"), ki18ndc("librekde", "@title:group identity fields", "Personal Data")},
+        {QStringLiteral("service"), ki18ndc("librekde", "@title:group identity fields", "Service")},
         {QStringLiteral("document"), ki18ndc("librekde", "@title:group identity fields", "Document")},
         {QStringLiteral("document_extra"), ki18ndc("librekde", "@title:group identity fields", "Issuing Information")},
         {QStringLiteral("additional"), ki18ndc("librekde", "@title:group identity fields", "Additional Data")},
@@ -354,6 +372,20 @@ QString localizedStatusToken(const QString& value)
         return {};
     }
     return split < 0 ? it->toString() : it->toString() + value.mid(split);
+}
+
+/// The document types the rs-eid plugin reports in `card_type`. Empty for a
+/// code this build does not name: append-only wire, verbatim passthrough.
+QString localizedCardType(const QString& code)
+{
+    static const QHash<QString, KLocalizedString> types{
+        {QStringLiteral("ID"), ki18ndc("librekde", "@item:intable document type", "Identity Card")},
+        {QStringLiteral("IF"), ki18ndc("librekde", "@item:intable document type", "Identity Card for Foreigners")},
+        {QStringLiteral("RP"), ki18ndc("librekde", "@item:intable document type", "Residence Permit")},
+        {QStringLiteral("EL"), ki18ndc("librekde", "@item:intable document type", "Official Service ID")},
+    };
+    const auto it = types.constFind(code);
+    return it == types.constEnd() ? QString() : it->toString();
 }
 
 /// The access-control methods the eMRTD plugin names in the presence group,
@@ -526,6 +558,13 @@ QString localizedFieldValue(const LibreSCRS::AgentClient::IdentityRow& row)
     // key-scoped so data_groups in the same group stays the machine list it is.
     if (row.labelKey == QLatin1String("field.auth_method") && !row.value.isEmpty()) {
         if (const QString named = localizedAuthMethod(row.value); !named.isEmpty()) {
+            return named;
+        }
+        return row.value;
+    }
+
+    if (row.labelKey == QLatin1String("field.card_type")) {
+        if (const QString named = localizedCardType(row.value); !named.isEmpty()) {
             return named;
         }
         return row.value;
