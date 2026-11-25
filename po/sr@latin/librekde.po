@@ -356,7 +356,13 @@ msgctxt "@info:status attaching a trusted timestamp"
 msgid "Adding timestamp…"
 msgstr "Dodajem vremenski žig…"
 
-#: components/plasmoid/src/SmartCardHandler.cpp:1416
+#: components/plasmoid/src/SmartCardHandler.cpp:1413
+#, kde-format
+msgctxt "@info:status waiting behind another operation on the same card"
+msgid "Waiting for another operation on this card…"
+msgstr "Čekam drugu operaciju na ovoj kartici…"
+
+#: components/plasmoid/src/SmartCardHandler.cpp:1420
 #, kde-format
 msgctxt "@info:status generic in-progress card operation"
 msgid "Working…"

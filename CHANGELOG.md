@@ -12,6 +12,12 @@ every entry below describes a change to what you get by building from source.
 
 ### Added
 
+- **An operation waiting behind another one on the same card says so.** When
+  the agent reports that an operation is queued behind another on the same
+  reader, the widget shows "Waiting for another operation on this card…"
+  instead of the generic "Working…", and the client library no longer gives it
+  up as a stalled agent while it waits.
+
 - **Every release carries a source tarball this project built.** The Arch
   recipe fetches that asset instead of the archive GitHub generates for a tag:
   the generated one is whatever the forge makes of a tag name, its bytes are

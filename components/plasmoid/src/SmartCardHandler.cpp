@@ -1408,6 +1408,10 @@ QString SmartCardHandler::operationPhaseLabel(int phase) const
         return ki18nc("@info:status producing the signature on the card", "Signing…").toString();
     case Client::OperationPhase::Timestamping:
         return ki18nc("@info:status attaching a trusted timestamp", "Adding timestamp…").toString();
+    case Client::OperationPhase::Queued:
+        return ki18nc("@info:status waiting behind another operation on the same card",
+                      "Waiting for another operation on this card…")
+            .toString();
     case Client::OperationPhase::Created:
     case Client::OperationPhase::Connecting:
     case Client::OperationPhase::Done:

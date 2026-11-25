@@ -458,9 +458,22 @@ TEST(SmartCardHandler, OperationPhaseLabelNonEmptyForEveryPhase)
     cfg.capabilities = Client::Cap::Pki;
     Harness h(cfg, BusNames::UniqueAndWellKnown);
     auto handler = makeHandler(h);
-    for (int p = 0; p <= 7; ++p) { // Created..Done
+    for (int p = 0; p <= 8; ++p) { // Created..Queued
         EXPECT_FALSE(handler->operationPhaseLabel(p).isEmpty()) << "phase " << p;
     }
+}
+
+// An operation waiting behind another one on the same card says so, rather
+// than the generic "Working…" that reads as if this card were being read.
+TEST(SmartCardHandler, AQueuedOperationIsNamedAsWaiting)
+{
+    FakeAgent::Config cfg;
+    cfg.capabilities = Client::Cap::Pki;
+    Harness h(cfg, BusNames::UniqueAndWellKnown);
+    auto handler = makeHandler(h);
+    const QString queued = handler->operationPhaseLabel(static_cast<int>(Client::OperationPhase::Queued));
+    EXPECT_NE(queued, handler->operationPhaseLabel(static_cast<int>(Client::OperationPhase::Created)));
+    EXPECT_TRUE(queued.contains(QStringLiteral("another operation"))) << queued.toStdString();
 }
 
 TEST(SmartCardHandler, PreAuthCardAdvancesAfterSuccessfulRead)

@@ -27,7 +27,7 @@ LatinCatalogTest 7
 MimeFormatMapTest 10
 ReadersTest 4
 SignJobTest 19
-SmartCardHandlerTest 100
+SmartCardHandlerTest 101
 appstreamtest.cmake 1
 check-catalogs.py 1
 identity-render-fence.cmake 1
