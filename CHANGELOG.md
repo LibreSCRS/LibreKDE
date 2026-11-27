@@ -17,6 +17,7 @@ every entry below describes a change to what you get by building from source.
   reader, the widget shows "Waiting for another operation on this card…"
   instead of the generic "Working…", and the client library no longer gives it
   up as a stalled agent while it waits.
+
 - **Every Serbian eID document type is labelled.** Identity cards, identity
   cards for foreigners, residence permits and official service IDs now show
   their fields in Serbian (blood group, purpose of stay, badge number, rank,
